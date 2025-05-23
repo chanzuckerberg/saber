@@ -1,4 +1,4 @@
-# SABER
+# SABER⚔️
 **S**egment **A**nything **B**ased **E**lectron tomography **R**ecognition is a robust platform designed for autonomous segmentation of organelles from cryo-electron tomography (cryo-ET) or electron microscopy (EM) datasets. Leveraging foundational models, SAM2-ET enables segmentation directly from video-based training translated into effective 3D tomogram analysis. Users can utilize zero-shot inference with morphological heuristics or enhance prediction accuracy through data-driven training.
 
 ## 💫 Key Features
