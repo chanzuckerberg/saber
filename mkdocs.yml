@@ -1,0 +1,81 @@
+site_name: octopi
+repo_url: "https://github.com/chanzuckerberg/octopi"
+repo_name: "chanzuckerberg/octopi"
+copyright: "2025, Jonathan Schwartz"
+theme:
+  name: material
+  palette:
+    # Palette toggle for light mode
+    - scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+    # Palette toggle for dark mode
+    - scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+  logo: assets/logo.png
+  features:
+    - content.code.copy
+
+# Page tree
+nav:
+  - 🏡 Home: 
+      - Overview: index.md
+
+  - 📓 Tutorials:
+      - Introduction: tutorials/introduction.md
+      - Training: tutorials/training.md
+      - Inference: tutorials/inference.md
+
+theme:
+  logo: assets/logo.png
+  # favicon: assets/favicon.png
+  # for more complex custom theming...
+  # custom_dir: docs/overrides 
+  name: material
+  palette:
+    # Palette toggle for light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: purple
+      accent: purple
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.expand
+    - navigation.sections
+    - search.highlight
+    - search.suggest
+    - content.tabs.link
+    - content.code.annotate
+    - content.code.copy
+  icon:
+    annotation: material/plus-circle
+
+markdown_extensions:
+  - admonition
+  - tables
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - attr_list
+  - pymdownx.superfences
+  - pymdownx.highlight
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - md_in_html
+  - pymdownx.arithmatex:
+      generic: true
+  - toc:
+      toc_depth: 3
+
+plugins:
+  - search

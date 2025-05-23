@@ -1,0 +1,36 @@
+from saber.classifier.micrograph_training_prep import prepare_micrograph_training, prepare_micrograph_training_slurm
+from saber.classifier.tomogram_training_prep import prepare_tomogram_training, prepare_tomogram_training_slurm
+from saber.classifier.inference import predict, predict_slurm
+from saber.classifier.train import train, train_slurm
+from saber.classifier.data_split import split_data, merge_data
+from saber.classifier.evaluator import evaluate
+import click
+
+@click.group(name="classifier")
+def classifier_routines():
+    """Routines for training and evaluating classifiers."""
+    pass
+
+# Add subcommands to the group
+classifier_routines.add_command(split_data)
+classifier_routines.add_command(merge_data)
+classifier_routines.add_command(train)
+classifier_routines.add_command(predict)
+classifier_routines.add_command(prepare_tomogram_training)
+classifier_routines.add_command(prepare_micrograph_training)
+classifier_routines.add_command(evaluate)
+
+
+@click.group(name="classifier")
+def slurm_classifier_routines():
+    """Routines for training and evaluating classifiers."""
+    pass
+
+# Add subcommands to the group
+slurm_classifier_routines.add_command(train_slurm)
+slurm_classifier_routines.add_command(predict_slurm)
+slurm_classifier_routines.add_command(prepare_tomogram_training_slurm)
+slurm_classifier_routines.add_command(prepare_micrograph_training_slurm)
+
+if __name__ == "__main__":
+    classifier_routines()

@@ -1,0 +1,60 @@
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[project]
+name = "saber"
+requires-python = ">=3.9"
+version = "0.1.0"
+dependencies = [
+    "click",
+    "mrcfile",
+    "starfile",
+    "tqdm",
+    "copick",
+    "matplotlib",
+    "opencv-python",
+    "multiprocess",
+    "monai",
+    "nibabel",
+    "torchmetrics",
+    "scikit-learn",    
+    "ipywidgets",
+    "umap-learn",
+    "torch-ema",
+    "copick-utils @ git+https://github.com/copick/copick-utils.git@main",
+    # "sam-2 @ git+https://github.com/facebookresearch/sam2.git@main",
+]
+
+[project.optional-dependencies]
+gui = [
+    "pyqtgraph",
+    "PyQt5"
+]
+dino = [
+    "dinov2 @ git+https://github.com/rmcao/cryoDINO.git@master"
+]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+authors = [
+  {name = "Jonathan Schwartz", email = "jonathan.schwartz@czii.org"},
+  {name = "Dari Kimanius", email = "dari.kimanius@czii.org"},
+  {name = "Saugat Kandel", email = "saugat.kandel@czii.org"}
+]
+
+description = "Command line tools to Run SABER for Electron Microscopy (CryoEM and ET)."
+readme = "README.md"
+license = {file = "LICENSE"}
+
+[project.scripts]
+saber = "saber.main:routines"
+saber-slurm = "saber.main:slurm_routines"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.semantic_release]
+version_variables = ["__init__.py:__version__"]
+build_command = "pip install build && python -m build"
