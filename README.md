@@ -18,6 +18,15 @@ To install the interactive labeling GUI, run the following command:
 
 **Note**: PyPI installation support coming soon.
 
+SABER provides a clean, scriptable command-line interface. Run the following command to view all available subcommands:
+```
+saber --help
+```
+We can begin by downloading the pre-trained SAM2 weights:
+```
+saber download sam2-weights
+```
+
 ## 🧪 Example Usage
 
 #### 🧩 Producing Intial SAM2 Segmentations
