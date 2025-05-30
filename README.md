@@ -29,6 +29,8 @@ saber download sam2-weights
 
 ## 🧪 Example Usage
 
+### Curating Training Labels and Training and Domain Expert Classifier 
+
 #### 🧩 Producing Intial SAM2 Segmentations
 Use `prepare-tomogram-training` to generate 2D segmentations from a tomogram using SAM2-style slab-based inference. These masks act as a rough initialization for downstream curation and model training.
 
@@ -72,6 +74,12 @@ classifier train \
 ```
 The number of classes should be 1 greater than the number of class names provided during annotation (to account for background).
 Training logs, model weights, and evaluation metrics will be saved under `results/`.
+
+### 🔍 Inference
+
+#### 🖼️ Producting 2D Segmentations with SABER
+
+-- TODO -- 
 
 #### 🧊 Producing 3D Segmentations with SABER 
 

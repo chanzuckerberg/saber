@@ -32,7 +32,7 @@ class cryoTomoSegmenter:
         classifier = None,
         target_class: int = 1,
         min_mask_area: int = 100,
-        min_rel_box_size: float = 0.01
+        min_rel_box_size: float = 0.025
     ):  
         """
         Initialize the cryoTomoSegmenter
@@ -41,7 +41,7 @@ class cryoTomoSegmenter:
         # Minimum Mask Area and Relative Box Size to Ignore 
         self.min_mask_area = min_mask_area
         self.min_rel_box_size = min_rel_box_size
-        j
+        
         # Determine device
         device = utils.determine_device(deviceID)
 
@@ -138,7 +138,7 @@ class cryoTomoSegmenter:
         self.masks = self.mask_generator.generate(image)
         
         # Display Original SAM2 Segmentations
-        plt.imshow(image, cmap='gray'); viz.show_anns(self.masks); plt.axis('off');  plt.show()
+        # plt.imshow(image, cmap='gray'); viz.show_anns(self.masks); plt.axis('off');  plt.show()
 
         # Apply Classifier Model or Physical Constraints to Filter False Positives
         if self.classifier is not None:

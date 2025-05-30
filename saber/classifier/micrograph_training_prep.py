@@ -1,3 +1,4 @@
+from saber.process.downsample import FourierRescale2D
 from saber.microSABER import cryoMicroSegmenter
 from saber import io, utilities as utils
 from saber.process import slurm_submit
@@ -59,7 +60,8 @@ def extract_sam2_candidates(
     ):
 
     # Fourier Crop the Image to the Desired Resolution
-    image = fourier_crop_mrc_to_resolution(fPath, pixel_size)
+    # image = fourier_crop_mrc_to_resolution(fPath, pixel_size)
+    image = mrc_fourier_crop(fPath, pixel_size)
 
     # Initialize the Segmenter
     segmenter = cryoMicroSegmenter(
@@ -76,14 +78,14 @@ def extract_sam2_candidates(
               help="Path to the input MRC files.")
 @click.option('--pixel-size', type=float, required=False, default=5, 
               help="Desired Resolution to Segment Images [Angstroms].")
-@click.option('--zarr-path', type=str, required=False, 
+@click.option('--output', type=str, required=False, 
               help="Path to the output Zarr file.", 
-              default = '24jul29c_training_data.zarr')
+              default = 'training_data.zarr')
 @slurm_submit.sam2_inputs
 def prepare_micrograph_training(
     mrc_path: str, 
     pixel_size: float,
-    zarr_path: str,
+    output: str,
     sam2_cfg: str,
     ):
 
@@ -99,7 +101,7 @@ def prepare_micrograph_training(
     fNames = [f for f in fNames if f.endswith('.mrc')]
 
     # Initialize the shared Zarr file with the new structure
-    zarr_store = zarr.DirectoryStore(zarr_path)
+    zarr_store = zarr.DirectoryStore(output)
     zroot = zarr.group(zarr_store, overwrite=True)
 
     iter = 1
@@ -145,15 +147,15 @@ def prepare_micrograph_training(
 @click.option('--pixel-size', type=float, required=False, default=5, 
               help="Desired Resolution to Segment Images [Angstroms].")
 @slurm_submit.sam2_inputs
-@click.option('--zarr-path', type=str, required=True, 
+@click.option('--output', type=str, required=True, 
               help="Path to the saved SAM2 output Zarr file.", 
-              default = '24jul29c_training_data.zarr')           
+              default = 'training_data.zarr')           
 @slurm_submit.compute_commands
 def prepare_micrograph_training_slurm(
     mrc_path: str,
     pixel_size: float,
     sam2_cfg: str,
-    zarr_path: str,
+    output: str,
     num_gpus: int,
     gpu_constraint: str,
     ):
@@ -164,7 +166,7 @@ classifier prepare-micrograph-training \\
     --mrc-path {mrc_path} \\
     --pixel-size {pixel_size} \\
     --sam2-cfg {sam2_cfg} \\
-    --zarr-path {zarr_path}
+    --output {output}
     """
 
     # Create Slurm Submit Script
@@ -177,7 +179,8 @@ classifier prepare-micrograph-training \\
         gpu_constraint=gpu_constraint
     )
 
-def fourier_crop_mrc_to_resolution(
+# def fourier_crop_mrc_to_resolution(
+def mrc_fourier_crop(
     file_path: str, 
     target_pixsize: float, 
     device=None
@@ -202,47 +205,8 @@ def fourier_crop_mrc_to_resolution(
     with mrcfile.open(file_path) as mrc:
         current_pixsize = mrc.voxel_size.x  # in Angstroms
         image = mrc.data
-        
-    if target_pixsize <= current_pixsize:
-        raise ValueError(f"Target pixel size ({target_pixsize}Å) must be larger than current pixel size ({current_pixsize}Å)")
     
-    # Convert to torch tensor
-    image = torch.from_numpy(image).to(device)
-    if not torch.is_floating_point(image):
-        image = image.float()
-    
-    # Get dimensions and check if odd
-    h, w = image.shape
-    h_is_odd = h % 2
-    w_is_odd = w % 2
-    
-    # Calculate new dimensions
-    crop_factor = target_pixsize / current_pixsize
-    h_new = int(h / crop_factor)
-    w_new = int(w / crop_factor)
-    
-    # Ensure new dimensions are even
-    h_new = h_new - (h_new % 2)
-    w_new = w_new - (w_new % 2)
-    
-    # Compute FFT
-    imFFT = torch.fft.fftshift(torch.fft.fft2(image))
-    
-    # Calculate cropping boundaries with odd/even correction
-    h_start = (h - h_new) // 2 + (h_is_odd)
-    w_start = (w - w_new) // 2 + (w_is_odd)
-    
-    # Crop in Fourier space
-    imFFT_cropped = imFFT[
-        h_start:h_start + h_new,
-        w_start:w_start + w_new
-    ]
-    
-    # Inverse FFT
-    im_cropped = torch.abs(torch.fft.ifft2(torch.fft.ifftshift(imFFT_cropped)))
-
-    if device != torch.device('cpu'):
-        im_cropped = im_cropped.cpu().numpy()
-        torch.cuda.empty_cache() # Clear CUDA cache
+    # Fourier Crop the Image to the Desired Resolution
+    im_cropped = FourierRescale2D.run(image, current_pixsize, target_pixsize, device)
 
     return im_cropped

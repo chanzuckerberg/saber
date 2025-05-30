@@ -97,8 +97,8 @@ def extract_sam2_candidates(
 @click.command(context_settings={"show_default": True})
 @slurm_submit.copick_commands
 @slurm_submit.sam2_inputs
-@click.option('--zarr-path', type=str, required=False, help="Path to the output Zarr file.", 
-              default = '24jul29c_training_data.zarr')
+@click.option('--output', type=str, required=False, help="Path to the output Zarr file.", 
+              default = 'training_data.zarr')
 @click.option('--num-slabs', type=int, default=1, callback=validate_odd, 
               help="Number of slabs to segment per tomogram.")
 def prepare_tomogram_training(
@@ -106,7 +106,7 @@ def prepare_tomogram_training(
     voxel_size: int, 
     tomogram_algorithm: str, 
     slab_thickness: int,
-    zarr_path: str,
+    output: str,
     sam2_cfg: str,
     num_slabs: int,
     ):
@@ -123,7 +123,7 @@ def prepare_tomogram_training(
     run_ids = [run.name for run in root.runs]
 
     # Initialize the shared Zarr file with the new structure
-    zarr_store = zarr.DirectoryStore(zarr_path)
+    zarr_store = zarr.DirectoryStore(output)
     zroot = zarr.group(zarr_store, overwrite=True)
 
     iter = 1
@@ -167,7 +167,7 @@ def prepare_tomogram_training(
 @click.command(context_settings={"show_default": True})
 @slurm_submit.copick_commands
 @slurm_submit.sam2_inputs
-@click.option('--zarr-path', type=str, required=True, help="Path to the saved SAM2 output Zarr file.", 
+@click.option('--output', type=str, required=True, help="Path to the saved SAM2 output Zarr file.", 
               default = '24jul29c_training_data.zarr')
 @click.option('--num-slabs', type=int, default=1, callback=validate_odd, 
               help="Number of slabs to segment per tomogram.")              
@@ -178,7 +178,7 @@ def prepare_tomogram_training_slurm(
     voxel_size: int, 
     tomogram_algorithm: str,
     slab_thickness: int,
-    zarr_path: str,
+    output: str,
     num_gpus: int,
     gpu_constraint: str,
     num_slabs: int,
@@ -192,7 +192,7 @@ classifier prepare-training \\
     --voxel-size {voxel_size} \\
     --tomogram-algorithm {tomogram_algorithm} \\
     --slab-thickness {slab_thickness} \\
-    --zarr-path {zarr_path}
+    --output {output}
     """
     
     if num_slabs > 1:
