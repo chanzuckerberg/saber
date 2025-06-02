@@ -6,7 +6,7 @@ import numpy as np
 
 def split(
     input: str,
-    train_split: float,
+    ratio: float,
     random_seed: int,
 ) -> Tuple[str, str]:
     """
@@ -15,7 +15,7 @@ def split(
     
     Args:
         input: Path to the Zarr file
-        train_split: Fraction of data to use for training
+        ratio: Fraction of data to use for training
         random_seed: Random seed for reproducibility
         
     Returns:
@@ -40,7 +40,7 @@ def split(
     # Perform random split
     train_keys, val_keys = train_test_split(
         all_keys,
-        train_size=train_split,
+        train_size=ratio,
         random_state=random_seed
     )
     
@@ -76,18 +76,18 @@ def split(
 @click.command(context_settings={"show_default": True})
 @click.option("--input", type=str, required=True, 
               help="Path to the Zarr file.")
-@click.option("--train-split", type=float, required=False, default=0.8, 
+@click.option("--ratio", type=float, required=False, default=0.8, 
               help="Fraction of data to use for training.")
 @click.option("--random-seed", type=int, required=False, default=42, 
               help="Random seed for reproducibility.")
-def split_data(input, train_split, random_seed):
+def split_data(input, ratio, random_seed):
     """
     Split data from a Zarr file into training and validation sets using random split.
     Creates two new zarr files for training and validation data.
     """
 
     # Call the split function
-    split(input, train_split, random_seed)
+    split(input, ratio, random_seed)
     
 
 def merge(inputs: List[str], output: str):
