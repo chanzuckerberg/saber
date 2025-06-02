@@ -60,7 +60,7 @@ Once annotations are complete, split the dataset into training and validation se
 ```
 classifier split-data \
     --input curated_labels.zarr \
-    --train-split 0.8
+    --ratio 0.8
 ```
 This generates `curated_labels_train.zarr` and `curated_labels_val.zarr` for use in model training.
 

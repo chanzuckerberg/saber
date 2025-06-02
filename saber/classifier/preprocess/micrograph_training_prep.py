@@ -88,6 +88,9 @@ def prepare_micrograph_training(
     output: str,
     sam2_cfg: str,
     ):
+    """
+    Prepare Training Data from Micrographs for a Classifier.
+    """    
 
     # Set up multiprocessing - max processs = number of GPUs
     mp.set_start_method("spawn")
@@ -159,6 +162,9 @@ def prepare_micrograph_training_slurm(
     num_gpus: int,
     gpu_constraint: str,
     ):
+    """
+    Prepare Training Data from Micrographs for a Classifier.
+    """
 
     # Create Prepare Training Command
     command = f"""

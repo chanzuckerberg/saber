@@ -1,8 +1,9 @@
-from saber.classifier.micrograph_training_prep import prepare_micrograph_training, prepare_micrograph_training_slurm
-from saber.classifier.tomogram_training_prep import prepare_tomogram_training, prepare_tomogram_training_slurm
+from saber.classifier.preprocess.micrograph_training_prep import prepare_micrograph_training, prepare_micrograph_training_slurm
+from saber.classifier.preprocess.tomogram_training_prep import prepare_tomogram_training, prepare_tomogram_training_slurm
+from saber.classifier.preprocess.data_split import split_data, merge_data
+from saber.classifier.preprocess.training_data_info import class_info
 from saber.classifier.inference import predict, predict_slurm
 from saber.classifier.train import train, train_slurm
-from saber.classifier.data_split import split_data, merge_data
 from saber.classifier.evaluator import evaluate
 import click
 
@@ -19,7 +20,7 @@ classifier_routines.add_command(predict)
 classifier_routines.add_command(prepare_tomogram_training)
 classifier_routines.add_command(prepare_micrograph_training)
 classifier_routines.add_command(evaluate)
-
+classifier_routines.add_command(class_info)
 
 @click.group(name="classifier")
 def slurm_classifier_routines():

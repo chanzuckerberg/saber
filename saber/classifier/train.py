@@ -169,6 +169,9 @@ def train(
     model_size: str,
     model_weights: str,
     ):
+    """
+    Train a Classifier.
+    """
 
     run(train, validate, num_epochs, batch_size, num_classes, backbone, model_size, model_weights)
 
@@ -184,6 +187,9 @@ def train_slurm(
     model_size: str,
     model_weights: str,
     ):
+    """
+    Train a Classifier.
+    """
 
     # Use triple quotes for the multi-line f-string
     command = f"""classifier train \\

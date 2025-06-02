@@ -48,6 +48,11 @@ def split(
     train_zarr = zarr.open(str(train_path), mode='w')
     val_zarr = zarr.open(str(val_path), mode='w')
     
+    # Copy all attributes from the input zarr file
+    for attr_name, attr_value in zfile.attrs.items():
+        train_zarr.attrs[attr_name] = attr_value
+        val_zarr.attrs[attr_name] = attr_value
+    
     # Copy data to new zarr files
     items = ['image', 'masks', 'rejected_masks']
     print('Copying data to train zarr file...')

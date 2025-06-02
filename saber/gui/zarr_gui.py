@@ -27,8 +27,7 @@ class MainWindow(QMainWindow):
         self.run_ids = list(self.root.keys())
 
         self.save_path = save_path
-
-        # Initialize class dictionary
+        
         self.class_dict = {
             class_name: {
                 'value': i + 1,  # Unique integer value for the class
@@ -214,7 +213,7 @@ class MainWindow(QMainWindow):
             class_name: {k: v for k, v in class_data.items() if k != 'masks'}
             for class_name, class_data in self.class_dict.items()
         }
-        zarr_root.attrs['class_dict'] = json.dumps(filtered_class_dict)        
+        zarr_root.attrs['class_names'] = json.dumps(filtered_class_dict)        
 
         # Reference the current run ID (from the selected item in the list)
         current_row = self.image_list.currentRow()        
@@ -255,36 +254,29 @@ class MainWindow(QMainWindow):
         accepted_masks = []  # List to store accepted masks in the correct order
         all_used_indices = set()  # Track all used indices
 
-        # Save accepted masks (per class or single-class)
-        if len(self.class_dict) > 1:  # Multi-class scenario
-                
-            # for class_name in sorted(self.class_dict.keys()):  # Iterate in sorted order
-
-            # Sort class names by their associated 'value'
-            sorted_classes = sorted(self.class_dict.keys(), key=lambda x: self.class_dict[x]['value'])
-            for class_name in sorted_classes:
-                class_merged_mask = np.zeros(mask_shape, dtype=np.uint8)
+        # Save accepted masks (per class)
+        # Sort class names by their associated 'value'
+        sorted_classes = sorted(self.class_dict.keys(), key=lambda x: self.class_dict[x]['value'])
+        for class_name in sorted_classes:
+            class_merged_mask = np.zeros(mask_shape, dtype=np.uint8)
+            
+            # Get indices for this class (either from class_dict or accepted_masks for single class)
+            if len(self.class_dict) > 1:
                 class_indices = sorted(self.class_dict[class_name]['masks'])
+            else:
+                class_indices = sorted(self.segmentation_viewer.accepted_masks)
 
-                for i in class_indices:
-                    if 0 <= i < total_masks:  # Validate index
-                        class_merged_mask = np.logical_or(
-                            class_merged_mask, self.segmentation_viewer.masks[i] > 0
-                        ).astype(np.uint8)
-                        all_used_indices.add(i)
-                    else:
-                        print(f"Invalid mask index {i} in class '{class_name}', skipping.")
-
-                # Append the merged mask for this class (even if it remains empty)
-                accepted_masks.append(class_merged_mask)
-
-        else:  # Single-class scenario
-            for i in sorted(self.segmentation_viewer.accepted_masks):
+            for i in class_indices:
                 if 0 <= i < total_masks:  # Validate index
-                    accepted_masks.append(self.segmentation_viewer.masks[i])
+                    class_merged_mask = np.logical_or(
+                        class_merged_mask, self.segmentation_viewer.masks[i] > 0
+                    ).astype(np.uint8)
                     all_used_indices.add(i)
                 else:
-                    print(f"Invalid mask index {i} in accepted_masks, skipping.")
+                    print(f"Invalid mask index {i} in class '{class_name}', skipping.")
+
+            # Append the merged mask for this class (even if it remains empty)
+            accepted_masks.append(class_merged_mask)
 
         # Save accepted masks to the 'masks' group
         if accepted_masks:
@@ -398,8 +390,8 @@ def gui(
     if class_names is not None:
         class_names = [name.strip() for name in class_names.split(",")]
     else:
-        print("\nNo class names provided. Using default class name: 'organelle'")
-        class_names = ['organelle']
+        print("\nNo class names provided. Using default class name: 'object'")
+        class_names = ['object']
     
     # Start the app
     app = QApplication(sys.argv)

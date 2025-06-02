@@ -110,6 +110,9 @@ def prepare_tomogram_training(
     sam2_cfg: str,
     num_slabs: int,
     ):
+    """
+    Prepare Training Data from Tomograms for a Classifier.
+    """    
 
     # Set up multiprocessing - max processs = number of GPUs
     mp.set_start_method("spawn")

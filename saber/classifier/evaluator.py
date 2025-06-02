@@ -105,6 +105,9 @@ class ClassifierEvaluator(ClassifierTrainer):
 @click.option('--beta', type=float, default=1.0, help='Beta for the F-Beta Score')
 @click.option('--output', type=str, default=None, help='Path to save results')
 def evaluate(test, model_config, model_weights, beta, output):
+    """
+    Evaluate a classifier model on a test set.
+    """
 
     # Check if test file exists
     if not os.path.exists(test):
