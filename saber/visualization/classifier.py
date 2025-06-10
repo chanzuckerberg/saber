@@ -5,18 +5,10 @@ import cv2
 
 def add_masks(masks, ax):
 
-    # Define unique colors for each class (RGBA values)
-    colors = [
-        (1, 0, 0, 0.5),  # Red with transparency
-        (0, 1, 0, 0.5),  # Green with transparency
-        (0, 0, 1, 0.5),  # Blue with transparency
-        (1, 1, 0, 0.5),  # Yellow with transparency
-        (0.5, 0, 0.5, 0.5),  # Purple with transparency
-        (1, 0.5, 0, 0.5),  # Orange with transparency
-        (0, 1, 1, 0.5),  # Cyan with transparency
-        (1, 0, 1, 0.5),  # Magenta with transparency
-    ]
+    # Get colors
+    colors = get_colors()
 
+    # Get number of masks
     num_masks = masks.shape[0]
     for i in range(num_masks):
         
@@ -30,9 +22,7 @@ def add_masks(masks, ax):
         ])
 
         ax.imshow(masks[i], cmap=custom_cmap, alpha=0.6)
-    ax.axis('off')
-    # plt.tight_layout()
-    # plt.show()    
+    ax.axis('off')  
 
 
 def display_masks(im, masks, masks2=None, title=None):
@@ -54,6 +44,73 @@ def display_masks(im, masks, masks2=None, title=None):
 
     # Add a centered title above both images
     if title is not None: fig.suptitle(title, fontsize=16, y=1.03)
+
+def _display_mask_list(masks, ax):
+    """
+    Display a list of masks in a single image.
+    """
+    # Get colors
+    colors = get_colors()
+
+    # Get number of masks
+    num_masks = masks.shape[0]
+    for i in range(num_masks):
+        
+        # Cycle through colors if there are more masks than colors
+        color = colors[i % len(colors)]  
+
+        # Create a custom colormap for this mask
+        custom_cmap = ListedColormap([
+            (1, 1, 1, 0),  # Transparent white for 0 values
+            color,  # Assigned color for non-zero values
+        ])
+
+        ax.imshow(masks[i], cmap=custom_cmap, alpha=0.6)
+    ax.axis('off')
+    # plt.tight_layout()
+    # plt.show()   
+
+def display_mask(image, masks):
+    """
+    Display a list of masks in a single image.
+    """
+
+    # Convert Masks to Array if Listx
+    if isinstance(masks, list):
+        masks = _masks_to_array(masks)
+
+    # Get colors
+    colors = get_colors()
+
+    # Generate Figure and Plot Image
+    plt.figure(figsize=(10, 10))
+    plt.imshow(image, cmap='gray')
+
+    # Plot the Segmentations over the Image
+    cmap_colors = [(1, 1, 1, 0)] + colors[:np.max(masks)]  # 0 is transparent
+    cmap = ListedColormap(cmap_colors)
+    plt.imshow(masks, cmap=cmap, alpha=0.6)
+    plt.axis('off') 
+
+def _masks_to_array(masks):
+    """
+    Convert list of masks to single label matrix
+    
+    Args:
+        masks: List of mask dictionaries with 'segmentation' key
+        image_shape: Shape of the output matrix (height, width)
+    
+    Returns:
+        label_matrix: numpy array where each mask has unique ID (1 to N)
+    """
+    
+    # Return a (Nx, Ny) matrix where each pixel is labeled with the mask ID
+    label_matrix = np.zeros(masks[0]['segmentation'].shape, dtype=np.uint16)
+    for idx, mask in enumerate(masks, start=1):
+        label_matrix[mask['segmentation'] > 0] = idx
+    
+    return label_matrix
+
 
 def plot_metrics(train_array, validation_array, metric_name="Metric", save_path=None):
     """
@@ -229,3 +286,44 @@ def plot_per_class_metrics(per_class_results, save_path=None):
         plt.savefig(save_path)
     else:
         plt.show()
+
+def get_colors():
+
+    # Extended vibrant color palette
+    colors = [
+        # Primary colors
+        (1, 0, 0, 0.5),        # Red
+        (0, 1, 0, 0.5),        # Green
+        (0, 0, 1, 0.5),        # Blue
+        
+        # Secondary colors
+        (1, 1, 0, 0.5),        # Yellow
+        (1, 0, 1, 0.5),        # Magenta
+        (0, 1, 1, 0.5),        # Cyan
+        
+        # Tertiary colors
+        (1, 0.5, 0, 0.5),      # Orange
+        (0.5, 0, 0.5, 0.5),    # Purple
+        (0, 0.5, 0, 0.5),      # Dark Green
+        (0.5, 0.5, 0, 0.5),    # Olive
+        (0, 0, 0.5, 0.5),      # Navy
+        (0.5, 0, 0, 0.5),      # Maroon
+        
+        # Pastel-ish
+        (1, 0.7, 0.7, 0.5),    # Light Red/Pink
+        (0.7, 1, 0.7, 0.5),    # Light Green
+        (0.7, 0.7, 1, 0.5),    # Light Blue
+        (1, 1, 0.7, 0.5),      # Light Yellow
+        
+        # Additional distinct colors
+        (0.8, 0.4, 0, 0.5),    # Burnt Orange
+        (0.6, 0.2, 0.8, 0.5),  # Violet
+        (0, 0.8, 0.4, 0.5),    # Emerald
+        (0.9, 0.6, 0.2, 0.5),  # Gold
+        (0.2, 0.6, 0.9, 0.5),  # Sky Blue
+        (0.7, 0.3, 0.6, 0.5),  # Orchid
+        (0.4, 0.7, 0.2, 0.5),  # Lime
+        (0.9, 0.2, 0.6, 0.5),  # Hot Pink
+    ]
+
+    return colors

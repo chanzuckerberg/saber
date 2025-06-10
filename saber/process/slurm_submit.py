@@ -94,7 +94,7 @@ def classifier_inputs(func):
                      help="Path to Classifier Model Config"),
         click.option("--model-weights", type=str, required=False, default=None,
                     help="Path to Classifier model trained weights."),    
-        click.option("--target-class", type=int, required=False, default=1,
+        click.option("--target-class", type=int, required=False, default=-1,
                     help="Target Class for Segmentation")
     ]
     for option in reversed(options):  # Add options in reverse order to preserve correct order

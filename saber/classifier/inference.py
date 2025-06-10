@@ -59,7 +59,8 @@ def predict(model_weights, model_config, input, output):
         masks = np.array(zfile[run_id]['masks'])
 
         # Run batched inference directly
-        predictions = predictor.predict(im, masks)  # Shape: (Nmasks, num_classes)
+        # predictions = predictor.predict(im, masks)  # Shape: (Nmasks, num_classes)
+        predictions = predictor.batch_predict(im, masks)  # Shape: (Nmasks, num_classes)
 
         # Initialize the final masks
         final_masks[:] = 0
@@ -111,36 +112,3 @@ def predict_slurm(
         shell_name = "predict_classifier.sh",
         command = command
     )
-
-    # # Main Loop
-    # for run_id in tqdm(run_ids):
-
-    #     im = np.array(zfile[run_id]['image'])
-    #     masks = np.array(zfile[run_id]['masks'])
-
-    #     # Run batched inference directly
-    #     predictions = predictor.predict(im, masks)  # Shape: (Nmasks, num_classes)
-
-    #     # Current Check to make sure predictions are aligned with masks
-    #     if masks.shape[0] != predictions.shape[0]:
-    #         import pdb; pdb.set_trace()
-
-    #     # If no predictions, skip
-    #     if predictions is not None:
-    #         # Determine the predicted class for each mask (argmax across class dimension)
-    #         predicted_classes = np.argmax(predictions, axis=1)  # Shape: (Nmasks,)
-    #         print(predicted_classes)
-
-    #         # Assign each mask to the predicted class
-    #         final_masks = np.zeros([num_classes - 1, nx, ny], dtype=np.uint8)
-    #         for mask_idx, class_idx in enumerate(predicted_classes):
-    #             if class_idx > 0: 
-    #                 final_masks[class_idx-1] |= (masks[mask_idx] > 0)  # Ensure binary masks per class
-
-    #         # Check if any masks are present
-    #         if np.any(final_masks):
-    #             # Save the combined class masks
-    #             output_zfile.create_dataset(f"{run_id}/masks", data=final_masks)
-
-    #             # Save the corresponding image
-    #             output_zfile.create_dataset(f"{run_id}/image", data=im)

@@ -48,6 +48,7 @@ class cryoTomoSegmenter:
         # Build SAM2 model
         (cfg, checkpoint) = pretrained_weights.get_sam2_checkpoint(sam2_cfg)
         self.sam2 = build_sam2(cfg, checkpoint, device=device, apply_postprocessing = True)
+        self.sam2.eval()
 
         # Build Default Mask Generator
         self.mask_generator = SAM2AutomaticMaskGenerator(
@@ -135,7 +136,8 @@ class cryoTomoSegmenter:
         self.image = image0
 
         # Run Inference from Pre-trained Model
-        self.masks = self.mask_generator.generate(image)
+        with torch.no_grad():
+            self.masks = self.mask_generator.generate(image)
         
         # Display Original SAM2 Segmentations
         # plt.imshow(image, cmap='gray'); viz.show_anns(self.masks); plt.axis('off');  plt.show()
@@ -158,6 +160,7 @@ class cryoTomoSegmenter:
 
         return self.masks 
 
+    @torch.inference_mode()
     def segment_tomogram(
         self, 
         vol,
@@ -208,7 +211,7 @@ class cryoTomoSegmenter:
         self.segment_image(
             vol, slab_thickness, display_image = save_mask, 
             save_run = save_run, run = run, zSlice = zSlice)
-
+            
         # Check to Make Sure Masks are Found
         if len(self.masks) == 0:
             hook_handle.remove()

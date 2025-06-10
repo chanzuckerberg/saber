@@ -72,16 +72,14 @@ class Predictor:
                 image = image.unsqueeze(1)  # now [B, 1, H, W]
             # Otherwise assume image is already [C, H, W] (e.g. C=1) and not batched
         
-        # If image is a single image ([1, H, W]) but we have multiple masks, expand it
-        if image.shape[0] == 1 and masks.shape[0] > 1:
-            image = image.expand(masks.shape[0], -1, -1, -1)
-        
         # Binarize the masks (assumes masks shape is [Nmasks, H, W])
         binarized_masks = (masks > 0).to(torch.uint8)
         
         # Compute the area of each mask and filter small ones
         mask_areas = binarized_masks.sum(dim=[1, 2])
         valid_indices = (mask_areas >= self.min_area).nonzero(as_tuple=False).squeeze(1).tolist()
+        
+        # Filter masks and corresponding images
         binarized_masks = binarized_masks[valid_indices]
         if binarized_masks.shape[0] == 0:
             return None, []
@@ -89,11 +87,13 @@ class Predictor:
         # Add a channel dimension to masks → [Nmasks, 1, H, W]
         binarized_masks = binarized_masks.unsqueeze(1)
         
-        # Now ensure the image batch matches the number of valid masks
-        if image.shape[0] == 1 and binarized_masks.shape[0] > 1:
+        # Handle image batching based on the FILTERED mask count
+        if image.shape[0] == 1:
+            # Single image - expand to match filtered mask count
             im_batch = image.expand(binarized_masks.shape[0], -1, -1, -1)
         else:
-            im_batch = image
+            # Multiple images - select only the valid ones
+            im_batch = image[valid_indices]
         
         # Build the input batch according to the model input mode
         if self.model.input_mode == 'separate':
@@ -116,61 +116,108 @@ class Predictor:
         Returns:
             numpy.ndarray: The predicted class probabilities of shape (Nmasks, num_classes).
         """
-        # Normalize the image and preprocess inputs into a batch
-        
         # Convert to PyTorch tensors if needed
-        image = torch.tensor(image, dtype=torch.float32)
-        masks = torch.tensor(masks, dtype=torch.uint8)  # Shape: (Nclass, H, W)
+        if isinstance(image, np.ndarray):
+            image = torch.tensor(image, dtype=torch.float32)
+        if isinstance(masks, np.ndarray):
+            masks = torch.tensor(masks, dtype=torch.uint8)
+        
+        # Store original mask count
+        original_mask_count = masks.shape[0]
         
         # Apply Transforms and Preprocess Inputs
         image = self.transforms(image)
-        image, masks = self.apply_crops(image, masks)
-        input_tensor, valid_indices = self.preprocess(image, masks)
+        
+        # Apply crops - this returns one cropped image per mask
+        cropped_images, cropped_masks = self.apply_crops(image, masks)
+        
+        # Now preprocess with already cropped images and masks
+        input_tensor, valid_indices = self.preprocess(cropped_images, cropped_masks)
 
         if input_tensor is None:
-            return None
+            return np.zeros((original_mask_count, self.config['model']['num_classes']), dtype=np.float32)
 
         # Perform inference
         with torch.no_grad():
             if self.model.input_mode == 'separate':
                 input_batch = input_tensor[:,0,].unsqueeze(1)
                 input_masks = input_tensor[:,1,].unsqueeze(1)
-                logits = self.model(input_batch,input_masks)     # Forward pass → (Nmasks, num_classes)
+                logits = self.model(input_batch, input_masks)
             else:
-                logits = self.model(input_tensor)     # Forward pass → (Nmasks, num_classes)
-            probs = torch.softmax(logits, dim=1)  # Convert logits to probabilities
-        probs = probs.cpu().numpy()               # Convert to NumPy for easy saving
+                logits = self.model(input_tensor)
+            probs = torch.softmax(logits, dim=1)
+        probs = probs.cpu().numpy()
 
         # Assign predicted probabilities to valid mask positions
-        full_probs = np.zeros((masks.shape[0], probs.shape[1]), dtype=np.float32)
+        full_probs = np.zeros((original_mask_count, probs.shape[1]), dtype=np.float32)
         if valid_indices:
             full_probs[valid_indices] = probs
 
-        return full_probs  # Shape: (Nmasks, num_classes)
-    
+        return full_probs        
+
+    def batch_predict(self, image, masks, batch_size=32):
+        """
+        Runs inference on masks in batches to avoid CUDA memory issues.
+        
+        Args:
+            image (numpy.ndarray or torch.Tensor): The input image (H, W).
+            masks (numpy.ndarray or torch.Tensor): A batch of candidate masks (Nmasks, H, W).
+            batch_size (int): Maximum number of masks to process at once. Default is 32.
+        
+        Returns:
+            numpy.ndarray: The predicted class probabilities of shape (Nmasks, num_classes).
+        """
+        # Convert to tensors if needed
+        if isinstance(masks, np.ndarray):
+            masks = torch.tensor(masks, dtype=torch.uint8)
+        
+        total_masks = masks.shape[0]
+        num_classes = self.config['model']['num_classes']
+        
+        # Initialize output array
+        all_probs = np.zeros((total_masks, num_classes), dtype=np.float32)
+        
+        # Process masks in batches
+        for start_idx in range(0, total_masks, batch_size):
+            end_idx = min(start_idx + batch_size, total_masks)
+            
+            # Extract current batch of masks
+            mask_batch = masks[start_idx:end_idx]
+            
+            # Run prediction on this batch
+            batch_probs = self.predict(image, mask_batch)
+            
+            # Handle case where all masks in batch were filtered out
+            if batch_probs is not None:
+                # Store results in the correct position
+                all_probs[start_idx:end_idx] = batch_probs
+        
+        return all_probs        
+
     def apply_crops(self, image, masks):
         """
         Applies crops to the input tensor.
-        Args:
-            data (Tensor): A tensor of shape (N, 2, H, W) where data[i, 0] is the image
-                        and data[i, 1] is the mask.
-        Returns:
-            Tensor: A tensor of cropped images and masks with shape (N, 2, H_out, W_out).
         """
-        
-        
-        # Determine the Number of Images and Iterate 
         nImages = masks.shape[0]
-        image0 = image.unsqueeze(0)
-        for ii in range(nImages):
+        image0 = image.unsqueeze(0) if image.ndim == 2 else image
+        
+        # Process first image to get output dimensions
+        img_crop, mask_crop = crop_and_resize_adaptive(image0, masks[0])
+        
+        # Pre-allocate output tensor on the same device as input
+        output = torch.zeros([nImages, 2, img_crop.shape[1], img_crop.shape[2]], 
+                            device=masks.device, dtype=image.dtype)
+        
+        # Store first result
+        output[0] = torch.cat([img_crop, mask_crop], dim=0)
+        
+        # Process remaining images
+        for ii in range(1, nImages):
+            img_crop, mask_crop = crop_and_resize_adaptive(image0, masks[ii])
+            output[ii] = torch.cat([img_crop, mask_crop], dim=0)
             
-            # TODO: Reshape Image 
-            image, mask = crop_and_resize_adaptive(image0, masks[ii,])
-            
-            # Initialize Output Tensor if First Iteration
-            if ii == 0:
-                output = torch.zeros([nImages, 2, image.shape[1], image.shape[2]])
-            # Concatenate the Cropped Image and Mask
-            output[ii,] = torch.cat([image, mask], dim=0)
+            # Optional: Empty the cache periodically
+            if ii % 100 == 0 and torch.cuda.is_available():
+                torch.cuda.empty_cache()
         
         return output[:,0], output[:,1]

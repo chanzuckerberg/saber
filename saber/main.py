@@ -1,8 +1,9 @@
 from saber.entry_points.segment_methods import methods as segment
 from saber.classifier.cli import classifier_routines as classifier
-from saber.pretrained_weights import cli as download
 from saber.entry_points.run_low_pass_filter import cli as filter3d
+from saber.pretrained_weights import cli as download
 from saber.entry_points.analyze import cli as save
+from saber.process.importers import cli as importers
 import click
 try:
     from saber.gui.zarr_gui import gui
@@ -19,6 +20,7 @@ def routines():
 routines.add_command(download)
 routines.add_command(filter3d)
 routines.add_command(classifier)
+routines.add_command(importers)
 if gui_available: routines.add_command(gui)
 routines.add_command(segment)
 routines.add_command(save)

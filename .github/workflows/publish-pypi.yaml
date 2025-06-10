@@ -1,4 +1,4 @@
-name: CI
+name: Publish Python Package
 
 on:
   push:
@@ -8,7 +8,6 @@ on:
       - "v*"
   pull_request:
   workflow_dispatch:
-  
 
 # cancel in-progress runs that use the same workflow and branch
 concurrency:
@@ -45,4 +44,34 @@ jobs:
 
       - name: Coverage
         uses: codecov/codecov-action@v5
+
+  build-and-publish:
+    name: Build and publish Python 🐍 distributions 📦 to PyPI
+    needs: test  # Only run after tests pass
+    runs-on: ubuntu-latest
+    # Only publish on tag pushes
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install pypa/build
+        run: python -m pip install build
+
+      - name: Build a binary wheel and a source tarball
+        run: python -m build
+
+      - name: Publish distribution 📦 to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          # For TestPyPI, uncomment the following:
+          # repository-url: https://test.pypi.org/legacy/
+          # password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+
 

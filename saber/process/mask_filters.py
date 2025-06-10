@@ -23,7 +23,8 @@ def apply_classifier(image, masks, classifier, desired_class: int = None, min_ma
     sam2_masks = np.array(sam2_masks)
 
     # Run predictions using your classifier and Determine predicted class for each mask
-    predictions = classifier.predict(image[:,:,0], sam2_masks)
+    with torch.no_grad():
+        predictions = classifier.predict(image[:,:,0], sam2_masks)
 
     return convert_predictions_to_masks(predictions, masks, desired_class, min_mask_area)   
 
@@ -35,12 +36,9 @@ def convert_predictions_to_masks(predictions, masks, desired_class: int = None, 
      # Get predicted class for each mask
     predicted_classes = np.argmax(predictions, axis=1)  
 
+    # Instance Segmentation 
     # If a desired class is specified, filter the masks that match the desired class
-    if desired_class is None:
-
-        # Get highest confidence for each mask (which is for the predicted class)
-        confidence_scores = np.max(predictions, axis=1)
-    else:
+    if desired_class > 0 or desired_class is not None:
         # Get confidence for the desired class
         confidence_scores = predictions[:,desired_class]
 
@@ -49,16 +47,21 @@ def convert_predictions_to_masks(predictions, masks, desired_class: int = None, 
         masks = [masks[i] for i in target_indices]
         confidence_scores = confidence_scores[target_indices]
 
+        # Apply Consensus-Based Resolution to the Target Masks
+        if len(masks) > 0:
+            # Filter Out Small Masks and Apply Consensus-Based Resolution
+            masks = _consensus_based_resolution(masks[0]['segmentation'].shape, masks, confidence_scores)
+            masks = [mask for mask in masks if mask['area'] >= min_mask_area] 
+            
+    # Semantic Segmentation (This is currently incorrect...)
+    else:
+        # Get highest confidence for each mask (which is for the predicted class)
+        confidence_scores = np.max(predictions, axis=1)
+
     # Apply NMS-like resolution to the target masks
     # target_masks = _confidence_based_resolution(target_masks, target_confidences, overlap_threshold = 0.3, min_area_ratio = 0.5, iou_threshold = 0.5)
 
-    # Apply Consensus-Based Resolution to the Target Masks
-    if len(masks) > 0:
-        # Filter Out Small Masks and Apply Consensus-Based Resolution
-        masks = _consensus_based_resolution(masks[0]['segmentation'].shape, masks, confidence_scores)
-        masks = [mask for mask in masks if mask['area'] >= min_mask_area]
-
-    return masks     
+    return masks
 
 def _consensus_based_resolution(image_shape, masks, confidences):
     """
@@ -133,79 +136,6 @@ def convert_mask_array_to_list(mask_array):
         masks.append(mask)
     return masks
 
-# def _confidence_based_resolution(masks, confidences, overlap_threshold, min_area_ratio, iou_threshold):
-#     """
-#     Implements NMS-like resolution for segmentation masks based on confidence scores.
-#     """
-#     # Create a list of (mask, confidence) tuples
-#     mask_data = list(zip(masks, confidences))
-    
-#     # Sort by confidence score (highest first)
-#     mask_data.sort(key=lambda x: x[1], reverse=True)
-    
-#     kept_masks = []
-    
-#     while mask_data:
-#         # Take the mask with highest confidence
-#         best_mask, best_conf = mask_data.pop(0)
-#         kept_masks.append(best_mask)
-        
-#         best_seg = best_mask['segmentation']
-#         best_area = float(np.sum(best_seg))
-        
-#         # Filter remaining masks
-#         remaining_masks = []
-#         for mask, conf in mask_data:
-#             seg = mask['segmentation']
-            
-#             # Calculate IoU with the best mask
-#             intersection = np.logical_and(seg, best_seg)
-#             union = np.logical_or(seg, best_seg)
-            
-#             iou = np.sum(intersection) / np.sum(union) if np.sum(union) > 0 else 0
-            
-#             # If IoU is above threshold (high overlap), consider for modification
-#             if iou > iou_threshold:
-#                 # Calculate overlap ratio (percentage of this mask that overlaps with best mask)
-#                 overlap_ratio = np.sum(intersection) / np.sum(seg) if np.sum(seg) > 0 else 0
-                
-#                 # If overlap is significant, modify the mask to remove overlapping region
-#                 if overlap_ratio > overlap_threshold:
-#                     # Remove overlapping pixels
-#                     modified_seg = np.logical_and(seg, ~best_seg)
-                    
-#                     # Check if enough of the mask remains
-#                     modified_area = np.sum(modified_seg)
-                    
-#                     if modified_area > min_area_ratio * np.sum(seg):
-#                         # Create a new mask with modified segmentation
-#                         new_mask = mask.copy()
-#                         new_mask['segmentation'] = modified_seg
-#                         new_mask['area'] = int(modified_area)
-                        
-#                         # Update bounding box if needed
-#                         if np.any(modified_seg):
-#                             rows, cols = np.where(modified_seg)
-#                             new_mask['bbox'] = [
-#                                 int(np.min(cols)), 
-#                                 int(np.min(rows)), 
-#                                 int(np.max(cols) - np.min(cols)), 
-#                                 int(np.max(rows) - np.min(rows))
-#                             ]
-                        
-#                         remaining_masks.append((new_mask, conf))
-#                     # Otherwise, mask is discarded due to insufficient remaining area
-#                 else:
-#                     # Overlap is below threshold, keep mask as is
-#                     remaining_masks.append((mask, conf))
-#             else:
-#                 # IoU is below threshold, keep mask as is
-#                 remaining_masks.append((mask, conf))
-        
-#         mask_data = remaining_masks
-    
-#     return kept_masks    
-
 def merge_segmentation_masks(segmentation, min_volume_threshold=100):
     """
     Process a 3D segmentation array where different segments have unique labels.
@@ -265,8 +195,6 @@ def merge_segmentation_masks(segmentation, min_volume_threshold=100):
         new_segmentation[labeled_mask == old_label] = new_label
     
     return new_segmentation
-
-
 
 
 def apply_physical_contraints(

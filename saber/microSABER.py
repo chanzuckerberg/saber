@@ -1,3 +1,4 @@
+from saber.process.downsample import FourierRescale2D
 from typing import List, Dict, Any, Tuple, Optional
 import saber.process.mask_filters as filters
 from saber.visualization import sam2 as viz
@@ -7,7 +8,10 @@ from scipy.optimize import curve_fit
 import saber.utilities as utils
 import matplotlib.pyplot as plt
 from scipy import ndimage
+from tqdm import tqdm
 import numpy as np
+
+from saber.visualization import classifier as viz
 
 # Testing 1D Gaussian Kernel
 from saber.process import gaussian_smooth as gauss
@@ -32,14 +36,21 @@ class cryoMicroSegmenter:
         deviceID: int = 0,
         classifier = None,
         target_class: int = 1,
-        labeled_points: Optional[str] = None
+        min_mask_area: int = 50,
+        window_size: int = 256,
+        overlap_ratio: float = 0.25,
     ):
         """
         Class for Segmenting Micrographs or Images using SAM2
         """
 
         # Minimum Mask Area to Ignore 
-        self.min_mask_area = 100
+        self.min_mask_area = min_mask_area
+
+        # Sliding window parameters
+        self.window_size = window_size
+        self.overlap_ratio = overlap_ratio
+        self.iou_threshold = 0.5        
 
         # Determine device
         device = utils.get_available_devices(deviceID)
@@ -47,6 +58,7 @@ class cryoMicroSegmenter:
         # Build SAM2 model
         (cfg, checkpoint) = pretrained_weights.get_sam2_checkpoint(sam2_cfg)
         self.sam2 = build_sam2(cfg, checkpoint, device=device, apply_postprocessing = True)
+        self.sam2.eval()
 
         # Build Mask Generator
         self.mask_generator = SAM2AutomaticMaskGenerator(
@@ -61,24 +73,48 @@ class cryoMicroSegmenter:
             crop_n_points_downscale_factor=2,
             use_m2m=True,
             multimask_output=True,
-            min_rel_box_size=0.1,
         )  
+
+        # Add Mask Filtering to Generator
+        self.mask_generator = fmask.FilteredSAM2MaskGenerator(
+            base_generator=self.mask_generator,
+            min_area_filter=self.min_mask_area,
+            max_rel_box_size=0.98,
+        )
 
         # Initialize Domain Expert Classifier for Filtering False Positives
         if classifier:
             self.classifier = classifier
             self.target_class = target_class
+            # Also set classifier to eval mode
+            if hasattr(self.classifier, 'eval'):
+                self.classifier.eval()
         else:
             self.classifier = None
             self.target_class = None
 
-        # Labeled Points to Overlay on Segmentations
-        self.labeled_points = labeled_points
-
+    @torch.inference_mode()
     def segment_image(self,
         image0,
-        display_image: bool = True, 
+        display_image: bool = True,
+        use_sliding_window: bool = True
     ):
+        """
+        Segment image using sliding window approach
+        
+        Args:
+            image0: Input image
+            display_image: Whether to display the result
+            use_sliding_window: Whether to use sliding window (True) or single inference (False)
+        """
+
+
+        # Fourier Crop the Image to the Desired Resolution
+        (nx, ny) = image0.shape
+        if not use_sliding_window and (nx > 1024 or ny > 1024):
+            scale_factor =  max(nx, ny) / 1024 
+            image0 = FourierRescale2D.run(image0, scale_factor)
+            (nx, ny) = image0.shape
 
         # Increase Contrast of Image and Normalize the Image to [0,1]        
         image0 = utils.contrast(image0, std_cutoff=2)
@@ -87,31 +123,109 @@ class cryoMicroSegmenter:
         # Extend From Grayscale to RGB 
         image = np.repeat(image0[..., None], 3, axis=2)   
 
-        # Run Inference from Pre-trained SAM2 Model
-        self.masks = self.mask_generator.generate(image)
+        # Run Segmentation
+        if use_sliding_window:
 
-        # Filter Out Small Masks
-        self.masks = [mask for mask in self.masks if mask['area'] >= self.min_mask_area]
+            # Create Full Mask
+            full_mask = np.zeros(image.shape[:2], dtype=np.uint16)
 
-        # Debug: Display The SAM2 Segmentations
-        # plt.imshow(image, cmap='gray'); viz.show_anns(self.masks); plt.axis('off'); plt.savefig('segmentations.png'); plt.show()
-        # plt.imshow(np.sum([mask['segmentation'] for mask in masks], axis=0), cmap='hot'); plt.colorbar(); plt.show()
-        # exit()
+            # Get sliding windows
+            windows = self.get_sliding_windows(image.shape)
+            
+            # Process each window
+            all_masks = []
+            for i, (y1, x1, y2, x2) in tqdm(enumerate(windows), total=len(windows)):
+                # Extract window
+                window_image = image[y1:y2, x1:x2]
+                
+                # Run inference on window
+                window_masks = self.mask_generator.generate(window_image)
+                
+                # Transform masks back to full image coordinates
+                for mask in window_masks:
+                    
+                    # Reset Full Mask
+                    full_mask[:] = 0
+                    full_mask[y1:y2, x1:x2] = mask['segmentation']
+                    
+                    # Update mask dictionary
+                    mask['segmentation'] = full_mask.copy()
+                    mask['bbox'][0] += x1  # x offset
+                    mask['bbox'][1] += y1  # y offset
+
+                # Filter Out Small Masks and Add to All Masks
+                window_masks = [mask for mask in window_masks if mask['area'] >= self.min_mask_area]
+                all_masks.extend(window_masks)
+
+            # Store the Masks
+            self.masks = all_masks       
+            
+        else:
+            # Original single inference
+            self.masks = self.mask_generator.generate(image)
+            
+            # Filter Out Small Masks
+            self.masks = [mask for mask in self.masks if mask['area'] >= self.min_mask_area]
 
         # Apply Classifier Model or Physical Constraints to Filter False Positives
         if self.classifier is not None:
             self.masks = filters.apply_classifier(image, self.masks, self.classifier, self.target_class)
 
-        # Optional: Save Save Segmentation to PNG or Plot Segmentation with Matplotlib
-        if display_image:
-            self.save_mask_segmentation(run, image, save_run)
-
-        # Option 2: RGB Image
+        # Store image
         self.image = image0
 
-        # Return the Masks
-        return self.masks     
+        # Optional: Save Save Segmentation to PNG or Plot Segmentation with Matplotlib
+        if display_image:
+            viz.display_mask(self.image, self.masks); plt.show()
 
+        # Return the Masks
+        return self.masks  
+        
     def save_mask_segmentation(self, masks):
         # TODO: Implement this
         pass
+
+    def get_sliding_windows(self, image_shape: Tuple[int, int]) -> List[Tuple[int, int, int, int]]:
+        """
+        Generate sliding window coordinates
+        
+        Args:
+            image_shape: (height, width) of the image
+            
+        Returns:
+            List of (y1, x1, y2, x2) coordinates for each window
+        """
+        h, w = image_shape[:2]
+        stride = int(self.window_size * (1 - self.overlap_ratio))
+        
+        windows = []
+        for y in range(0, h, stride):
+            for x in range(0, w, stride):
+                y1 = y
+                x1 = x
+                y2 = min(y + self.window_size, h)
+                x2 = min(x + self.window_size, w)
+                
+                # Skip windows that are too small
+                if (y2 - y1) < self.window_size // 2 or (x2 - x1) < self.window_size // 2:
+                    continue
+                    
+                windows.append((y1, x1, y2, x2))
+                
+        return windows
+
+    def masks_to_list(self, masks):
+        if not masks:
+            return None
+    
+        # Get shape from first mask
+        h, w = masks[0]['segmentation'].shape
+        n_masks = len(masks)
+        
+        # Create array
+        masks_array = np.zeros((n_masks, h, w), dtype=np.uint8)
+        for i, mask in enumerate(masks):
+            masks_array[i] = mask['segmentation']
+        
+        return masks_array
+        

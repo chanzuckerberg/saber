@@ -12,9 +12,9 @@ def fit_quadratic(x, data):
     x_max = np.argmax(data[1:-1])
     popt1, _ = curve_fit(
         quadratic, x, data, 
-        p0=[-1e-3, int(nFrames/2), 1, np.max(data)/2], 
-        bounds=([-np.inf, x_max - 50, 0, 0  ], 
-                [0, x_max + 50, 10, 10]) )
+        p0=[-1e-3, x_max, 1, np.max(data)/2], 
+        bounds=([-np.inf, 0, 0, 0  ], 
+                [0, nFrames, 10, 10]) )
 
     r2_quad = calculate_r2_score(data, quadratic, popt1)
 
@@ -28,12 +28,13 @@ def fit_gaussian(x, data):
 
     # Estimate Max Bound 
     nFrames = data.shape[0]
+    x_max = np.argmax(data[1:-1])
     c_max = nFrames * 0.25 / 2.355
 
     # Option 2 - Gaussian Fit and Calculate R2 Score
     popt2, _ = curve_fit(
         gaussian, x, data,  
-        p0=[np.max(data), int(nFrames/2), 3e-1 ], 
+        p0=[np.max(data), x_max, 3e-1 ], 
         bounds=((0, 0, 0), (np.inf, nFrames, c_max)) 
     )
     r2_gauss = calculate_r2_score(data, gaussian, popt2)
@@ -85,7 +86,6 @@ def fit_organelle_boundaries(frame_scores: np.ndarray):
         # Fit the function to the data
         try:
             popt1, r2_quad = fit_quadratic(x, data)
-
         except Exception as e:
             print(f"Error fitting Quadratic mask {ii}: {e}")
             r2_quad = 0
@@ -106,7 +106,7 @@ def fit_organelle_boundaries(frame_scores: np.ndarray):
             mask_boundaries[:,ii] = gaussian(x, *popt2)
 
         # Optional - Plot the Fit
-        # viz.plot_fit(data, func, parameters)   
+        viz.plot_fit(data, func, parameters)   
 
     return mask_boundaries
 

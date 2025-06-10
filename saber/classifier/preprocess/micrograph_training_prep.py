@@ -8,9 +8,6 @@ import multiprocess as mp
 from tqdm import tqdm
 import numpy as np
 
-import matplotlib.pyplot as plt
-
-
 @click.group()
 @click.pass_context
 def cli(ctx):
@@ -216,3 +213,34 @@ def mrc_fourier_crop(
     im_cropped = FourierRescale2D.run(image, current_pixsize, target_pixsize, device)
 
     return im_cropped
+
+def materials_process(
+    file_path: str, 
+    target_pixsize: float, 
+    device: torch.device = None
+    ):
+    
+    try:
+        import hyperspy.api as hs
+    except ImportError:
+        print("Hyperspy is not installed. Please install it to use this function.")
+        return
+
+    data = hs.load(file_path)
+
+    # TODO: Figure out how to read 
+
+    return data
+
+def stem4d_process(
+    file_path: str, 
+    target_pixsize: float, 
+    device: torch.device = None
+    ):
+    try:
+        import py4DSTEM
+    except ImportError:
+        print("py4DSTEM is not installed. Please install it to use this function.")
+        return    
+
+    datacube = py4DSTEM.io.load(file_path)
