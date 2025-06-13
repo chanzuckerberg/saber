@@ -1,4 +1,12 @@
+import mrcfile, skimage
 import numpy as np
+
+# Try to import hyperspy for Material Science dataset
+try:
+    import hyperspy.api as hs
+    hyperspy_available = True
+except:
+    hyperspy_available = False
 
 def get_tomogram(run, 
                  voxel_size: float = 10, 
@@ -130,3 +138,20 @@ def get_coordinates(run,                     # CoPick run object containing the 
 
     # Return the array of coordinates
     return coordinates
+
+def read_micrograph(input: str):
+    if input.endswith('.mrc'):
+        with mrcfile.open(input, permissive=True) as mrc:
+            data = mrc.data
+            pixel_size = mrc.voxel_size.x
+        return data, pixel_size
+    elif input.endswith('.tif') or input.endswith('.tiff'):
+        return skimage.io.imread(input)
+    elif hyperspy_available and input.endswith('.hspy'):
+        signal = hs.load(input)
+        data = signal.data
+        axes = signal.axes_manager
+        pixel_size = axes[0].scale
+        return data, pixel_size
+    else:
+        raise ValueError(f"Unsupported file type: {input}")

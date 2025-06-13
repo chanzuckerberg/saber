@@ -1,7 +1,9 @@
+from saber.process.downsample import FourierRescale2D
 import saber.process.slurm_submit as slurm_submit
 from saber.microSABER import cryoMicroSegmenter
 import mrcfile, skimage, glob, click, torch
 from saber.classifier.models import common
+from saber.io import read_micrograph
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import numpy as np
@@ -24,7 +26,8 @@ def segment_micrograph_separate_process(
     model_config: str,
     target_class: int,
     display_image: bool = False,
-    use_sliding_window: bool = True
+    use_sliding_window: bool = True,
+    target_resolution: float = None
     ):
 
     # Initialize the Domain Expert Classifier   
@@ -39,10 +42,20 @@ def segment_micrograph_separate_process(
 
     # Get Micrograph
     print(f'Getting Micrograph from {input}')
-    im = read_micrograph(input)
+    im, pixel_size = read_micrograph(input)
+    im = im.astype(np.float32)
 
-    # Temporary Crop
-    im = im[75:75+1100, 1280:1280+1100]
+    # Downsample if desired resolution is larger than current resolution
+    if target_resolution is not None and target_resolution > pixel_size:
+        scale = target_resolution / pixel_size
+        im = FourierRescale2D.run(im, scale)
+
+#     # Temporary Crop
+#     im = im[75:75+1100, 1280:1280+1100]
+#     im -= 30000
+#     im[im < 0] = 0
+# #    plt.imshow(im,cmap='gray'); plt.show()
+# #    import pdb; pdb.set_trace()
 
     # Segment Micrograph
     masks = segmenter.segment_image(
@@ -58,13 +71,16 @@ def segment_micrograph_separate_process(
 @slurm_submit.classifier_inputs
 @click.option("--sliding-window", type=bool, required=False, default=False,
               help="Use Sliding Window for Segmentation")
+@click.option("--target-resolution", type=float, required=False, default=None, 
+              help="Desired Resolution to Segment Images [Angstroms]. If not provided, no downsampling will be performed.")
 def micrographs(
     input: str,
     sam2_cfg: str,
     model_weights: str,
     model_config: str,
     target_class: int,
-    sliding_window: bool
+    sliding_window: bool,
+    target_resolution: float 
     ):
     """
     Segment a single micrograph or all micrographs in a folder.
@@ -77,7 +93,8 @@ def micrographs(
     elif len(files) == 1:
         segment_micrograph_separate_process(
             files[0], sam2_cfg, model_weights, model_config, target_class,
-            display_image=True, use_sliding_window=sliding_window
+            display_image=True, use_sliding_window=sliding_window, 
+            target_resolution=target_resolution,
             )
     else:
         import multiprocess as mp
@@ -140,12 +157,3 @@ def micrographs_slurm(
     
     pass
 
-def read_micrograph(input: str):
-    if input.endswith('.mrc'):
-        return mrcfile.read(input)
-    elif input.endswith('.tif') or input.endswith('.tiff'):
-        return skimage.io.imread(input)
-    elif input.endswith('.hspy'):
-        return hs.load(input)
-    else:
-        raise ValueError(f"Unsupported file type: {input}")

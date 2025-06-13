@@ -20,8 +20,6 @@ from saber.process import gaussian_smooth as gauss
 # Explained Here: https://github.com/facebookresearch/sam2/blob/main/INSTALL.md
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
-# from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
-# from sam2.build_sam import build_sam2, build_sam2_tomogram_predictor, build_sam2_video_predictor
 from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
 from saber.sam2 import filtered_automatic_mask_generator as fmask
 from sam2.build_sam import build_sam2

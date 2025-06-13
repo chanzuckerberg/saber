@@ -31,7 +31,7 @@ class FourierRescale:
             self.device = torch.device('cuda')
         else:
             self.device = torch.device('cpu')
-
+  
     def run(self, volume):
         """
         Rescale a 3D volume (or a batch of volumes on GPU) using Fourier cropping.
@@ -131,7 +131,7 @@ class FourierRescale:
 class FourierRescale2D:
 
     @staticmethod
-    def run(image, input_pixsize: float, target_pixsize: float, device: torch.device = None):
+    def run_resolution(image, input_pixsize: float, target_pixsize: float, device: torch.device = None):
         """
         Rescale a 2D image using Fourier cropping.
         """
@@ -203,137 +203,4 @@ class FourierRescale2D:
 
         return im_cropped     
 
-    # @staticmethod
-    # def run(image, 
-    #         input_pixsize: float, target_pixsize: float, 
-    #         device: torch.device = None):
-    #     """
-    #     Rescale a 2D image using Fourier cropping.
-
-    #     Parameters:
-    #         image (numpy.ndarray or torch.Tensor): The input image to rescale.
-    #         input_pixsize (float): The physical spacing of the input voxels (Å).
-    #         target_pixsize (float): The desired physical spacing of the output voxels (Å).
-    #         device (torch.device, optional): The device to perform computation on (defaults to cuda if available).
-    #     """
-
-    #     # Set device if not provided
-    #     if device is None:
-    #         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-    #     # Check if target pixel size is larger than input pixel size
-    #     if target_pixsize <= input_pixsize:
-    #         raise ValueError(f"Target pixel size ({target_pixsize}Å) must be larger than current pixel size ({input_pixsize}Å)")
-        
-    #     # Check to see if image is a numpy array
-    #     if isinstance(image, np.ndarray):
-    #         image = torch.from_numpy(image).to(device)
-    #         is_numpy = True
-    #     else:
-    #         image = image.to(device)
-    #         is_numpy = False
-
-    #     # Get dimensions and check if odd
-    #     h, w = image.shape
-    #     h_is_odd = h % 2
-    #     w_is_odd = w % 2
-        
-    #     # Calculate new dimensions
-    #     crop_factor = target_pixsize / input_pixsize
-    #     h_new = int(h / crop_factor)
-    #     w_new = int(w / crop_factor)
-        
-    #     # Ensure new dimensions are even
-    #     h_new = h_new - (h_new % 2)
-    #     w_new = w_new - (w_new % 2)
-        
-    #     # Compute FFT
-    #     imFFT = torch.fft.fftshift(torch.fft.fft2(image))
-        
-    #     # Calculate cropping boundaries with odd/even correction
-    #     h_start = (h - h_new) // 2 + (h_is_odd)
-    #     w_start = (w - w_new) // 2 + (w_is_odd)
-        
-    #     # Crop in Fourier space
-    #     imFFT_cropped = imFFT[
-    #         h_start:h_start + h_new,
-    #         w_start:w_start + w_new
-    #     ]
-        
-    #     # Inverse FFT
-    #     im_cropped = torch.abs(torch.fft.ifft2(torch.fft.ifftshift(imFFT_cropped)))
-
-    #     if is_numpy:
-    #         im_cropped = im_cropped.cpu().numpy()
-    #         torch.cuda.empty_cache() # Clear CUDA cache
-    #     else:
-    #         im_cropped = im_cropped.cpu()
-
-    #     return im_cropped
-
-    # @staticmethod
-    # def run(image, 
-    #         scale_factor: float,
-    #         device: torch.device = None):
-    #     """
-    #     Rescale a 2D image using Fourier cropping.
-
-    #     Parameters:
-    #         image (numpy.ndarray or torch.Tensor): The input image to rescale.
-    #         scale_factor (float): The scale factor to apply to the image.
-    #         device (torch.device, optional): The device to perform computation on (defaults to cuda if available).
-    #     """
-
-    #     # Set device if not provided
-    #     if device is None:
-    #         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-    #     # Check to see if image is a numpy array
-    #     if isinstance(image, np.ndarray):
-    #         image = torch.from_numpy(image).to(device)
-    #         is_numpy = True
-    #     else:
-    #         image = image.to(device)
-    #         is_numpy = False
-
-    #     # Get dimensions and check if odd
-    #     h, w = image.shape
-    #     h_is_odd = h % 2
-    #     w_is_odd = w % 2
-        
-    #     # Calculate new dimensions
-    #     h_new = int(h / scale_factor)
-    #     w_new = int(w / scale_factor)
-        
-    #     # Ensure new dimensions are even
-    #     h_new = h_new - (h_new % 2)
-    #     w_new = w_new - (w_new % 2)
-        
-    #     # Compute FFT
-    #     imFFT = torch.fft.fftshift(torch.fft.fft2(image))
-        
-    #     # Calculate cropping boundaries with odd/even correction
-    #     h_start = (h - h_new) // 2 + (h_is_odd)
-    #     w_start = (w - w_new) // 2 + (w_is_odd)
-        
-    #     # Crop in Fourier space
-    #     imFFT_cropped = imFFT[
-    #         h_start:h_start + h_new,
-    #         w_start:w_start + w_new
-    #     ]
-        
-    #     # Inverse FFT
-    #     im_cropped = torch.abs(torch.fft.ifft2(torch.fft.ifftshift(imFFT_cropped)))
-
-    #     if is_numpy:
-    #         im_cropped = im_cropped.cpu().numpy()
-    #         torch.cuda.empty_cache() # Clear CUDA cache
-    #     else:
-    #         im_cropped = im_cropped.cpu()
-
-    #     return im_cropped   
-
-    
-    
-
-        
+   

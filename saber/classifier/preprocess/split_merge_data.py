@@ -102,6 +102,7 @@ def merge(inputs: List[str], output: str):
     # Create the output zarr group
     mergedZarr = zarr.open_group(output, mode='w')
 
+    # Copy data from each input zarr file to the merged zarr file
     for input in inputs:
         
         # Get the session label from the input
@@ -118,6 +119,10 @@ def merge(inputs: List[str], output: str):
             mergedZarr.create_group(write_key)  # Explicitly create the group first
             for item in items:
                 mergedZarr[write_key][item] = zfile[key][item][:]  # [:] ensures a full copy
+
+    # Copy all attributes from the last input zarr file
+    for attr_name, attr_value in zfile.attrs.items():
+        mergedZarr.attrs[attr_name] = attr_value
 
     print("Merge complete!")
 

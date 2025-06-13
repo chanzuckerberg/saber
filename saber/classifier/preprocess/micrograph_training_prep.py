@@ -210,7 +210,7 @@ def mrc_fourier_crop(
         image = mrc.data
     
     # Fourier Crop the Image to the Desired Resolution
-    im_cropped = FourierRescale2D.run(image, current_pixsize, target_pixsize, device)
+    im_cropped = FourierRescale2D.run_resolution(image, current_pixsize, target_pixsize, device)
 
     return im_cropped
 

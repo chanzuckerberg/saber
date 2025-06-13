@@ -38,7 +38,8 @@ def convert_predictions_to_masks(predictions, masks, desired_class: int = None, 
 
     # Instance Segmentation 
     # If a desired class is specified, filter the masks that match the desired class
-    if desired_class > 0 or desired_class is not None:
+    if desired_class > 0 and desired_class is not None:
+
         # Get confidence for the desired class
         confidence_scores = predictions[:,desired_class]
 
@@ -53,13 +54,15 @@ def convert_predictions_to_masks(predictions, masks, desired_class: int = None, 
             masks = _consensus_based_resolution(masks[0]['segmentation'].shape, masks, confidence_scores)
             masks = [mask for mask in masks if mask['area'] >= min_mask_area] 
             
-    # Semantic Segmentation (This is currently incorrect...)
+    # Semantic Segmentation
     else:
-        # Get highest confidence for each mask (which is for the predicted class)
-        confidence_scores = np.max(predictions, axis=1)
+        # Get the shape from the first mask
+        if len(masks) > 0:
+            nx, ny = masks[0]['segmentation'].shape
+        else:
+            return np.array([])  # Return empty array if no masks
 
-    # Apply NMS-like resolution to the target masks
-    # target_masks = _confidence_based_resolution(target_masks, target_confidences, overlap_threshold = 0.3, min_area_ratio = 0.5, iou_threshold = 0.5)
+        masks = _semantic_segmentation(masks, predictions)
 
     return masks
 
@@ -135,6 +138,33 @@ def convert_mask_array_to_list(mask_array):
         }
         masks.append(mask)
     return masks
+
+def _semantic_segmentation(masks, predictions):
+    """
+    Get array that returns the masks as semantic segmentation.
+    """
+
+    # Get predicted class and confidence for each mask
+    predicted_classes = np.argmax(predictions, axis=1)
+    confidence_scores = np.max(predictions, axis=1)
+
+    # Create semantic segmentation
+    output_masks = np.zeros(masks[0]['segmentation'].shape, dtype=np.uint8)
+    confidence_map = np.zeros(masks[0]['segmentation'].shape, dtype=np.float32)
+
+    for ii in range(len(masks)):
+        if predicted_classes[ii] > 0:
+            mask = masks[ii]['segmentation']
+            confidence = confidence_scores[ii]
+            
+            # Only update pixels where this mask has higher confidence
+            update_pixels = mask & (confidence > confidence_map)
+            
+            output_masks[update_pixels] = predicted_classes[ii]
+            confidence_map[update_pixels] = confidence
+
+    return output_masks
+
 
 def merge_segmentation_masks(segmentation, min_volume_threshold=100):
     """
@@ -344,59 +374,3 @@ def _estimate_feature_size_3d(binary_volume, scale=0.075):
     sigma = scale * approx_diameter
     return sigma
 
-# def merge_masks(original_masks: np.ndarray, 
-#                 distance_threshold: float = 5, 
-#                 iou_threshold: float = 0.75):
-#     """
-#     Merge masks based on distance and IoU thresholds.
-#     """
-#     merged_masks = []
-#     used = set()
-
-#     # Precompute the center of mass for each mask
-#     centers_of_mass = [ndimage.center_of_mass(m['segmentation']) for m in original_masks]
-
-#     for i, mask1 in enumerate(original_masks):
-#         if i in used:
-#             continue
-#         segmentation1 = mask1['segmentation']
-#         merged_mask = segmentation1.copy()
-#         overlapping_masks = [i]  # Track all overlapping masks
-
-#         merged = True
-#         while merged:
-#             merged = False
-#             com_merged = ndimage.center_of_mass(merged_mask)
-#             # Compare the merged_mask with all other masks not yet used
-#             for j, mask2 in enumerate(original_masks):
-#                 if j in used or j in overlapping_masks:
-#                     continue
-#                 segmentation2 = mask2['segmentation']
-#                 com2 = centers_of_mass[j]
-
-#                 # Calculate distance between centers of mass
-#                 distance = np.linalg.norm(np.array(com_merged) - np.array(com2))
-
-#                 # Calculate IoU between the current merged_mask and mask2
-#                 iou = calculate_iou(merged_mask, segmentation2)
-                
-#                 # Debug print statements (optional)
-#                 # print(distance, ' ', iou)
-#                 # print(f"Comparing mask {i} with mask {j}: Distance = {distance}, IoU = {iou}")
-
-#                 # Merge if distance and IoU thresholds are met
-#                 if distance < distance_threshold and iou < iou_threshold:
-#                     merged_mask = np.logical_or(merged_mask, segmentation2)
-#                     overlapping_masks.append(j)
-#                     merged = True  # Continue the while loop
-
-#         # Mark all overlapping masks as used
-#         for idx in overlapping_masks:
-#             used.add(idx)
-
-#         # Add the merged mask to the result
-#         new_mask = mask1.copy()
-#         new_mask['segmentation'] = merged_mask
-#         merged_masks.append(new_mask)
-
-#     return merged_masks  

@@ -100,7 +100,8 @@ def run(
         },
         'data': {
             'train': train_path,
-            'validate': validate_path
+            'validate': validate_path,
+            'classes': num_classes
         }
     }
     with open(f'results_{backbone}_{model_size}/model_config.yaml', 'w') as f:
