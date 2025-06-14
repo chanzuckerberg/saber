@@ -2,7 +2,9 @@ from saber.process.downsample import FourierRescale2D
 from saber.microSABER import cryoMicroSegmenter
 from saber import io, utilities as utils
 from saber.process import slurm_submit
-import click, torch, zarr, os, mrcfile
+from saber.process import mask_filters
+import click, torch, zarr, os, glob
+from saber.io import read_micrograph
 from multiprocessing import Lock
 import multiprocess as mp
 from tqdm import tqdm
@@ -12,6 +14,20 @@ import numpy as np
 @click.pass_context
 def cli(ctx):
     pass
+
+def micrograph_options(func):
+    """Decorator to add common options to a Click command."""
+    options = [
+        click.option("--input", type=str, required=True,
+                      help="Path to Micrograph or Project, in the case of project provide the file extention (e.g. 'path/*.mrc')"),
+        click.option("--output", type=str, required=False, default='saber_training_data.zarr',
+                      help="Path to the output Zarr file (if input points to a folder)."),
+        click.option("--target-resolution", type=float, required=False, default=None, 
+                      help="Desired Resolution to Segment Images [Angstroms]. If not provided, no downsampling will be performed."),
+    ]
+    for option in reversed(options):  # Add options in reverse order to preserve correct order
+        func = option(func)
+    return func
 
 # Initialize the global lock at the module level
 lock = Lock()
@@ -33,15 +49,9 @@ def segment(segmenter, image):
     # Produce Initialial Segmentations with SAM2
     masks_list = segmenter.segment_image(
         image, display_image=False)
-    
-    # Convert Masks to Numpy Array (Sorted by Area in Ascending Order)
-    (nx, ny) = masks_list[0]['segmentation'].shape
-    masks = np.zeros([len(masks_list), nx, ny], dtype=np.uint8)
-    masks_list = sorted(masks_list, key=lambda mask: mask['area'], reverse=False)
 
-    # Populate the numpy array
-    for j, mask in enumerate(masks_list):
-        masks[j] = mask['segmentation'].astype(np.uint8) * (j + 1)
+    # Convert Masks to Numpy Array
+    masks = mask_filters.convert_mask_list_to_array(masks_list)
     
     # Return the Segmented Image and Masks
     image_seg = segmenter.image
@@ -49,16 +59,20 @@ def segment(segmenter, image):
 
 def extract_sam2_candidates(
     fName: str,
-    fPath: str,
-    pixel_size: float,
+    target_resolution: float,
     model_cfg: str,
     zroot: zarr.Group,
     deviceID: int = 0,
     ):
 
-    # Fourier Crop the Image to the Desired Resolution
-    # image = fourier_crop_mrc_to_resolution(fPath, pixel_size)
-    image = mrc_fourier_crop(fPath, pixel_size)
+    # Read the Micrograph
+    image, pixel_size = read_micrograph(fPath)
+    image = image.astype(np.float32)
+
+    # Downsample if desired resolution is larger than current resolution
+    if target_resolution is not None and target_resolution > pixel_size:
+        scale = target_resolution / pixel_size
+        image = FourierRescale2D.run(image, scale)
 
     # Initialize the Segmenter
     segmenter = cryoMicroSegmenter(
@@ -71,18 +85,12 @@ def extract_sam2_candidates(
     save_to_zarr(zroot, fName, image_seg, masks)
 
 @click.command(context_settings={"show_default": True})
-@click.option('--mrc-path', type=str, required=True, 
-              help="Path to the input MRC files.")
-@click.option('--pixel-size', type=float, required=False, default=5, 
-              help="Desired Resolution to Segment Images [Angstroms].")
-@click.option('--output', type=str, required=False, 
-              help="Path to the output Zarr file.", 
-              default = 'training_data.zarr')
+@micrograph_options
 @slurm_submit.sam2_inputs
 def prepare_micrograph_training(
-    mrc_path: str, 
-    pixel_size: float,
+    input: str, 
     output: str,
+    target_resolution: float,
     sam2_cfg: str,
     ):
     """
@@ -93,12 +101,13 @@ def prepare_micrograph_training(
     mp.set_start_method("spawn")
     n_procs = torch.cuda.device_count()    
     lock = Lock()  # Initialize the lock (Remove?)
-    print(f'\nRunning SAM2 Organelle Segmentations for the Following MRC Path: {mrc_path}')
+    print(f'\nRunning Saber Segmentations for the Following MRC Path: {mrc_path}')
     print(f'Parallelizing the Computation over {n_procs} GPUs\n')
 
     # Get All MRC Files in the Directory
-    fNames = os.listdir(mrc_path)
-    fNames = [f for f in fNames if f.endswith('.mrc')]
+    fNames = glob.glob(input)
+    if len(fNames) == 0:
+        raise ValueError(f"No files found in {input}")
 
     # Initialize the shared Zarr file with the new structure
     zarr_store = zarr.DirectoryStore(output)
@@ -114,14 +123,12 @@ def prepare_micrograph_training(
             if _iz_this >= n_fNames:
                 break
             fName = fNames[_iz_this]
-            fPath = os.path.join(mrc_path, fName)
-            print(f'\nProcessing {fPath} ({iter}/{len(fNames)})')   
+            print(f'\nProcessing {fName} ({iter}/{len(fNames)})')   
             p = mp.Process(
                 target=extract_sam2_candidates,
                 args=(
                       fName,
-                      fPath, 
-                      pixel_size,
+                      target_resolution, 
                       sam2_cfg,
                       zroot,
                       _in),
@@ -138,24 +145,18 @@ def prepare_micrograph_training(
         for p in processes:
             p.close()
 
-    print('Preparation of Cryo-SAM2 Training Data Complete!')     
+    print('Preparation of Saber Training Data Complete!')     
 
 
-@click.command(context_settings={"show_default": True})
-@click.option('--mrc-path', type=str, required=True, 
-              help="Path to the input MRC files.")
-@click.option('--pixel-size', type=float, required=False, default=5, 
-              help="Desired Resolution to Segment Images [Angstroms].")
+@click.command(context_settings={"show_default": True}, name='prepare-micrograph-training')
+@micrograph_options
 @slurm_submit.sam2_inputs
-@click.option('--output', type=str, required=True, 
-              help="Path to the saved SAM2 output Zarr file.", 
-              default = 'training_data.zarr')           
 @slurm_submit.compute_commands
 def prepare_micrograph_training_slurm(
-    mrc_path: str,
-    pixel_size: float,
-    sam2_cfg: str,
+    input: str,
     output: str,
+    target_resolution: float,
+    sam2_cfg: str,
     num_gpus: int,
     gpu_constraint: str,
     ):
@@ -165,12 +166,16 @@ def prepare_micrograph_training_slurm(
 
     # Create Prepare Training Command
     command = f"""
-classifier prepare-micrograph-training \\
-    --mrc-path {mrc_path} \\
-    --pixel-size {pixel_size} \\
+saber classifier prepare-micrograph-training \\
+    --input {input} \\
+    --output {output} \\
     --sam2-cfg {sam2_cfg} \\
-    --output {output}
+    --num-gpus {num_gpus} \\
+    --gpu-constraint {gpu_constraint} \\
     """
+
+    if target_resolution is not None:
+        command += f" --target-resolution {target_resolution}"
 
     # Create Slurm Submit Script
     slurm_submit.create_shellsubmit(
@@ -182,65 +187,3 @@ classifier prepare-micrograph-training \\
         gpu_constraint=gpu_constraint
     )
 
-# def fourier_crop_mrc_to_resolution(
-def mrc_fourier_crop(
-    file_path: str, 
-    target_pixsize: float, 
-    device=None
-    ):
-    """
-    Read an MRC file and Fourier crop it to achieve a target pixel size (resolution)
-    
-    Parameters:
-    -----------
-    file_path : str
-        Path to the MRC file
-    target_pixsize : float
-        Desired pixel size in Angstroms (must be larger than current_pixsize)
-    device : torch.device, optional
-        Device to perform computation on (defaults to cuda if available)
-    """
-    # Set device if not provided
-    if device is None:
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    
-    # Read MRC file and get pixel size
-    with mrcfile.open(file_path) as mrc:
-        current_pixsize = mrc.voxel_size.x  # in Angstroms
-        image = mrc.data
-    
-    # Fourier Crop the Image to the Desired Resolution
-    im_cropped = FourierRescale2D.run_resolution(image, current_pixsize, target_pixsize, device)
-
-    return im_cropped
-
-def materials_process(
-    file_path: str, 
-    target_pixsize: float, 
-    device: torch.device = None
-    ):
-    
-    try:
-        import hyperspy.api as hs
-    except ImportError:
-        print("Hyperspy is not installed. Please install it to use this function.")
-        return
-
-    data = hs.load(file_path)
-
-    # TODO: Figure out how to read 
-
-    return data
-
-def stem4d_process(
-    file_path: str, 
-    target_pixsize: float, 
-    device: torch.device = None
-    ):
-    try:
-        import py4DSTEM
-    except ImportError:
-        print("py4DSTEM is not installed. Please install it to use this function.")
-        return    
-
-    datacube = py4DSTEM.io.load(file_path)

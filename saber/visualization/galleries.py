@@ -125,11 +125,15 @@ def display_masks_on_axis(im, masks, ax, title=None):
     Display a grayscale image with overlaid masks in different colors on a given axis.
     """
     ax.imshow(im, cmap='gray')
-    if masks is not None:
+    if masks.ndim == 3:
+        viz.add_masks(masks, ax)
+    else: 
+        masks = viz.masks_to_3d_array(masks)
         viz.add_masks(masks, ax)
     ax.axis('off')
     if title is not None:
         ax.set_title(title, fontsize=10, pad=2, loc='center')
+
 
 def convert_zarr_to_gallery(
     input_zarr_path, 

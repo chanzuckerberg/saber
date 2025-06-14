@@ -5,11 +5,11 @@ from saber.process import slurm_submit
 import saber.utilities as utils
 
 from torch.optim.lr_scheduler import CosineAnnealingLR
+import torch, click, yaml, os, zarr, json
 from torch.utils.data import DataLoader
 from monai.losses import FocalLoss
 from monai.transforms import Compose
 from torch.optim import AdamW
-import torch, click, yaml, os
 from tqdm import tqdm
 import torch.nn as nn
 
@@ -76,13 +76,13 @@ def run(
     # Option 2: Initialize MONAI's FocalLoss
     loss_fn = FocalLoss(gamma=1, alpha=0.5, reduction="mean")
 
-    # Initialize trainer and Train
+    # # Initialize trainer and Train
     print('Training...')
     trainer = ClassifierTrainer(model, optimizer, scheduler, loss_fn, device)
     trainer.results_path = f'results_{backbone}_{model_size}'
     trainer.train(train_loader, val_loader, num_epochs)
 
-    # Save results to Zarr
+    # # Save results to Zarr
     trainer.save_results(train_path, validate_path)
 
     # Save Model Config
@@ -101,9 +101,10 @@ def run(
         'data': {
             'train': train_path,
             'validate': validate_path,
-            'classes': num_classes
+            'classes': get_class_names(train_path)
         }
     }
+
     with open(f'results_{backbone}_{model_size}/model_config.yaml', 'w') as f:
         yaml.dump(model_config, f, default_flow_style=False, sort_keys=False, indent=2)
 
@@ -213,3 +214,19 @@ def train_slurm(
         command = command
     )
 
+
+def get_class_names(zarr_path: str):
+    """
+    Get the class names from the Zarr file.
+    The class names are stored as a string in the Zarr file.
+    This function converts the string to a dictionary.
+    """
+
+    # Open the Zarr file
+    zfile = zarr.open(zarr_path, mode='r')
+
+    # Get the class names
+    class_names = zfile.attrs['class_names']
+    
+    # convert to dict
+    return json.loads(class_names) 

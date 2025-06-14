@@ -1,20 +1,13 @@
 from saber.process.downsample import FourierRescale2D
-from typing import List, Dict, Any, Tuple, Optional
+from saber.visualization import classifier as viz
 import saber.process.mask_filters as filters
-from saber.visualization import sam2 as viz
-import torch, skimage, os, cv2, saber
 from saber import pretrained_weights
-from scipy.optimize import curve_fit
 import saber.utilities as utils
-import matplotlib.pyplot as plt
-from scipy import ndimage
+from typing import List, Tuple
 from tqdm import tqdm
 import numpy as np
+import torch
 
-from saber.visualization import classifier as viz
-
-# Testing 1D Gaussian Kernel
-from saber.process import gaussian_smooth as gauss
 
 # Suppress Warning for Post Processing from SAM2 - 
 # Explained Here: https://github.com/facebookresearch/sam2/blob/main/INSTALL.md
@@ -109,7 +102,7 @@ class cryoMicroSegmenter:
 
         # Fourier Crop the Image to the Desired Resolution
         (nx, ny) = image0.shape
-        if not use_sliding_window and (nx > 1024 or ny > 1024):
+        if not use_sliding_window and (nx > 1536 or ny > 1536):
             scale_factor =  max(nx, ny) / 1024 
             image0 = FourierRescale2D.run(image0, scale_factor)
             (nx, ny) = image0.shape
@@ -164,6 +157,7 @@ class cryoMicroSegmenter:
             
             # Filter Out Small Masks
             self.masks = [mask for mask in self.masks if mask['area'] >= self.min_mask_area]
+            self.masks = sorted(self.masks, key=lambda mask: mask['area'], reverse=False)
 
         # Apply Classifier Model or Physical Constraints to Filter False Positives
         if self.classifier is not None:
@@ -174,15 +168,11 @@ class cryoMicroSegmenter:
 
         # Optional: Save Save Segmentation to PNG or Plot Segmentation with Matplotlib
         if display_image:
-            viz.display_mask(self.image, self.masks); plt.show()
+            viz.display_mask(self.image, self.masks)
 
         # Return the Masks
         return self.masks  
         
-    def save_mask_segmentation(self, masks):
-        # TODO: Implement this
-        pass
-
     def get_sliding_windows(self, image_shape: Tuple[int, int]) -> List[Tuple[int, int, int, int]]:
         """
         Generate sliding window coordinates

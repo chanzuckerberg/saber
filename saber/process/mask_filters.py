@@ -52,7 +52,10 @@ def convert_predictions_to_masks(predictions, masks, desired_class: int = None, 
         if len(masks) > 0:
             # Filter Out Small Masks and Apply Consensus-Based Resolution
             masks = _consensus_based_resolution(masks[0]['segmentation'].shape, masks, confidence_scores)
+            
+            # Sort Masks by Area
             masks = [mask for mask in masks if mask['area'] >= min_mask_area] 
+            masks = sorted(masks, key=lambda x: x['area'], reverse=False)
             
     # Semantic Segmentation
     else:
@@ -137,6 +140,21 @@ def convert_mask_array_to_list(mask_array):
             'area': np.sum(mask_array[iMask]),
         }
         masks.append(mask)
+    return masks
+
+def convert_mask_list_to_array(masks_list):
+    """
+    Convert a mask list to a numpy array.
+    """
+
+    # Convert Masks to Numpy Array 
+    (nx, ny) = masks_list[0]['segmentation'].shape
+    masks = np.zeros([len(masks_list), nx, ny], dtype=np.uint8)
+
+    # Populate the numpy array
+    for j, mask in enumerate(masks_list):
+        masks[j] = mask['segmentation'].astype(np.uint8) * (j + 1)
+
     return masks
 
 def _semantic_segmentation(masks, predictions):

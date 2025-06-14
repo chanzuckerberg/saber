@@ -90,7 +90,7 @@ def display_mask(image, masks):
     cmap_colors = [(1, 1, 1, 0)] + colors[:np.max(masks)]  # 0 is transparent
     cmap = ListedColormap(cmap_colors)
     plt.imshow(masks, cmap=cmap, alpha=0.6)
-    plt.axis('off') 
+    plt.axis('off'); plt.show()
 
 def _masks_to_array(masks):
     """
@@ -111,6 +111,18 @@ def _masks_to_array(masks):
     
     return label_matrix
 
+def masks_to_3d_array(masks):
+
+    classes = np.unique(masks)
+    max_val = classes.max()
+    if max_val == 1:
+        return np.expand_dims(masks, axis=0) # Shape: (1, H, W)
+    else:
+        # Create a one-hot encoded array
+        one_hot = np.zeros((max_val + 1, *masks.shape), dtype=np.uint8)
+        for cls in np.arange(1, max_val + 1):
+            one_hot[cls-1] = (masks == cls).astype(np.uint8)
+        return one_hot
 
 def plot_metrics(train_array, validation_array, metric_name="Metric", save_path=None):
     """
@@ -291,39 +303,33 @@ def get_colors():
 
     # Extended vibrant color palette
     colors = [
-        # Primary colors
-        (1, 0, 0, 0.5),        # Red
-        (0, 1, 0, 0.5),        # Green
-        (0, 0, 1, 0.5),        # Blue
-        
-        # Secondary colors
-        (1, 1, 0, 0.5),        # Yellow
+        (0, 1, 1, 0.5),        # Cyan (bright, high contrast)
         (1, 0, 1, 0.5),        # Magenta
-        (0, 1, 1, 0.5),        # Cyan
-        
-        # Tertiary colors
+        (0, 0, 1, 0.5),        # Blue
+        (0, 1, 0, 0.5),        # Green
+
         (1, 0.5, 0, 0.5),      # Orange
         (0.5, 0, 0.5, 0.5),    # Purple
+        (0.2, 0.6, 0.9, 0.5),  # Sky Blue
+        (0.9, 0.2, 0.6, 0.5),  # Hot Pink
+        (0.6, 0.2, 0.8, 0.5),  # Violet
+
+        (0.4, 0.7, 0.2, 0.5),  # Lime
+        (0.8, 0.4, 0, 0.5),    # Burnt Orange
         (0, 0.5, 0, 0.5),      # Dark Green
+        (0.7, 0.3, 0.6, 0.5),  # Orchid
+        (0.9, 0.6, 0.2, 0.5),  # Gold
+
+        (1, 1, 0.3, 0.5),      # Yellow
         (0.5, 0.5, 0, 0.5),    # Olive
         (0, 0, 0.5, 0.5),      # Navy
         (0.5, 0, 0, 0.5),      # Maroon
-        
-        # Pastel-ish
+
+        # Pastel shades (can be used for less prominent classes)
         (1, 0.7, 0.7, 0.5),    # Light Red/Pink
         (0.7, 1, 0.7, 0.5),    # Light Green
         (0.7, 0.7, 1, 0.5),    # Light Blue
         (1, 1, 0.7, 0.5),      # Light Yellow
-        
-        # Additional distinct colors
-        (0.8, 0.4, 0, 0.5),    # Burnt Orange
-        (0.6, 0.2, 0.8, 0.5),  # Violet
-        (0, 0.8, 0.4, 0.5),    # Emerald
-        (0.9, 0.6, 0.2, 0.5),  # Gold
-        (0.2, 0.6, 0.9, 0.5),  # Sky Blue
-        (0.7, 0.3, 0.6, 0.5),  # Orchid
-        (0.4, 0.7, 0.2, 0.5),  # Lime
-        (0.9, 0.2, 0.6, 0.5),  # Hot Pink
     ]
 
     return colors

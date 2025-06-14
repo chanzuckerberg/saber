@@ -76,7 +76,8 @@ def contrast(image, std_cutoff=5):
     """
     image_mean = uniform_filter(image, size=500)
     image_sq = uniform_filter(image**2, size=500)
-    image_std = np.sqrt(image_sq - image_mean**2)
+    image_var = np.clip(image_sq - image_mean**2, a_min=0, a_max=None)
+    image_std = np.sqrt(image_var)
     image = (image - image_mean) / (image_std + 1e-8)
 
     return np.clip(image, -std_cutoff, std_cutoff)

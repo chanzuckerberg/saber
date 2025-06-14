@@ -140,18 +140,35 @@ def get_coordinates(run,                     # CoPick run object containing the 
     return coordinates
 
 def read_micrograph(input: str):
+
     if input.endswith('.mrc'):
         with mrcfile.open(input, permissive=True) as mrc:
             data = mrc.data
             pixel_size = mrc.voxel_size.x
         return data, pixel_size
     elif input.endswith('.tif') or input.endswith('.tiff'):
-        return skimage.io.imread(input)
-    elif hyperspy_available and input.endswith('.hspy'):
-        signal = hs.load(input)
-        data = signal.data
-        axes = signal.axes_manager
-        pixel_size = axes[0].scale
-        return data, pixel_size
+        return skimage.io.imread(input), None
+    elif hyperspy_available and (input.endswith('.dm4') or input.endswith('.ser')):
+        return read_stem_micrograph(input)
     else:
         raise ValueError(f"Unsupported file type: {input}")
+
+def read_stem_micrograph(input: str):
+
+    signal = hs.load(input)
+    data = signal.data
+    axes = signal.axes_manager
+    pixel_size = axes[0].scale
+    units = axes[0].units
+
+    # Convert units to Angstroms
+    if units == 'nm':
+        pixel_size *= 10
+    elif units == 'µm':
+        pixel_size *= 1e3
+    elif units == 'pm':
+        pixel_size *= 1e-3
+    else:
+        raise ValueError(f"Unsupported unit: {units}")
+
+    return data, pixel_size
