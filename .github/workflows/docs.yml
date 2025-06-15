@@ -1,43 +1,71 @@
-# This workflow installs mkdocs-material and itsdependencies, 
-# builds the docs, and pushes the built site to the `gh-pages` branch 
-# of the same repository.
-name: docs
+name: Deploy Documentation
 
 on:
   push:
     branches:
       - main
       - docs
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - '.github/workflows/deploy-docs.yaml'
+  pull_request:
+    branches:
+      - main
+      - docs
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - '.github/workflows/deploy-docs.yaml'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
 
 jobs:
-  deploy-docs:
-    permissions:
-      contents: write
-      
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: '3.8'
+          cache: 'pip'
 
       - name: Install dependencies
         run: |
+          python -m pip install --upgrade pip
           pip install mkdocs-material
+          pip install mkdocs-git-revision-date-localized-plugin
+          pip install mkdocs-git-committers-plugin-2
+          pip install mkdocs-git-authors-plugin
+          pip install mkdocs-awesome-pages-plugin
+          pip install mkdocs-minify-plugin
+          pip install mkdocs-redirects
+    
+      - name: Build documentation
+        run: mkdocs build
 
-      # Build the docs
-      - name: Build the docs
-        run: |
-          mkdocs build
-
-      # Push the site to github-pages
-      - name: GitHub Pages action
-        uses: peaceiris/actions-gh-pages@v4
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          publish_dir: ./site
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          path: ./site
 
-
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4 

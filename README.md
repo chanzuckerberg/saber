@@ -1,5 +1,8 @@
 # SABER⚔️
-**S**egment **A**nything **B**ased **E**lectron tomography **R**ecognition is a robust platform designed for autonomous segmentation of organelles from cryo-electron tomography (cryo-ET) or electron microscopy (EM) datasets. Leveraging foundational models, SAM2-ET enables segmentation directly from video-based training translated into effective 3D tomogram analysis. Users can utilize zero-shot inference with morphological heuristics or enhance prediction accuracy through data-driven training.
+**S**egment **A**nything **B**ased **E**lectron tomography **R**ecognition is a robust platform designed for autonomous segmentation of organelles from cryo-electron tomography (cryo-ET) or electron microscopy (EM) datasets. 
+
+## Introduction
+Leveraging foundational models, SAM2-ET enables segmentation directly from video-based training translated into effective 3D tomogram analysis. Users can utilize zero-shot inference with morphological heuristics or enhance prediction accuracy through data-driven training.
 
 ## 💫 Key Features
 * 🔍 Zero-shot segmentation: Segment EM/cryo-ET data without explicit retraining, using foundational vision models.
@@ -9,15 +12,13 @@
 
 ## 🚀 Getting Started
 
-To this package, it is recommended to have at a minumum Cuda 12.4 driver installed. In the case on bruno, you can load this module and build a conda environment with the following commands. 
-`ml cuda/12.6.3_560.35.05 cudnn/8.9.7.29_cuda12`
-`conda create --prefix=pySAM2 python=3.10`
+### Installation
 
-To install the interactive labeling GUI, run the following command:
-`pip install -e ".[gui]"`
+```bash
+pip install saber-em
+```
 
-**Note**: PyPI installation support coming soon.
-
+### Basic Usage
 SABER provides a clean, scriptable command-line interface. Run the following command to view all available subcommands:
 ```
 saber --help
@@ -27,6 +28,10 @@ We can begin by downloading the pre-trained SAM2 weights:
 saber download sam2-weights
 ```
 
+## 📚 Documentation
+
+For detailed documentation, tutorials, CLI and API reference, visit our [documenation]()
+
 ## 🧪 Example Usage
 
 ### Curating Training Labels and Training and Domain Expert Classifier 
@@ -35,7 +40,7 @@ saber download sam2-weights
 Use `prepare-tomogram-training` to generate 2D segmentations from a tomogram using SAM2-style slab-based inference. These masks act as a rough initialization for downstream curation and model training.
 
 ```
-classifier prepare-tomogram-training \
+saber classifier prepare-tomogram-training \
     --config config.json \
     --zarr-path output_zarr_fname.zarr \
     --num-slabs 3

@@ -1,6 +1,6 @@
-site_name: octopi
-repo_url: "https://github.com/chanzuckerberg/octopi"
-repo_name: "chanzuckerberg/octopi"
+site_name: SABER - Segment Any Electron Micrograph 
+repo_url: "https://github.com/czi-ai/segment-microscopy-sam2"
+repo_name: "czi-ai/saber"
 copyright: "2025, Jonathan Schwartz"
 theme:
   name: material
@@ -20,16 +20,28 @@ theme:
   logo: assets/logo.png
   features:
     - content.code.copy
+    - repo.stats
 
 # Page tree
 nav:
   - 🏡 Home: 
       - Overview: index.md
 
-  - 📓 Tutorials:
-      - Introduction: tutorials/introduction.md
-      - Training: tutorials/training.md
-      - Inference: tutorials/inference.md
+  - 📦 Getting Started:
+      - Installation: getting-started/installation.md
+      - Import Tomograms: getting-started/import-tomos.md
+      - Quickstart: getting-started/quickstart.md
+
+  - 📓 User Guide:
+      - Overview: tutorials/introduction.md
+      - Pre-processing: tutorials/preprocessing.md
+      - Training a Classifier: tutorials/training.md
+      - Inference (2D & 3D): tutorials/inference.md
+
+  - 📦 API Reference:
+      - Overview: api/overview.md
+      - API Quickstart: api/quickstart.md
+      - API Reference: api/reference.md
 
 theme:
   logo: assets/logo.png
