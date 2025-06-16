@@ -91,3 +91,17 @@ markdown_extensions:
 
 plugins:
   - search
+  - git-revision-date-localized:
+      type: datetime
+      enable_creation_date: true
+  - git-committers:
+      repository: chanzuckerberg/octopi
+      branch: main
+  - git-authors
+  - minify:
+      minify_html: true  
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/czi-ai/segment-microscopy-sam2
