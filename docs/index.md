@@ -22,9 +22,19 @@ SABER leverages state-of-the-art foundational models to enable:
 
 ---
 
+## 💡 Why SABER?
+
+SABER is designed for researchers who want to:
+
+- Accelerate organelle segmentation in large EM/cryo-ET datasets
+- Combine the power of foundational models with expert curation
+- Seamlessly move from raw data to publication-ready segmentations in both 2D and 3D.
+
+---
+
 ## 📚 Tutorials
 
-SABER can be used both from the command line (CLI) and as a Python library (API). Choose the workflow that fits your needs:
+SABER can be used both from the command line (CLI) and as a Python library (API). Choose the workflow that fits your needs. Follow the [quick start guide](getting-started/quickstart.md) to learn the core commands to develop segmentations. 
 
 ### 🖥️ CLI Tutorials
 Use SABER from the command line for quick, scriptable workflows:
@@ -41,22 +51,11 @@ Integrate SABER into your own Python scripts and notebooks:
 
 ---
 
-## 💡 Why SABER?
+## 🙋‍♂️ Getting Help
 
-SABER is designed for researchers who want to:
-
-- Accelerate organelle segmentation in large EM/cryo-ET datasets
-- Combine the power of foundational models with expert curation
-- Seamlessly move from raw data to publication-ready segmentations in both 2D and 3D.
+Visit our [GitHub repository](https://github.com/czi-ai/segment-microscopy-sam2) for source code and issues.
 
 ---
 
-## 📬 Need Help?
-
-For questions, feature requests, or collaboration inquiries, contact:  
-[jonathan.schwartz@czii.org](mailto:jonathan.schwartz@czii.org)
-
----
-
-_Ready to get started? Check out the [CLI Pre-processing Tutorial](tutorials/preprocessing.md) or the [API Quickstart](api/quickstart.md)!_
+_Ready to get started? Check out the [Quick Start](getting-started/quickstart.md) or the [API Quickstart](api/quickstart.md)!_
 

@@ -1,0 +1,100 @@
+# Quick Start Guide
+
+This guide walks you through a complete Saber workflow: from curation of training data to segmenting micrographs or tomograms in both 2D and 3D.
+
+## Basic Workflow Overview
+
+The SABER workflow consists of three main phases:
+
+1. **Data Preparation & Annotation** - Generate initial segmentations and curate training labels
+2. **Model Training** - Train a domain expert classifier on your annotated data
+3. **Production Inference** - Apply your trained model to new data
+
+For reference, you can skip steps 1 and 2 to visualize the raw SAM2 segmentations in 2D or 3D without a domain expert classifier. 
+
+## Phase 1: Curating Training Labels and Training and Domain Expert Classifier 
+
+### 🧩 Producing Intial SAM2 Segmentations
+Use `prepare-tomogram-training` to generate 2D segmentations from a tomogram using SAM2-style slab-based inference. These masks act as a rough initialization for downstream curation and model training.
+
+#### For tomogram data:
+```bash
+saber classifier prepare-tomogram-training \
+    --config config.json \
+    --num-slabs 3 \
+    --voxel-size 10 --tomogram-algorithm denoised \
+    --output training_data.zarr \
+```
+This will save slab-wise segmentations in a Zarr volume that can be reviewed or refined further.
+
+#### For electron micrograph/single-particle data:
+```bash
+saber classifier prepare-micrograph-training \
+    --input path/to/folder/*.mrc \
+    --ouput training_data.zarr \
+    --target-resolution 10 
+```
+
+In the case of referencing MRC files from single particle datasets use `prepare-micrograph-training` instead. 
+
+### 🎨 Annotating Segmentations for the Classifier with the Interactive GUI
+
+Launch an interactive labeling session to annotate the initial SAM2 segmentations and assign class labels.
+```
+saber gui \
+    --input output_zarr_fname.zarr \
+    --output curated_labels.zarr \
+    --class-names carbon,lysosome,artifacts
+```
+
+For transfering the data between machines, its recommended ziping (compressing) the zarr file prior to data transfer (e.g. `zip -r curated_labels.zarr.zip curated_labels.zarr`).
+
+Once annotations are complete, split the dataset into training and validation sets:
+
+```
+saber classifier split-data \
+    --input curated_labels.zarr \
+    --ratio 0.8
+```
+This generates `curated_labels_train.zarr` and `curated_labels_val.zarr` for use in model training.
+
+## Phase 2: 🧠 Train a Domain Expert Classifier
+
+Train a classifier using your curated annotations. This model improves segmentation accuracy beyond zero-shot results by learning from expert-provided labels.
+```
+saber classifier train \
+    --train curated_labels_train.zarr --validate curated_labels_val.zarr \
+    --num-epochs 75 --num-classes 4 
+```
+The number of classes should be 1 greater than the number of class names provided during annotation (to account for background).
+Training logs, model weights, and evaluation metrics will be saved under `results/`.
+
+## Phase 3: 🔍 Inference
+
+-- TODO --
+
+### 🖼️ Producting 2D Segmentations with SABER
+
+-- TODO -- 
+
+```bash
+saber segment micrographs \
+```
+
+### 🧊 Producing 3D Segmentations with SABER 
+
+Use the trained model to generate volumetric segmentations across the entire tomogram. The segment command supports slab-based 3D inference for smoother, context-aware outputs.
+```
+saber segment tomograms \
+    --config config.json
+    --model-config results/model_config.yaml \
+    --model-weights results/best_model.pth \
+    --target-class 2 --num-slabs 3 --segmentation-name lysosome
+```
+Saves a 3D mask labeled as lysosome.
+`--target-class` must match the class index from the annotation step.
+
+## What's Next?
+This workflow gives you a quick introduction to the saber segmentation pipeline. To learn more:
+* Checkout the tutorial.
+* Learn how to use the API. 

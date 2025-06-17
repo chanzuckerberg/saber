@@ -20,21 +20,6 @@ SABER can read and process the following file formats:
 
 ---
 
-## 🧩 Producing Initial SAM2 Segmentations
-
-For **tomograms**, use the `prepare-tomogram-training` command to generate 2D segmentations using SAM2-style slab-based inference. These masks serve as a rough initialization for downstream curation and model training.
-
-```bash
-saber classifier prepare-tomogram-training \
-    --config config.json \
-    --zarr-path output_zarr_fname.zarr \
-    --num-slabs 3
-```
-
-This will save slab-wise segmentations in a Zarr volume that can be reviewed or refined further.
-
----
-
 ## Playing with SAM2 Segmenations
 
 Before preparing training data for the classifier, we can quickly assess whether our data is suitable for the SABER workflow. To inspect the raw SAM2 segmentations for micrographs we run 
@@ -50,6 +35,21 @@ and for tomograms we can run
 saber segment slab \
     --config config.json 
 ```
+
+## 🧩 Producing Initial SAM2 Segmentations
+
+For **tomograms**, use the `prepare-tomogram-training` command to generate 2D segmentations using SAM2-style slab-based inference. These masks serve as a rough initialization for downstream curation and model training.
+
+```bash
+saber classifier prepare-tomogram-training \
+    --config config.json \
+    --zarr-path output_zarr_fname.zarr \
+    --num-slabs 3
+```
+
+This will save slab-wise segmentations in a Zarr volume that can be reviewed or refined further.
+
+---
 
 ## 🧬 Pre-processing Electron Micrographs
 

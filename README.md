@@ -2,18 +2,19 @@
 **S**egment **A**nything **B**ased **E**lectron tomography **R**ecognition is a robust platform designed for autonomous segmentation of organelles from cryo-electron tomography (cryo-ET) or electron microscopy (EM) datasets. 
 
 ## Introduction
-Leveraging foundational models, SAM2-ET enables segmentation directly from video-based training translated into effective 3D tomogram analysis. Users can utilize zero-shot inference with morphological heuristics or enhance prediction accuracy through data-driven training.
+Leveraging foundational models, SABER enables segmentation directly from video-based training translated into effective 3D tomogram analysis. Users can utilize zero-shot inference with morphological heuristics or enhance prediction accuracy through data-driven training.
 
 ## 💫 Key Features
 * 🔍 Zero-shot segmentation: Segment EM/cryo-ET data without explicit retraining, using foundational vision models.
 * 🖼️ Interactive GUI for labeling: Intuitive graphical interface for manual annotation and segmentation refinement.
 * 🧠 Expert-driven classifier training: Fine-tune segmentation results by training custom classifiers on curated annotations.
-* 🧊 3D organelle reconstruction: Generate volumetric segmentation masks across tomographic slices.
+* 🧊 3D organelle segmentation: Generate volumetric segmentation masks across tomographic slices.
 
 ## 🚀 Getting Started
 
 ### Installation
 
+Saber is available on PyPI and can be installed using pip:
 ```bash
 pip install saber-em
 ```
@@ -30,74 +31,8 @@ saber download sam2-weights
 
 ## 📚 Documentation
 
-For detailed documentation, tutorials, CLI and API reference, visit our [documenation]()
+For detailed documentation, tutorials, CLI and API reference, visit our [documentation](https://redesigned-journey-jn1nq38.pages.github.io/)
 
-## 🧪 Example Usage
-
-### Curating Training Labels and Training and Domain Expert Classifier 
-
-#### 🧩 Producing Intial SAM2 Segmentations
-Use `prepare-tomogram-training` to generate 2D segmentations from a tomogram using SAM2-style slab-based inference. These masks act as a rough initialization for downstream curation and model training.
-
-```
-saber classifier prepare-tomogram-training \
-    --config config.json \
-    --zarr-path output_zarr_fname.zarr \
-    --num-slabs 3
-```
-This will save slab-wise segmentations in a Zarr volume that can be reviewed or refined further.
-In the case of referencing MRC files from single particle datasets use `prepare-micrograph-training` instead. 
-
-#### 🎨 Annotating Segmentations for the Classifier with the Interactive GUI
-
-Launch an interactive labeling session to annotate the initial SAM2 segmentations and assign class labels.
-```
-saber-gui \
-    --input output_zarr_fname.zarr \
-    --output curated_labels.zarr \
-    --class-names carbon,lysosome,artifacts
-```
-
-For transfering the data between machines, its recommended ziping (compressing) the zarr file prior to data transfer (e.g. `zip -r curated_labels.zarr.zip curated_labels.zarr`).
-
-Once annotations are complete, split the dataset into training and validation sets:
-
-```
-classifier split-data \
-    --input curated_labels.zarr \
-    --ratio 0.8
-```
-This generates `curated_labels_train.zarr` and `curated_labels_val.zarr` for use in model training.
-
-#### 🧠 Train a Domain Expert Classifier
-
-Train a classifier using your curated annotations. This model improves segmentation accuracy beyond zero-shot results by learning from expert-provided labels.
-```
-classifier train \
-    --train curated_labels_train.zarr --validate curated_labels_val.zarr \
-    --num-epochs 75 --num-classes 4 
-```
-The number of classes should be 1 greater than the number of class names provided during annotation (to account for background).
-Training logs, model weights, and evaluation metrics will be saved under `results/`.
-
-### 🔍 Inference
-
-#### 🖼️ Producting 2D Segmentations with SABER
-
--- TODO -- 
-
-#### 🧊 Producing 3D Segmentations with SABER 
-
-Use the trained model to generate volumetric segmentations across the entire tomogram. The segment command supports slab-based 3D inference for smoother, context-aware outputs.
-```
-segment tomograms \
-    --config config.json
-    --model-config results/model_config.yaml \
-    --model-weights results/best_model.pth \
-    --target-class 2 --num-slabs 3 --segmentation-name lysosome
-```
-Saves a 3D mask labeled as lysosome.
-`--target-class` must match the class index from the annotation step.
 
 ## 🤝 Contributing
 
