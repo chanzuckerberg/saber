@@ -12,9 +12,9 @@ The SABER workflow consists of three main phases:
 
 For reference, you can skip steps 1 and 2 to visualize the raw SAM2 segmentations in 2D or 3D without a domain expert classifier. 
 
-## Phase 1: Curating Training Labels and Training and Domain Expert Classifier 
+## 🧩 Phase 1: Curating Training Labels and Training and Domain Expert Classifier 
 
-### 🧩 Producing Intial SAM2 Segmentations
+### Producing Intial SAM2 Segmentations
 Use `prepare-tomogram-training` to generate 2D segmentations from a tomogram using SAM2-style slab-based inference. These masks act as a rough initialization for downstream curation and model training.
 
 #### For tomogram data:
@@ -58,7 +58,7 @@ saber classifier split-data \
 ```
 This generates `curated_labels_train.zarr` and `curated_labels_val.zarr` for use in model training.
 
-## Phase 2: 🧠 Train a Domain Expert Classifier
+## 🧠 Phase 2: Train a Domain Expert Classifier
 
 Train a classifier using your curated annotations. This model improves segmentation accuracy beyond zero-shot results by learning from expert-provided labels.
 ```
@@ -69,30 +69,30 @@ saber classifier train \
 The number of classes should be 1 greater than the number of class names provided during annotation (to account for background).
 Training logs, model weights, and evaluation metrics will be saved under `results/`.
 
-## Phase 3: 🔍 Inference
-
--- TODO --
+## 🔍 Phase 3: Inference
 
 ### 🖼️ Producting 2D Segmentations with SABER
 
--- TODO -- 
+SABER operates in two modes depending on your input: interactive mode when processing a single image, and batch processing mode when you provide a file path pattern (like `--input 'path/to/*.mrc'`) to process entire datasets automatically.
 
 ```bash
 saber segment micrographs \
+    --input path/to/image.mrc \
+    --target-resolution 10 # Angstrom 
+    # provide --scale 3 instead if you want to dowsample by 3
 ```
 
 ### 🧊 Producing 3D Segmentations with SABER 
 
-Use the trained model to generate volumetric segmentations across the entire tomogram. The segment command supports slab-based 3D inference for smoother, context-aware outputs.
-```
+For tomograms, SABER enters interactive mode when you specify particular `--run-ids`, or batch processes the entire project when `--run-ids` is omitted.
+
+```bash
 saber segment tomograms \
     --config config.json
     --model-config results/model_config.yaml \
     --model-weights results/best_model.pth \
-    --target-class 2 --num-slabs 3 --segmentation-name lysosome
+    --target-class 2 --run-ids Position_12_Vol
 ```
-Saves a 3D mask labeled as lysosome.
-`--target-class` must match the class index from the annotation step.
 
 ## What's Next?
 This workflow gives you a quick introduction to the saber segmentation pipeline. To learn more:

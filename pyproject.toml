@@ -3,7 +3,8 @@ requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
-name = "saber"
+name = "saber-em"
+description = "Segment Anything Based Electron Recognition"
 requires-python = ">=3.10"
 version = "0.1.0"
 dependencies = [
@@ -23,7 +24,7 @@ dependencies = [
     "ipywidgets",
     "umap-learn",
     "torch-ema",
-    "copick-utils @ git+https://github.com/copick/copick-utils.git@main",
+    "copick-utils",
 ]
 
 [project.optional-dependencies]
@@ -55,6 +56,10 @@ saber-slurm = "saber.main:slurm_routines"
 [tool.hatch.version]
 source = "vcs"
 
+[project.urls]
+Homepage = "https://github.com/czi-ai/segment-microscopy-sam2"
+Issues = "https://github.com/czi-ai/segment-microscopy-sam2/issues"
+
 [tool.semantic_release]
-version_variables = ["__init__.py:__version__"]
+version_variables = ["saber/__init__.py:__version__"]
 build_command = "pip install build && python -m build"

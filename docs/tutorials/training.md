@@ -90,8 +90,7 @@ The training process involves:
 
 - `best_model.pth` - Best performing model weights
 - `model_config.yaml` - Model configuration and hyperparameters
-- `training_logs.csv` - Detailed training metrics and loss curves
-- `validation_metrics.json` - Final model performance statistics
+- `metrics.pdf` and `per_class_metrics.pdf` - Plots of average and per class metrics during training.
 
 ## 🔍 Testing Your Trained Model
 
@@ -108,10 +107,10 @@ saber classifier predict \
 ```
 
 **What this produces**:
+
 - **Prediction masks**: Semantic segmentation results stored in zarr format
 - **Visual gallery**: HTML gallery with segmentations overlaid on original images
 - **Class-specific colors**: Each biological class gets a unique color for easy identification
-- **Confidence scores**: Model certainty for each prediction
 
 ### Evaluating Results
 
