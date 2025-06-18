@@ -2,6 +2,22 @@
 
 Welcome to the SABER User Guide! This tutorial series will take you from raw microscopy data to precise feature segmentations using foundational models and expert-driven training.
 
+## 🔬 How SABER Works
+
+SABER is a few-shot segmentation framework that enables large-scale annotation of tomographic datasets with minimal manual input. By combining SAM2's general-purpose segmentation capabilities with a lightweight classifier tailored to microscopy-specific context, SABER produces rich contextual annotations efficiently.
+
+![SABER Workflow](../assets/workflow.png)
+
+#### Three-Stage Process
+
+**Stage 1: Foundation Model Segmentation** - SABER begins by extracting 2D slices from your 3D tomogram (or processing 2D micrographs directly). SAM2's automatic mask generation identifies and segments every discernible structure in the image, creating comprehensive semantic segmentations without requiring any domain-specific training. This foundation model approach captures cellular structures, organelles, and artifacts that traditional segmentation methods might miss, providing a rich starting point for expert annotation.
+
+**Stage 2: Expert-Guided Classification** - A domain expert classifier learns from user input annotations how to map SAM2's structure-agnostic segments to specific biological classes (organelles, membranes, artifacts, etc.). This creates context-aware segmentations tailored to your research needs, shown as the refined purple regions with expert-identified features.
+
+**Stage 3: 3D Propagation of Prompts** For tomographic data, the trained classifier generates semantic masks on adjacent 2D slices, which serve as prompts for SAM2's video segmentation capabilities. This enables coherent propagation of segmentations through the z-stack (z₀₋₁, z₀, z₀₊₁), maintaining temporal consistency as structures evolve across slices. The result is a complete 3D reconstruction of your segmented features.
+
+*Note: For 2D micrograph workflows, Stage 3 is optional - you can stop after obtaining high-quality 2D segmentations.*
+
 ## Tutorial Sections
 
 ### 🗂️ [Data Preprocessing](preprocessing.md)
@@ -55,7 +71,7 @@ Follow the complete workflow:
 - **[Explore the API →](../api/quickstart.md)** - For programmatic usage
 
 ### ⚡ **Want immediate results?**
-- **[Try the Quick Start →](quickstart.md)** - See SABER in action in 30 minutes
+- **[Try the Quick Start →](../getting-started/quickstart.md)** - See SABER in action in 30 minutes
 
 ---
 

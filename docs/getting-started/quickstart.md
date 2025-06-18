@@ -96,5 +96,6 @@ Saves a 3D mask labeled as lysosome.
 
 ## What's Next?
 This workflow gives you a quick introduction to the saber segmentation pipeline. To learn more:
-* Checkout the tutorial.
-* Learn how to use the API. 
+
+* [Checkout the tutorial](../tutorials/introduction.md).
+* [Learn how to use the API](../api/overview.md). 
