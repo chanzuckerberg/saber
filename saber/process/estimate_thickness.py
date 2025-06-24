@@ -65,7 +65,7 @@ def preprocess(data: np.ndarray):
 
     return data
 
-def fit_organelle_boundaries(frame_scores: np.ndarray):
+def fit_organelle_boundaries(frame_scores: np.ndarray, plot: bool = False):
     """
     Fit boundaries for organelles based on frame scores.
     """
@@ -106,7 +106,8 @@ def fit_organelle_boundaries(frame_scores: np.ndarray):
             mask_boundaries[:,ii] = gaussian(x, *popt2)
 
         # Optional - Plot the Fit
-        viz.plot_fit(data, func, parameters)   
+        if plot:
+            viz.plot_fit(data, func, parameters)   
 
     return mask_boundaries
 
