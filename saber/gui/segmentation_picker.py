@@ -106,6 +106,7 @@ class SegmentationViewer(pg.GraphicsLayoutWidget):
         """
         Load new base image and masks into the viewer.
         """
+        
         self.base_image = base_image
         self.masks = masks
 

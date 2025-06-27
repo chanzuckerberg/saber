@@ -1,5 +1,5 @@
+from saber.segmenters.tomo import cryoTomoSegmenter
 import saber.process.slurm_submit as slurm_submit
-from saber.tomoSABER import cryoTomoSegmenter
 from saber.classifier.models import common
 from saber import io, utilities as utils
 from saber.visualization import galleries 

@@ -1,5 +1,5 @@
 from saber.process.downsample import FourierRescale2D
-from saber.microSABER import cryoMicroSegmenter
+from saber.segmenters.micro import cryoMicroSegmenter
 from saber import io, utilities as utils
 from saber.process import slurm_submit
 from saber.process import mask_filters

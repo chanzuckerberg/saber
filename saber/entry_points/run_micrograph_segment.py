@@ -1,6 +1,6 @@
+from saber.segmenters.micro import cryoMicroSegmenter
 from saber.process.downsample import FourierRescale2D
 import saber.process.slurm_submit as slurm_submit
-from saber.microSABER import cryoMicroSegmenter
 from saber.classifier.models import common
 from saber.visualization import galleries 
 from saber.process import mask_filters

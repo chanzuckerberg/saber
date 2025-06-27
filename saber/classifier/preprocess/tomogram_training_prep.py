@@ -2,7 +2,7 @@ import logging
 # Root logger - blocks all INFO messages
 logging.getLogger().setLevel(logging.WARNING)  
 
-from saber.tomoSABER import cryoTomoSegmenter
+from saber.segmenters.tomo import cryoTomoSegmenter
 from saber.classifier import validate_odd
 from saber import io, utilities as utils
 from saber.process import slurm_submit
