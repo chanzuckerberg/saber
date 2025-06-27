@@ -123,6 +123,11 @@ class MainWindow(QMainWindow):
         base_image = self.root[run_id]['image'][:]
         masks = self.root[run_id]['masks'][:]
 
+        (nx, ny) = base_image.shape
+        if nx < ny:
+            base_image = base_image.T
+            masks = np.swapaxes(masks, 1, 2)
+
         return base_image, masks
 
     def on_image_selected(self, item):
