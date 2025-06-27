@@ -78,6 +78,8 @@ SABER operates in two modes depending on your input: interactive mode when proce
 ```bash
 saber segment micrographs \
     --input path/to/image.mrc \
+    --model-config results/model_config.yaml \
+    --model-weights results/best_model.pth \
     --target-resolution 10 # Angstrom 
     # provide --scale 3 instead if you want to dowsample by 3
 ```

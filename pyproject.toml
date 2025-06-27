@@ -2,6 +2,9 @@
 requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build.targets.wheel]
+packages = ["saber"]
+
 [project]
 name = "saber-em"
 description = "Segment Anything Based Electron Recognition"

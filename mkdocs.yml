@@ -1,5 +1,5 @@
 site_name: SABER - Segment Anything Based Electron Recognition 
-repo_url: "https://github.com/czi-ai/segment-microscopy-sam2"
+repo_url: "https://github.com/czi-ai/saber"
 repo_name: "czi-ai/saber"
 copyright: "2025, Jonathan Schwartz"
 theme:
