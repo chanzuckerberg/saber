@@ -6,6 +6,7 @@ from saber.visualization import galleries
 from saber.process import mask_filters
 from copick_utils.writers import write
 import copick, click, torch, os
+import multiprocess as mp
 from tqdm import tqdm
 import numpy as np
 
@@ -58,6 +59,39 @@ def slab(
     # For 2D segmentation, call segment_image
     masks = segmenter.segment_image(vol, slab_thickness, display_image=True)
 
+def init_worker(worker_id):
+    """Each process gets assigned a unique GPU based on its position in the pool"""
+    
+    # Get the worker ID from process identity (1-indexed, so subtract 1)
+    worker_id = mp.current_process()._identity[0] - 1
+    
+    # Store in environment variable (most reliable with spawn)
+    os.environ['WORKER_GPU_ID'] = str(worker_id)
+    
+    # Optional debug print
+    print(f"Process {os.getpid()} assigned GPU {worker_id}")
+
+def segment_worker(args):
+    """Worker function that uses the process's assigned GPU"""
+    root, run_id, voxel_size, tomogram_algorithm, segmentation_name, \
+    segmentation_session_id, slab_thickness, display_segmentation, \
+    model_weights, model_config, target_class, num_slabs, sam2_cfg = args
+
+    # Get GPU ID from environment variable
+    gpu_id = int(os.environ['WORKER_GPU_ID'])
+    
+    # Optional debug print
+    print(f"Process {os.getpid()} processing {run_id} on GPU {gpu_id}")
+
+    return segment_tomogram_separate_process(
+        root, run_id, gpu_id, 
+        voxel_size, tomogram_algorithm,     
+        segmentation_name, segmentation_session_id,
+        slab_thickness, display_segmentation,
+        model_weights, model_config,
+        target_class, num_slabs, sam2_cfg
+    )
+
 @cli.command(context_settings={"show_default": True})
 @slurm_submit.copick_commands
 @slurm_submit.tomogram_segment_commands
@@ -85,12 +119,12 @@ def tomograms(
     Generate a 3D Segmentation of a tomogram.
     """
 
-    import multiprocess as mp
+    # Set the Start Method to Spawn
     mp.set_start_method("spawn")
 
     n_procs = torch.cuda.device_count()
     print(f'\nRunning SAM2 Organelle Segmentations for the Following Tomograms:\n Algorithm: {tomogram_algorithm}, Voxel-Size: {voxel_size} Å')
-    print(f'Paraellizing the Computation over {n_procs} GPUs\n')
+    print(f'Parallelizing the Computation over {n_procs} GPUs\n')
 
     # Open Copick Project and Query All Available Runs
     root = copick.from_file(config)
@@ -123,43 +157,20 @@ def tomograms(
     iter = 1
     n_run_ids = len(run_ids)
 
-    # Main Loop - Segment All Tomograms
-    for _iz in range(0, n_run_ids, n_procs):
-        processes = []
-        for _in in range(n_procs):
-            _iz_this = _iz + _in
-            if _iz_this >= n_run_ids:
-                break
-            run_id = run_ids[_iz_this]
-            print(f'\nProcessing {run_id} ({iter}/{len(run_ids)})')    
-            p = mp.Process(
-                target=segment_tomogram_separate_process,
-                args=(root, 
-                      run_id, 
-                      _in,
-                      voxel_size, 
-                      tomogram_algorithm,
-                      segmentation_name,
-                      segmentation_session_id,
-                      slab_thickness,
-                      display_segmentation,
-                      model_weights,
-                      model_config,
-                      target_class,
-                      num_slabs,
-                      sam2_cfg),
-            )
-            processes.append(p)
-            iter += 1
+    # Run Segmentation for Each Tomogram
+    with mp.Pool(processes=n_procs, initializer=init_worker) as pool:  # No initargs needed
+        with tqdm(total=n_run_ids, desc='Segmenting Tomograms', unit='run') as pbar:
+            # Create argument tuples for each task
+            tasks = [
+                (root, run_id, voxel_size, tomogram_algorithm, segmentation_name,
+                segmentation_session_id, slab_thickness, display_segmentation,
+                model_weights, model_config, target_class, num_slabs, sam2_cfg)
+                for run_id in run_ids
+            ]
+            
+            for _ in pool.imap_unordered(segment_worker, tasks, chunksize=1):
+                pbar.update(1)
 
-        for p in processes:
-            p.start()
-
-        for p in processes:
-            p.join()
-
-        for p in processes:
-            p.close()
 
     # Create a gallery of the tomograms
     galleries.create_png_gallery(
@@ -185,11 +196,11 @@ def segment_tomogram_separate_process(
     sam2_cfg: str
     ):
 
-    # Initialize the Domain Expert Classifier   
-    classifier = common.get_predictor(model_weights, model_config, deviceID)
-
     # Get Run
     run = root.get_run(runID)
+
+    # Initialize the Domain Expert Classifier   
+    classifier = common.get_predictor(model_weights, model_config, deviceID)
 
     # Get Tomogram, Return None if No Tomogram is Found
     vol = io.get_tomogram(run, voxel_size, algorithm = tomogram_algorithm)
@@ -281,53 +292,3 @@ def segment_tomogram_separate_process(
     del segmenter
     del segment_mask
     torch.cuda.empty_cache()
-
-@cli.command(context_settings={"show_default": True})
-@slurm_submit.copick_commands
-@slurm_submit.tomogram_segment_commands
-@click.option("--run-ids", type=str, required=False, default=None, 
-              help="Path to Copick Config for Processing Data")
-@slurm_submit.compute_commands
-@slurm_submit.classifier_inputs 
-@slurm_submit.sam2_inputs
-def tomograms_slurm(
-    config: str,
-    run_ids: str,
-    voxel_size: float, 
-    tomogram_algorithm: str,
-    segmentation_name: str,
-    segmentation_session_id: str,
-    slab_thickness: int,
-    num_gpus: int,
-    gpu_constraint: str,
-    model_config: str,
-    target_class: int,
-    sam2_cfg: str
-    ):
-    """
-    Generate a SLURM submission to segment a tomogram.
-    """
-
-    command = f"""
-segment tomograms \\
-    --config {config} \\
-    --slab-thickness {slab_thickness} \\
-    --voxel-size {voxel_size} --tomogram-algorithm {tomogram_algorithm} \\
-    --segmentation-name {segmentation_name} --segmentation-session-id {segmentation_session_id} \\
-    """
-
-    if  model_config is not None:
-        command += f""" --model-config {model_config} --target-class {target_class}"""
-    3
-    if run_ids is not None:
-        command += f""" --run-ids {run_ids}"""
-
-    # Create Slurm Submit Script
-    slurm_submit.create_shellsubmit(
-        job_name="sam2-segment",
-        output_file="sam2-segment.out",
-        shell_name="sam2-segment.sh",
-        command=command,
-        num_gpus=num_gpus,
-        gpu_constraint=gpu_constraint
-    )
