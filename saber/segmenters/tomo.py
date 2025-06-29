@@ -19,44 +19,61 @@ class cryoTomoSegmenter(saber3Dsegmenter):
         """
         Initialize the cryoTomoSegmenter
         """ 
-        super().__init__(sam2_cfg, deviceID, classifier, target_class, min_mask_area, min_rel_box_size)
+        super().__init__(sam2_cfg, deviceID, classifier, target_class, min_mask_area)
 
         # Flag to indicate we're processing a 3D tomogram rather than a 2D image
         self.is_tomogram_mode = False
 
         # Flag to Bound the Segmentation to the Tomogram
-        self.bound_segmentation = True                
+        self.filter_segmentation = True
 
-    def generate_slab(self, zSlice, slab_thickness):
+    def generate_slab(self, vol, zSlice, slab_thickness):
         """
         Generate a Slab of the Tomogram at a Given Depth
         """
 
-        # Option 2: Project Single Slab 
-        image0 = utils.project_tomogram(self.vol, zSlice, slab_thickness)
-        image0 = utils.contrast(image0, std_cutoff=3)
-        image0 = utils.normalize(image0)
-        image = np.stack([image0, image0, image0], axis=-1)
+        # Project a Single Slab 
+        self.image0 = utils.project_tomogram(vol, zSlice, slab_thickness)
+        self.image0 = utils.contrast(self.image0, std_cutoff=3)
+        self.image0 = utils.normalize(self.image0)
+        self.image = np.stack([self.image0, self.image0, self.image0], axis=-1)
 
-        return image
+        return self.image
+
+    @torch.inference_mode()
+    def segment_slab(self, vol, slab_thickness, zSlice=None, display_image=True):
+        """
+        Segment a 2D image using the Video Predictor
+        """
+
+        # 1D Smoothing along Z-Dimension
+        vol = gauss.gaussian_smoothing(vol, 5, dim=0)
+        vol = utils.normalize(vol)
+
+        # If No Z-Slice is Provided, Use the Middle of the Tomogram
+        if zSlice is None:
+            zSlice = int(vol.shape[0] // 2)
+            
+        # Generate Slab
+        self.generate_slab(vol, zSlice, slab_thickness)
+
+        # Segment Slab 
+        self.segment_image( display_image = display_image)
+
+        return vol, self.masks
 
     @torch.inference_mode()
     def segment(
         self, 
         vol,
-        run,
         slab_thickness: int,
-        show_segmentations: bool = False, 
+        zSlice: int = None,
         save_run: str = None, 
-        zSlice: int = None
+        show_segmentations: bool = False, 
     ):  
         """
         Segment a 3D tomogram using the Video Predictor
         """
-
-        # Testing Try 1D Smoothing along Z-Dimension
-        vol = gauss.gaussian_smoothing(vol, 5, dim=0)
-        vol = utils.normalize(vol)
 
         # Determine if We Should Show the 2D Segmentations or Show the Segmentations in 3D
         if not show_segmentations:  save_mask = True
@@ -88,15 +105,16 @@ class cryoTomoSegmenter(saber3Dsegmenter):
         # Register the hook on the SAM mask decoder.
         hook_handle = self.video_predictor.predictor.sam_mask_decoder.register_forward_hook(mask_decoder_hook)
 
-        # Generate Slab
-        image = self.generate_slab(zSlice, slab_thickness)
+        # Segment Initial Slab 
+        vol = self.segment_slab(vol, slab_thickness, zSlice, display_image=False)[0]
 
-        # Segment Slab 
-        self.segment_image( display_image = save_mask)
+        # Initialize Video Predictor
+        if self.is_tomogram_mode and self.inference_state is None:
+            self.inference_state = self.video_predictor.create_inference_state_from_tomogram(vol)        
 
         # Optional: Save Save Segmentation to PNG or Plot Segmentation with Matplotlib
-        if save_mask:
-            cryoviz.save_mask_segmentation(run, image, self.masks, save_run)        
+        if save_mask: # TODO: Figure out a better name / method for this.
+            cryoviz.save_slab_segmentation(save_run, self.image, self.masks)        
             
         # Check to Make Sure Masks are Found
         if len(self.masks) == 0:
@@ -148,7 +166,7 @@ class cryoTomoSegmenter(saber3Dsegmenter):
         hook_handle.remove()
 
         # Filter out low confidence masks at edges of tomograms
-        if self.bound_segmentation:
+        if self.filter_segmentation:
             self.frame_scores = np.zeros([vol.shape[0], len(self.masks)])
             vol_masks, video_segments = self.filter_video_segments(video_segments, captured_scores, mask_shape)
         else: # Convert Video Segments to Masks (Without Filtering)

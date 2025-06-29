@@ -3,81 +3,23 @@ import matplotlib.pyplot as plt
 import numpy as np
 import cv2
 
-def add_masks(masks, ax):
-
-    # Get colors
-    colors = get_colors()
-
-    # Get number of masks
-    num_masks = masks.shape[0]
-    for i in range(num_masks):
-        
-        # Cycle through colors if there are more masks than colors
-        color = colors[i % len(colors)]  
-
-        # Create a custom colormap for this mask
-        custom_cmap = ListedColormap([
-            (1, 1, 1, 0),  # Transparent white for 0 values
-            color,  # Assigned color for non-zero values
-        ])
-
-        ax.imshow(masks[i], cmap=custom_cmap, alpha=0.6)
-    ax.axis('off')  
-
-
-def display_masks(im, masks, masks2=None, title=None):
-    """
-    Display a grayscale image with overlaid masks in different colors.
-    
-    Args:
-        im (numpy.ndarray): The grayscale image to display.           [H, W]
-        masks (numpy.ndarray): The masks to overlay on the image.  [N, H, W]
-    """
-
-    fig, ax = plt.subplots(1,2, figsize=(10, 5))
-    ax[0].imshow(im, cmap='gray'); ax[0].axis('off')
-    ax[1].imshow(im, cmap='gray'); ax[1].axis('off')
-    if masks2 is not None:
-        add_masks(masks2, ax[0])
-    add_masks(masks, ax[1])
-    plt.tight_layout()    
-
-    # Add a centered title above both images
-    if title is not None: fig.suptitle(title, fontsize=16, y=1.03)
-
-def _display_mask_list(masks, ax):
-    """
-    Display a list of masks in a single image.
-    """
-    # Get colors
-    colors = get_colors()
-
-    # Get number of masks
-    num_masks = masks.shape[0]
-    for i in range(num_masks):
-        
-        # Cycle through colors if there are more masks than colors
-        color = colors[i % len(colors)]  
-
-        # Create a custom colormap for this mask
-        custom_cmap = ListedColormap([
-            (1, 1, 1, 0),  # Transparent white for 0 values
-            color,  # Assigned color for non-zero values
-        ])
-
-        ax.imshow(masks[i], cmap=custom_cmap, alpha=0.6)
-    ax.axis('off')
-    # plt.tight_layout()
-    # plt.show()   
-
-def display_mask(image, masks):
+def display_mask_list(image: np.ndarray, masks: list):
     """
     Display a list of masks in a single image.
     """
 
-    # Convert Masks to Array if Listx
-    if isinstance(masks, list):
-        masks = _masks_to_array(masks)
+    if isinstance(masks, np.ndarray):
+        display_mask_array(image, masks)
+
+    # Sort Masks so that smallest masks are on top. 
+    masks = sorted(masks, key=lambda mask: mask['area'], reverse=True)
+
+    # Convert Masks to Array if List
+    masks = _masks_to_array(masks)
+
+    display_mask_array(image, masks)
+
+def display_mask_array(image: np.ndarray, masks: np.ndarray):
 
     # Get colors
     colors = get_colors()
@@ -333,3 +275,70 @@ def get_colors():
     ]
 
     return colors
+
+def add_masks(masks, ax):
+
+    # Get colors
+    colors = get_colors()
+
+    # Get number of masks
+    num_masks = masks.shape[0]
+    for i in range(num_masks):
+        
+        # Cycle through colors if there are more masks than colors
+        color = colors[i % len(colors)]  
+
+        # Create a custom colormap for this mask
+        custom_cmap = ListedColormap([
+            (1, 1, 1, 0),  # Transparent white for 0 values
+            color,  # Assigned color for non-zero values
+        ])
+
+        ax.imshow(masks[i], cmap=custom_cmap, alpha=0.6)
+    ax.axis('off')  
+
+def display_masks(im, masks, masks2=None, title=None):
+    """
+    Display a grayscale image with overlaid masks in different colors.
+    
+    Args:
+        im (numpy.ndarray): The grayscale image to display.           [H, W]
+        masks (numpy.ndarray): The masks to overlay on the image.  [N, H, W]
+    """
+
+    fig, ax = plt.subplots(1,2, figsize=(10, 5))
+    ax[0].imshow(im, cmap='gray'); ax[0].axis('off')
+    ax[1].imshow(im, cmap='gray'); ax[1].axis('off')
+    if masks2 is not None:
+        add_masks(masks2, ax[0])
+    add_masks(masks, ax[1])
+    plt.tight_layout()    
+
+    # Add a centered title above both images
+    if title is not None: fig.suptitle(title, fontsize=16, y=1.03)  
+
+
+# def _display_mask_list(masks, ax):
+#     """
+#     Display a list of masks in a single image.
+#     """
+#     # Get colors
+#     colors = get_colors()
+
+#     # Get number of masks
+#     num_masks = masks.shape[0]
+#     for i in range(num_masks):
+        
+#         # Cycle through colors if there are more masks than colors
+#         color = colors[i % len(colors)]  
+
+#         # Create a custom colormap for this mask
+#         custom_cmap = ListedColormap([
+#             (1, 1, 1, 0),  # Transparent white for 0 values
+#             color,  # Assigned color for non-zero values
+#         ])
+
+#         ax.imshow(masks[i], cmap=custom_cmap, alpha=0.6)
+#     ax.axis('off')
+#     # plt.tight_layout()
+#     # plt.show() 

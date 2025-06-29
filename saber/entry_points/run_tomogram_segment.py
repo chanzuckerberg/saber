@@ -52,14 +52,14 @@ def slab(
     # Create an instance of cryoTomoSegmenter
     segmenter = cryoTomoSegmenter(
         sam2_cfg=sam2_cfg,
-        classifier=predictor,          # if you have a classifier; otherwise, leave as None
+        classifier=predictor,         # if you have a classifier; otherwise, leave as None
         target_class=target_class     # desired target class if using a classifier
     )
 
     # For 2D segmentation, call segment_image
-    masks = segmenter.segment_image(vol, slab_thickness, display_image=True)
+    masks = segmenter.segment_slab(vol, slab_thickness, display_image=True)
 
-def init_worker(worker_id):
+def init_worker():
     """Each process gets assigned a unique GPU based on its position in the pool"""
     
     # Get the worker ID from process identity (1-indexed, so subtract 1)
@@ -119,12 +119,7 @@ def tomograms(
     Generate a 3D Segmentation of a tomogram.
     """
 
-    # Set the Start Method to Spawn
-    mp.set_start_method("spawn")
-
-    n_procs = torch.cuda.device_count()
     print(f'\nRunning SAM2 Organelle Segmentations for the Following Tomograms:\n Algorithm: {tomogram_algorithm}, Voxel-Size: {voxel_size} Å')
-    print(f'Parallelizing the Computation over {n_procs} GPUs\n')
 
     # Open Copick Project and Query All Available Runs
     root = copick.from_file(config)
@@ -154,12 +149,15 @@ def tomograms(
         )
         return
 
-    iter = 1
-    n_run_ids = len(run_ids)
+    n_procs = torch.cuda.device_count()
+    print(f'Parallelizing the Computation over {n_procs} GPUs\n')    
+
+    # Set the Start Method to Spawn
+    mp.set_start_method("spawn")
 
     # Run Segmentation for Each Tomogram
     with mp.Pool(processes=n_procs, initializer=init_worker) as pool:  # No initargs needed
-        with tqdm(total=n_run_ids, desc='Segmenting Tomograms', unit='run') as pbar:
+        with tqdm(total=len(run_ids), desc='Segmenting Tomograms', unit='run') as pbar:
             # Create argument tuples for each task
             tasks = [
                 (root, run_id, voxel_size, tomogram_algorithm, segmentation_name,
@@ -199,14 +197,14 @@ def segment_tomogram_separate_process(
     # Get Run
     run = root.get_run(runID)
 
-    # Initialize the Domain Expert Classifier   
-    classifier = common.get_predictor(model_weights, model_config, deviceID)
-
     # Get Tomogram, Return None if No Tomogram is Found
     vol = io.get_tomogram(run, voxel_size, algorithm = tomogram_algorithm)
     if vol is None:
         print(f'No Tomogram Found for {runID}')
         return
+
+    # Initialize the Domain Expert Classifier   
+    classifier = common.get_predictor(model_weights, model_config, deviceID)        
 
     # Initialize the SAM2 Segmenter
     segmenter = cryoTomoSegmenter(
@@ -237,9 +235,10 @@ def segment_tomogram_separate_process(
             slab_center = center_index + offset
             
             # Segment this slab
-            segment_mask = segmenter.segment_tomogram(
-                vol, run, slab_thickness, display_segmentation, 
-                runID + '-' + segmentation_session_id, zSlice=slab_center)        
+            segment_mask = segmenter.segment(
+                vol, run, slab_thickness, zSlice=slab_center, 
+                save_run=runID + '-' + segmentation_session_id, 
+                show_segmentations=display_segmentation)        
 
             # Process and combine masks immediately if valid
             if segment_mask is not None:
@@ -257,27 +256,30 @@ def segment_tomogram_separate_process(
 
     else:
         # Single slab case
-        segment_mask = segmenter.segment_tomogram(
-            vol, run, slab_thickness, display_segmentation, 
-            runID + '-' + segmentation_session_id)
+        segment_mask = segmenter.segment(
+            vol, slab_thickness, 
+            save_run=runID + '-' + segmentation_session_id, 
+            show_segmentations=display_segmentation)
 
         # Check if the segment_mask is None
         if segment_mask is None:
             print(f'No Segmentation Found for {runID}')
             return
-    
-    # Apply Adaptive Gaussian Smoothing to the Segmentation Mask   
-    segment_mask = mask_filters.fast_3d_gaussian_smoothing(segment_mask, scale = 0.05, deviceID = deviceID)
-    
-    # Convert the Segmentation Mask to a uint8 array
-    segment_mask = segment_mask.astype(np.uint8)
-
-    # print('Saving the Segmentation to a MRC File..')
-    # import mrcfile
-    # mrcfile.write('segment.mrc', segment_mask, overwrite=True) 
 
     # Write Segmentation if We aren't Displaying Results
     if not display_segmentation and segment_mask is not None: 
+
+        # Apply Adaptive Gaussian Smoothing to the Segmentation Mask   
+        segment_mask = mask_filters.fast_3d_gaussian_smoothing(segment_mask, scale = 0.05, deviceID = deviceID)
+        
+        # Convert the Segmentation Mask to a uint8 array
+        segment_mask = segment_mask.astype(np.uint8)
+
+        # print('Saving the Segmentation to a MRC File..')
+        # import mrcfile
+        # mrcfile.write('segment.mrc', segment_mask, overwrite=True) 
+
+        # Write Segmentation to Copick Project
         write.segmentation(
             run, 
             segment_mask,

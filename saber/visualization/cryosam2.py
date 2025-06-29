@@ -5,11 +5,10 @@ import matplotlib.pyplot as plt
 import torch, cv2, zarr, os
 import numpy as np
 
-def save_mask_segmentation(
-    run,
-    image,
-    masks,
-    save_run: str = None
+def save_slab_segmentation(
+    current_run,
+    image, masks,
+    show_plot: bool = False
     ):
 
     # Show 2D Annotations
@@ -18,13 +17,10 @@ def save_mask_segmentation(
     plt.axis('off')
 
     # Save the Figure
-    if save_run is None:
-        plt.show()
-    else:
-        runID, sessionID = save_run.split('-')
-        os.makedirs(f'gallery_sessionID_{sessionID}/frames', exist_ok=True)
-        plt.savefig(f'gallery_sessionID_{sessionID}/frames/{runID}.png', bbox_inches='tight', pad_inches=0)
-        plt.close('all')
+    runID, sessionID = current_run.split('-')
+    os.makedirs(f'gallery_sessionID_{sessionID}/frames', exist_ok=True)
+    plt.savefig(f'gallery_sessionID_{sessionID}/frames/{runID}.png', bbox_inches='tight', pad_inches=0)
+    plt.close('all')
 
 def record_video_segmentation(video_segments, 
                               inference_state, 

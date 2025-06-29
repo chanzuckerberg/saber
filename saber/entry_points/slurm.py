@@ -58,24 +58,24 @@ segment tomograms \\
         gpu_constraint=gpu_constraint
     )
 
-    @cli.command(context_settings={"show_default": True})
-    @slurm_submit.classifier_inputs
-    @slurm_submit.sam2_inputs
-    @slurm_submit.compute_commands
-    def micrographs_slurm(
-        input: str,
-        output: str,
-        sam2_cfg: str,
-        model_weights: str,
-        model_config: str,
-        target_class: int,
-        sliding_window: bool,
-        target_resolution: float,
-        num_gpus: int,
-        gpu_constraint: str
-        ):
-        """
-        Generate a SLURM submission to segment all micrographs in a project.
-        """
+@cli.command(context_settings={"show_default": True})
+@slurm_submit.classifier_inputs
+@slurm_submit.sam2_inputs
+@slurm_submit.compute_commands
+def micrographs_slurm(
+    input: str,
+    output: str,
+    sam2_cfg: str,
+    model_weights: str,
+    model_config: str,
+    target_class: int,
+    sliding_window: bool,
+    target_resolution: float,
+    num_gpus: int,
+    gpu_constraint: str
+    ):
+    """
+    Generate a SLURM submission to segment all micrographs in a project.
+    """
         
     pass

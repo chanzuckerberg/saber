@@ -74,7 +74,6 @@ class saber2Dsegmenter:
         self.mask_generator = fmask.FilteredSAM2MaskGenerator(
             base_generator=self.mask_generator,
             min_area_filter=self.min_mask_area,
-            max_rel_box_size=0.98,
         )
 
         # Initialize Domain Expert Classifier for Filtering False Positives
@@ -146,21 +145,19 @@ class saber2Dsegmenter:
             # Original single inference
             with torch.no_grad():
                 self.masks = self.mask_generator.generate(self.image)
-        
+
         # Apply Classifier Model or Physical Constraints to Filter False Positives
         if self.classifier is not None:
             self.masks = filters.apply_classifier(self.image, self.masks, self.classifier, self.target_class)
+        else: # Since Order Doesn't Matter, Sort by Area for Saber GUI. 
+            self.masks = sorted(self.masks, key=lambda mask: mask['area'], reverse=False)
 
         # Filter Out Small Masks
         self.masks = [mask for mask in self.masks if mask['area'] >= self.min_mask_area]
-        self.masks = sorted(self.masks, key=lambda mask: mask['area'], reverse=False)
-
-        # Store image
-        self.image = self.image
 
         # Optional: Save Save Segmentation to PNG or Plot Segmentation with Matplotlib
         if display_image:
-            viz.display_mask(self.image, self.masks)
+            viz.display_mask_list(self.image, self.masks)
 
         # Return the Masks
         return self.masks  
@@ -194,20 +191,41 @@ class saber2Dsegmenter:
                 
         return windows
 
-    def masks_to_list(self, masks):
-        if not masks:
-            return None
+    # def masks_to_array(self, masks):
+    #     """
+    #     Convert list of masks to single label matrix
+    #     """
+    #     if not masks or not isinstance(masks, list):
+    #         return None
     
-        # Get shape from first mask
-        h, w = masks[0]['segmentation'].shape
-        n_masks = len(masks)
+    #     # Get shape from first mask
+    #     h, w = masks[0]['segmentation'].shape
+    #     n_masks = len(masks)
         
-        # Create array
-        masks_array = np.zeros((n_masks, h, w), dtype=np.uint8)
-        for i, mask in enumerate(masks):
-            masks_array[i] = mask['segmentation']
+    #     # Create array
+    #     masks_array = np.zeros((n_masks, h, w), dtype=np.uint8)
+    #     for i, mask in enumerate(masks):
+    #         masks_array[i] = mask['segmentation']
+    #         masks_array[i]
         
-        return masks_array
+    #     return masks_array
+
+    # def masks_to_list(self, masks):
+
+    #     # If already a list, return original masks
+    #     if isinstance(masks, list):
+    #         return masks
+
+    #     # Convert masks to list of dictionaries
+    #     masks_list = []
+    #     vals = np.unique(masks)
+    #     for val in vals:
+    #         mask = masks == val
+    #         masks_list.append({
+    #             'segmentation': mask,
+    #             'area': np.sum(mask > 0)})
+        
+    #     return masks_list
     
 class saber3Dsegmenter(saber2Dsegmenter):
     def __init__(self,
@@ -255,7 +273,7 @@ class saber3Dsegmenter(saber2Dsegmenter):
             video_segments1[out_frame_idx] = {
                 out_obj_id: (out_mask_logits[i] > 0.0).cpu().numpy() for i, out_obj_id in enumerate(out_obj_ids)
             }
-        vol_mask = utils.convert_segments_to_mask(video_segments1, vol_mask, mask_shape, nMasks)               
+        # vol_mask = utils.convert_segments_to_mask(video_segments1, vol_mask, mask_shape, nMasks)               
 
         # run propagation throughout the video and collect the results in a dict
         video_segments2 = {}  # video_segments contains the per-frame segmentation results
@@ -266,10 +284,11 @@ class saber3Dsegmenter(saber2Dsegmenter):
             video_segments2[out_frame_idx] = {
                 out_obj_id: (out_mask_logits[i] > 0.0).cpu().numpy() for i, out_obj_id in enumerate(out_obj_ids)
             }
-        vol_mask = utils.convert_segments_to_mask(video_segments2, vol_mask, mask_shape, nMasks)
+        # vol_mask = utils.convert_segments_to_mask(video_segments2, vol_mask, mask_shape, nMasks)
 
         # Merge Video Segments to Return for Visualization / Analysis    
-        video_segments = video_segments1 | video_segments2     
+        video_segments = video_segments1 | video_segments2   
+        vol_mask = utils.convert_segments_to_mask(video_segments, vol_mask, mask_shape, nMasks)
 
         return vol_mask, video_segments
 

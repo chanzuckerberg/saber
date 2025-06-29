@@ -65,7 +65,7 @@ def convert_predictions_to_masks(predictions, masks, desired_class: int = None, 
         else:
             return np.array([])  # Return empty array if no masks
 
-        masks = _semantic_segmentation(masks, predictions)
+        masks = _semantic_segmentation2(masks, predictions)
 
     return masks
 
@@ -128,35 +128,6 @@ def _consensus_based_resolution(image_shape, masks, confidences):
     
     return consensus_masks    
 
-def convert_mask_array_to_list(mask_array):
-    """
-    Convert a 3D mask array to a list of masks.
-    """
-    masks = []
-    nMasks = mask_array.shape[0]
-    for iMask in range(nMasks):
-        mask = {
-            'segmentation': mask_array[iMask],
-            'area': np.sum(mask_array[iMask]),
-        }
-        masks.append(mask)
-    return masks
-
-def convert_mask_list_to_array(masks_list):
-    """
-    Convert a mask list to a numpy array.
-    """
-
-    # Convert Masks to Numpy Array 
-    (nx, ny) = masks_list[0]['segmentation'].shape
-    masks = np.zeros([len(masks_list), nx, ny], dtype=np.uint8)
-
-    # Populate the numpy array
-    for j, mask in enumerate(masks_list):
-        masks[j] = mask['segmentation'].astype(np.uint8) * (j + 1)
-
-    return masks
-
 def _semantic_segmentation(masks, predictions):
     """
     Get array that returns the masks as semantic segmentation.
@@ -183,6 +154,68 @@ def _semantic_segmentation(masks, predictions):
 
     return output_masks
 
+def _semantic_segmentation2(masks, predictions):
+    """
+    Get array that returns the masks as semantic segmentation.
+    Merges all masks belonging to each predicted class.
+    """
+    predicted_classes = np.argmax(predictions, axis=1)
+    max_class = np.max(predicted_classes)
+    
+    # Initialize empty masks for each class (excluding class 0)
+    output_masks = []
+    for ii in range(1, max_class + 1):  # Start from 1 to skip background class 0
+        output_masks.append({
+            'segmentation': np.zeros(masks[0]['segmentation'].shape, dtype=np.uint8),
+            'area': 0,
+        })
+
+    # Merge masks for each class
+    for ii in range(len(masks)):
+        predicted_class = predicted_classes[ii]
+        if predicted_class > 0:  # Skip background class 0
+            class_idx = predicted_class - 1  # Adjust index since we start from class 1
+            
+            # Merge segmentation masks using logical OR
+            output_masks[class_idx]['segmentation'] = np.logical_or(
+                output_masks[class_idx]['segmentation'], 
+                masks[ii]['segmentation']
+            ).astype(np.uint8)
+            
+            # Accumulate area
+            output_masks[class_idx]['area'] += masks[ii]['area']
+    
+    return output_masks
+
+def convert_mask_array_to_list(mask_array):
+    """
+    Convert a 3D mask array to a list of masks.
+    """
+    masks = []
+    nMasks = mask_array.shape[0]
+    for iMask in range(nMasks):
+        mask = {
+            'segmentation': mask_array[iMask],
+            'area': np.sum(mask_array[iMask]),
+        }
+        masks.append(mask)
+    return masks
+
+
+def convert_mask_list_to_array(masks_list):
+    """
+    Convert a mask list to a numpy array.
+    """
+
+    # Convert Masks to Numpy Array 
+    (nx, ny) = masks_list[0]['segmentation'].shape
+    masks = np.zeros([len(masks_list), nx, ny], dtype=np.uint8)
+
+    # Populate the numpy array
+    for j, mask in enumerate(masks_list):
+        masks[j] = mask['segmentation'].astype(np.uint8) * (j + 1)
+
+    return masks
 
 def merge_segmentation_masks(segmentation, min_volume_threshold=100):
     """
