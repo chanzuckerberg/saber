@@ -6,15 +6,11 @@ Choose between threading (fast) or multiprocessing (robust) approaches.
 Perfect for any function, including your segment_tomogram_separate_process.
 """
 
-import torch
-import torch.multiprocessing as mp
-import threading
-import time
-import queue
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Callable, Any, Dict, Optional, Union
+import torch, threading, time, queue, os
+import torch.multiprocessing as mp
 from tqdm import tqdm
-import os
 
 class GPUPool:
     """

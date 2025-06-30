@@ -1,6 +1,10 @@
 from typing import Dict, Any
-import zarr, os, threading
+import zarr, threading
 import numpy as np
+
+# Global zarr writer instance (initialized once)
+_zarr_writer = None
+_writer_lock = threading.Lock()
 
 class ParallelZarrWriter:
     """
@@ -42,8 +46,9 @@ class ParallelZarrWriter:
             self._run_counter += 1
             return run_index
     
-    def write_run_data(self, run_name: str, image: np.ndarray, masks: np.ndarray, 
-                      metadata: Dict[str, Any] = None) -> int:
+    def write(
+        self, run_name: str, image: np.ndarray, masks: np.ndarray, 
+        metadata: Dict[str, Any] = None) -> int:
         """
         Write data for a single run to the zarr file.
         This is thread-safe and can be called from multiple GPUs simultaneously.
@@ -107,10 +112,6 @@ class ParallelZarrWriter:
             
         except Exception as e:
             print(f"⚠️  Error finalizing zarr file: {str(e)}")
-
-# # Global zarr writer instance (initialized once)
-# _zarr_writer = None
-# _writer_lock = threading.Lock()
 
 def get_zarr_writer(zarr_path: str) -> ParallelZarrWriter:
     """Get or create the global zarr writer instance."""

@@ -2,6 +2,7 @@ from saber.entry_points.loaders import preprocess_workflow
 from saber.entry_points.parallelization import GPUPool
 from saber.classifier.preprocess import zarr_writer
 from saber.classifier import validate_odd
+from saber.visualization import galleries
 from saber import io, utilities as utils
 from saber.process import slurm_submit
 import copick, click, torch, zarr
@@ -13,21 +14,17 @@ import numpy as np
 def cli(ctx):
     pass
 
-# Global zarr writer instance
-_zarr_writer = None
-_writer_lock = threading.Lock()
-
 # Base segmentation function that processes a given slab using the segmenter.
 def segment(segmenter, vol, slab_thickness, zSlice):
     
     # Produce Initialial Segmentations with SAM2
     masks_list = segmenter.segment_slab(
         vol, slab_thickness, display_image=False, zSlice=zSlice)
+    masks_list = sorted(masks_list, key=lambda mask: mask['area'], reverse=False)
     
     # Convert Masks to Numpy Array (Sorted by Area in Ascending Order)
     (nx, ny) = masks_list[0]['segmentation'].shape
     masks = np.zeros([len(masks_list), nx, ny], dtype=np.uint8)
-    masks_list = sorted(masks_list, key=lambda mask: mask['area'], reverse=False)
     
     # Populate the numpy array
     for j, mask in enumerate(masks_list):
@@ -39,6 +36,7 @@ def segment(segmenter, vol, slab_thickness, zSlice):
 
 def extract_sam2_candidates(
     run, 
+    output,
     voxel_size: int, 
     tomogram_algorithm: str,
     slab_thickness: int,
@@ -47,11 +45,17 @@ def extract_sam2_candidates(
     models      # Added by GPUPool
     ):
 
+    # Get the Global Zarr Writer
+    zwriter = zarr_writer.get_zarr_writer(output)
+
     # Use pre-loaded segmenter
     segmenter = models['segmenter']
 
     # Get Tomogram
     vol = io.get_tomogram(run, voxel_size, algorithm = tomogram_algorithm)
+    if vol is None:
+        print('No Tomogram Found for Run: ', run.name)
+        return
     
     # Process Multiple Slabs or Single Slab at the Center of the Volume
     if multiple_slabs > 1:
@@ -70,18 +74,13 @@ def extract_sam2_candidates(
             
             # Save to a group with name: run.name + "_{index}"
             group_name = f"{run.name}_{i+1}"
-            # zwriter.write_run_data(group_name, image_seg, masks)
-
-            # zarr_writer.write_run_data(
-            #     run_name=run.name,
-            #     image=run_images,
-            #     masks=run_masks,
-            #     metadata=metadata
-            # )
+            zwriter.write(run_name=group_name, image=image_seg, masks=masks)            
     else:
         zSlice = int(vol.shape[0] // 2)
         image_seg, masks = segment(segmenter, vol, slab_thickness, zSlice=zSlice)
-        save_to_zarr(zroot, run.name, image_seg, masks)
+
+        # Write Run to Zarr
+        zwriter.write(run_name=run.name, image=image_seg, masks=masks)
 
 @click.command(context_settings={"show_default": True})
 @slurm_submit.copick_commands
@@ -126,7 +125,7 @@ def prepare_tomogram_training(
 
     # Prepare tasks
     tasks = [
-        (run, voxel_size, tomogram_algorithm, slab_thickness, zroot, num_slabs)
+        (run, output, voxel_size, tomogram_algorithm, slab_thickness, num_slabs)
         for run in runs
     ]
 
@@ -162,9 +161,7 @@ def prepare_tomogram_training(
     finally:
         pool.shutdown()
 
-    # Add Function to Create a Gallery of the Training Data
-    # galleries.create_png_gallery(
-    #     f'gallery_sessionID_{segmentation_session_id}/frames',
-    # )
+    # Create a Gallery of the Training Data
+    galleries.convert_zarr_to_gallery(output)
 
     print('Preparation of SABER Training Data Complete!')     
