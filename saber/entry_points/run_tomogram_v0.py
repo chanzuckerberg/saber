@@ -1,13 +1,13 @@
-from saber.entry_points.loaders import tomogram_workflow
-from saber.entry_points.parallelization import GPUPool
 from saber.segmenters.tomo import cryoTomoSegmenter
 import saber.process.slurm_submit as slurm_submit
 from saber.classifier.models import common
+from saber import io, utilities as utils
 from saber.visualization import galleries 
 from saber.process import mask_filters
 from copick_utils.writers import write
-import copick, click, torch
-from saber import io
+import copick, click, torch, os
+import multiprocess as mp
+from tqdm import tqdm
 import numpy as np
 
 @click.group()
@@ -59,6 +59,39 @@ def slab(
     # For 2D segmentation, call segment_image
     masks = segmenter.segment_slab(vol, slab_thickness, display_image=True)
 
+def init_worker():
+    """Each process gets assigned a unique GPU based on its position in the pool"""
+    
+    # Get the worker ID from process identity (1-indexed, so subtract 1)
+    worker_id = mp.current_process()._identity[0] - 1
+    
+    # Store in environment variable (most reliable with spawn)
+    os.environ['WORKER_GPU_ID'] = str(worker_id)
+    
+    # Optional debug print
+    print(f"Process {os.getpid()} assigned GPU {worker_id}")
+
+def segment_worker(args):
+    """Worker function that uses the process's assigned GPU"""
+    root, run_id, voxel_size, tomogram_algorithm, segmentation_name, \
+    segmentation_session_id, slab_thickness, display_segmentation, \
+    model_weights, model_config, target_class, num_slabs, sam2_cfg = args
+
+    # Get GPU ID from environment variable
+    gpu_id = int(os.environ['WORKER_GPU_ID'])
+    
+    # Optional debug print
+    print(f"Process {os.getpid()} processing {run_id} on GPU {gpu_id}")
+
+    return segment_tomogram_separate_process(
+        root, run_id, gpu_id, 
+        voxel_size, tomogram_algorithm,     
+        segmentation_name, segmentation_session_id,
+        slab_thickness, display_segmentation,
+        model_weights, model_config,
+        target_class, num_slabs, sam2_cfg
+    )
+
 @cli.command(context_settings={"show_default": True})
 @slurm_submit.copick_commands
 @slurm_submit.tomogram_segment_commands
@@ -96,79 +129,90 @@ def tomograms(
         display_segmentation = False
         run_ids = [run.name for run in root.runs]
     else:
-        run = root.get_run(run_ids[0])
+        run_ids = [run_ids]
         display_segmentation = True   
-        segment_tomograms(
-            run, 0,
-            voxel_size, tomogram_algorithm,
-            segmentation_name, segmentation_session_id,
-            slab_thickness, num_slabs,
-            display_segmentation
+        segment_tomogram_separate_process(
+            root,
+            run_ids[0],
+            0,
+            voxel_size,
+            tomogram_algorithm,
+            segmentation_name,
+            segmentation_session_id,
+            slab_thickness,
+            display_segmentation,
+            model_weights,
+            model_config,
+            target_class,
+            num_slabs,
+            sam2_cfg
         )
         return
 
-    # Create pool with model pre-loading
-    GPUPool(
-        init_fn=tomogram_workflow,
-        init_args=(model_weights, model_config, target_class, sam2_cfg),
-        verbose=True
-    )
+    n_procs = torch.cuda.device_count()
+    print(f'Parallelizing the Computation over {n_procs} GPUs\n')    
 
-    # Prepare tasks (same format as your existing code)
-    tasks = [
-        (run, voxel_size, tomogram_algorithm, segmentation_name,
-         segmentation_session_id, slab_thickness, display_segmentation,
-         model_weights, model_config, target_class, num_slabs, sam2_cfg)
-        for run in root.runs
-    ]
+    # Set the Start Method to Spawn
+    mp.set_start_method("spawn")
 
-    # Execute
-    try:
-        results = pool.execute(
-            segment_tomograms,
-            tasks,
-            task_ids=run_ids,
-            progress_desc="Segmenting Tomograms"
-        )
-        
-        # Handle results
-        failed_runs = [r for r in results if not r['success']]
-        if failed_runs:
-            print(f"Failed runs: {[r['task_id'] for r in failed_runs]}")
+    # Run Segmentation for Each Tomogram
+    with mp.Pool(processes=n_procs, initializer=init_worker) as pool:  # No initargs needed
+        with tqdm(total=len(run_ids), desc='Segmenting Tomograms', unit='run') as pbar:
+            # Create argument tuples for each task
+            tasks = [
+                (root, run_id, voxel_size, tomogram_algorithm, segmentation_name,
+                segmentation_session_id, slab_thickness, display_segmentation,
+                model_weights, model_config, target_class, num_slabs, sam2_cfg)
+                for run_id in run_ids
+            ]
             
-    finally:
-        pool.shutdown()
-    
-    # Check results
-    successful = [r for r in results if r['success']]
-    failed = [r for r in results if not r['success']]
+            for _ in pool.imap_unordered(segment_worker, tasks, chunksize=1):
+                pbar.update(1)
 
-    # Report Results to User
-    print('Completed the Orgnalle Segmentations with Cryo-SAM2!')
-    print(f"Processed {len(successful)} successfully, {len(failed)} failed")    
 
     # Create a gallery of the tomograms
     galleries.create_png_gallery(
         f'gallery_sessionID_{segmentation_session_id}/frames',
     )
 
+    print('Completed the Orgnalle Segmentations with Cryo-SAM2!')
 
-def segment_tomograms(
-    run,
+def segment_tomogram_separate_process(
+    root: str,
+    runID: str,
+    deviceID: int, 
     voxel_size: float, 
     tomogram_algorithm: str,
     segmentation_name: str,
     segmentation_session_id: str,
     slab_thickness: int,
+    display_segmentation: bool,
+    model_weights: str,
+    model_config: str,
+    target_class: int,
     num_slabs: int,
-    display_segmentation: bool
+    sam2_cfg: str
     ):
+
+    # Get Run
+    run = root.get_run(runID)
 
     # Get Tomogram, Return None if No Tomogram is Found
     vol = io.get_tomogram(run, voxel_size, algorithm = tomogram_algorithm)
     if vol is None:
-        print(f'No Tomogram Found for {run.name}')
+        print(f'No Tomogram Found for {runID}')
         return
+
+    # Initialize the Domain Expert Classifier   
+    classifier = common.get_predictor(model_weights, model_config, deviceID)        
+
+    # Initialize the SAM2 Segmenter
+    segmenter = cryoTomoSegmenter(
+        sam2_cfg = sam2_cfg,
+        deviceID = deviceID,
+        classifier = classifier,
+        target_class = target_class
+    )
     
     # Handle multiple slabs
     if num_slabs > 1:
@@ -193,7 +237,7 @@ def segment_tomograms(
             # Segment this slab
             segment_mask = segmenter.segment(
                 vol, run, slab_thickness, zSlice=slab_center, 
-                save_run=run.name + '-' + segmentation_session_id, 
+                save_run=runID + '-' + segmentation_session_id, 
                 show_segmentations=display_segmentation)        
 
             # Process and combine masks immediately if valid
@@ -214,12 +258,12 @@ def segment_tomograms(
         # Single slab case
         segment_mask = segmenter.segment(
             vol, slab_thickness, 
-            save_run=run.name + '-' + segmentation_session_id, 
+            save_run=runID + '-' + segmentation_session_id, 
             show_segmentations=display_segmentation)
 
         # Check if the segment_mask is None
         if segment_mask is None:
-            print(f'No Segmentation Found for {run.name}')
+            print(f'No Segmentation Found for {runID}')
             return
 
     # Write Segmentation if We aren't Displaying Results
