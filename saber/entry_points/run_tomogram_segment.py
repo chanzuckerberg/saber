@@ -63,8 +63,8 @@ def slab(
 @click.option("--run-ids", type=str, required=False, default=None,
               help="Path to Copick Config for Processing Data")
 @slurm_submit.classifier_inputs
-@click.option("--num-slabs", type=int, required=False, default=1,
-              help="Number of Slabs to Segment")
+@click.option("--num-slabs", type=int, default=1, callback=slurm_submit.validate_odd,
+              required=False, help="Number of Slabs to Segment")
 @slurm_submit.sam2_inputs
 def tomograms(
     config: str,

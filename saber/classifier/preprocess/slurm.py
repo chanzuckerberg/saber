@@ -46,8 +46,8 @@ saber classifier prepare-micrograph-training \\
 @slurm_submit.sam2_inputs
 @click.option('--output', type=str, required=True, help="Path to the saved SAM2 output Zarr file.", 
               default = '24jul29c_training_data.zarr')
-@click.option('--num-slabs', type=int, default=1, callback=validate_odd, 
-              help="Number of slabs to segment per tomogram.")              
+@click.option('--num-slabs', type=int, default=1, callback=slurm_submit.validate_odd, 
+              required=False, help="Number of slabs to segment per tomogram.")              
 @slurm_submit.compute_commands
 def prepare_tomogram_training_slurm(
     config: str,

@@ -68,11 +68,12 @@ class ParallelZarrWriter:
         
         try:
             # Create group for this run - zarr handles concurrent group creation
-            run_group = self.zroot.create_group(f"run_{run_index:06d}")
+            # run_group = self.zroot.create_group(f"run_{run_index:06d}")
+            run_group = self.zroot.create_group(run_name)   
             
             # Store run metadata
-            run_group.attrs['run_name'] = run_name
-            run_group.attrs['run_index'] = run_index
+            # run_group.attrs['run_name'] = run_name
+            # run_group.attrs['run_index'] = run_index
             if metadata:
                 for key, value in metadata.items():
                     run_group.attrs[key] = value
@@ -92,7 +93,7 @@ class ParallelZarrWriter:
                 compressor=zarr.Blosc(cname='zstd', clevel=3, shuffle=2)
             )
             
-            print(f"✅ Written {run_name} to zarr as run_{run_index:06d}")
+            # print(f"✅ Written {run_name} to {self.zarr_path}")
             return run_index
             
         except Exception as e:

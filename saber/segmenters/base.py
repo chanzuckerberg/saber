@@ -22,8 +22,8 @@ import logging
 logging.getLogger("sam2").setLevel(logging.ERROR)  # Only show errors
 
 # Suppress SAM2 Logger 
-# logger = logging.getLogger()
-# logger.disabled = True
+logger = logging.getLogger()
+logger.disabled = True
 
 class saber2Dsegmenter:
     def __init__(self,
