@@ -8,16 +8,25 @@ def display_mask_list(image: np.ndarray, masks: list):
     Display a list of masks in a single image.
     """
 
+    # If Masks is an Array, Display it
     if isinstance(masks, np.ndarray):
         display_mask_array(image, masks)
 
-    # Sort Masks so that smallest masks are on top. 
-    masks = sorted(masks, key=lambda mask: mask['area'], reverse=True)
+    # If Masks is an Empty List, Display the Image
+    if len(masks) == 0:
+        print("No masks found")
+        plt.figure(figsize=(10, 10))
+        plt.imshow(image, cmap='gray')
+        plt.axis('off'); plt.show()
+    else:
+        # Sort Masks so that smallest masks are on top. 
+        masks = sorted(masks, key=lambda mask: mask['area'], reverse=True)
 
-    # Convert Masks to Array if List
-    masks = _masks_to_array(masks)
+        # Convert Masks to Array if List
+        masks = _masks_to_array(masks)
 
-    display_mask_array(image, masks)
+        # Display the Masks
+        display_mask_array(image, masks)
 
 def display_mask_array(image: np.ndarray, masks: np.ndarray):
 

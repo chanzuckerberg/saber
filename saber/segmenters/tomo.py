@@ -21,9 +21,6 @@ class cryoTomoSegmenter(saber3Dsegmenter):
         """ 
         super().__init__(sam2_cfg, deviceID, classifier, target_class, min_mask_area)
 
-        # Flag to indicate we're processing a 3D tomogram rather than a 2D image
-        self.is_tomogram_mode = False
-
         # Flag to Bound the Segmentation to the Tomogram
         self.filter_segmentation = True
 
@@ -78,7 +75,25 @@ class cryoTomoSegmenter(saber3Dsegmenter):
         # Determine if We Should Show the 2D Segmentations or Show the Segmentations in 3D
         if not show_segmentations:  save_mask = True
         else:                       save_mask = False
-        self.is_tomogram_mode = True
+        self.is_tomogram_mode = True        
+
+        # Segment Initial Slab 
+        vol = self.segment_slab(vol, slab_thickness, zSlice, display_image=False)[0]
+
+        # Optional: Save Save Segmentation to PNG or Plot Segmentation with Matplotlib
+        if save_mask: # TODO: Figure out a better name / method for this.
+            cryoviz.save_slab_segmentation(save_run, self.image, self.masks)        
+            
+        # Check to Make Sure Masks are Found
+        if len(self.masks) == 0:
+            # hook_handle.remove()
+            return None
+
+        # If A Mask is Found, Follow to 3D Segmentation Propagation
+
+        # Initialize Video Predictor
+        # if self.inference_state is None:
+        self.inference_state = self.video_predictor.create_inference_state_from_tomogram(vol)                    
 
         # Set up a dictionary to capture the object score logits from the mask decoder.
         # The keys will be frame indices and the values will be a list of score arrays from that frame.
@@ -104,22 +119,6 @@ class cryoTomoSegmenter(saber3Dsegmenter):
 
         # Register the hook on the SAM mask decoder.
         hook_handle = self.video_predictor.predictor.sam_mask_decoder.register_forward_hook(mask_decoder_hook)
-
-        # Segment Initial Slab 
-        vol = self.segment_slab(vol, slab_thickness, zSlice, display_image=False)[0]
-
-        # Initialize Video Predictor
-        if self.is_tomogram_mode and self.inference_state is None:
-            self.inference_state = self.video_predictor.create_inference_state_from_tomogram(vol)        
-
-        # Optional: Save Save Segmentation to PNG or Plot Segmentation with Matplotlib
-        if save_mask: # TODO: Figure out a better name / method for this.
-            cryoviz.save_slab_segmentation(save_run, self.image, self.masks)        
-            
-        # Check to Make Sure Masks are Found
-        if len(self.masks) == 0:
-            hook_handle.remove()
-            return None
 
         # Get the dimensions of the volume.
         (nx, ny, nz) = (

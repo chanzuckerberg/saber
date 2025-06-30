@@ -1,14 +1,12 @@
+from saber.entry_points.inference_core import segment_tomogram_core
 from saber.entry_points.loaders import tomogram_workflow
 from saber.entry_points.parallelization import GPUPool
 from saber.segmenters.tomo import cryoTomoSegmenter
 import saber.process.slurm_submit as slurm_submit
+import copick, click, torch, os, matplotlib
 from saber.classifier.models import common
 from saber.visualization import galleries 
-from saber.process import mask_filters
-from copick_utils.writers import write
-import copick, click, torch
 from saber import io
-import numpy as np
 
 @click.group()
 @click.pass_context
@@ -96,20 +94,26 @@ def tomograms(
         display_segmentation = False
         run_ids = [run.name for run in root.runs]
     else:
-        run = root.get_run(run_ids[0])
+        run = root.get_run(run_ids)
         display_segmentation = True   
-        segment_tomograms(
-            run, 0,
-            voxel_size, tomogram_algorithm,
+        segment_tomogram_interactive(
+            run, voxel_size, tomogram_algorithm,
             segmentation_name, segmentation_session_id,
             slab_thickness, num_slabs,
-            display_segmentation
+            display_segmentation,
+            model_weights, model_config,
+            target_class, sam2_cfg
         )
         return
 
+    # # Set to Agg Backend to Avoid Displaying Matplotlib Figures
+    os.environ['MPLBACKEND'] = 'Agg'
+    matplotlib.use('Agg')
+
     # Create pool with model pre-loading
-    GPUPool(
+    pool = GPUPool(
         init_fn=tomogram_workflow,
+        approach="threading",
         init_args=(model_weights, model_config, target_class, sam2_cfg),
         verbose=True
     )
@@ -117,15 +121,15 @@ def tomograms(
     # Prepare tasks (same format as your existing code)
     tasks = [
         (run, voxel_size, tomogram_algorithm, segmentation_name,
-         segmentation_session_id, slab_thickness, display_segmentation,
-         model_weights, model_config, target_class, num_slabs, sam2_cfg)
+         segmentation_session_id, slab_thickness, num_slabs, 
+         display_segmentation)
         for run in root.runs
     ]
 
     # Execute
     try:
         results = pool.execute(
-            segment_tomograms,
+            segment_tomogram_parallel,
             tasks,
             task_ids=run_ids,
             progress_desc="Segmenting Tomograms"
@@ -152,101 +156,82 @@ def tomograms(
         f'gallery_sessionID_{segmentation_session_id}/frames',
     )
 
-
-def segment_tomograms(
+# Segment a Single Tomogram
+def segment_tomogram_interactive(
     run,
-    voxel_size: float, 
+    voxel_size: float,
     tomogram_algorithm: str,
     segmentation_name: str,
     segmentation_session_id: str,
     slab_thickness: int,
     num_slabs: int,
-    display_segmentation: bool
+    display_segmentation: bool,
+    model_weights: str,
+    model_config: str,
+    target_class: int,
+    sam2_cfg: str,
+    gpu_id: int = 0
     ):
-
-    # Get Tomogram, Return None if No Tomogram is Found
-    vol = io.get_tomogram(run, voxel_size, algorithm = tomogram_algorithm)
-    if vol is None:
-        print(f'No Tomogram Found for {run.name}')
-        return
+    """
+    Interactive version - loads models fresh and can display results
+    """
     
-    # Handle multiple slabs
-    if num_slabs > 1:
-
-        # Default Showing Segmentation to False
-        display_segmentation = False
-
-        # Get the Center Index of the Tomogram
-        depth = vol.shape[0]
-        center_index = depth // 2
-        
-        # Initialize combined mask with zeros (using volume shape)
-        combined_mask = np.zeros((vol.shape), dtype=np.uint8)
-
-        # Process each slab
-        mask_label = 0
-        for i in range(num_slabs):
-            # Define the center of the slab
-            offset = (i - num_slabs // 2) * slab_thickness
-            slab_center = center_index + offset
-            
-            # Segment this slab
-            segment_mask = segmenter.segment(
-                vol, run, slab_thickness, zSlice=slab_center, 
-                save_run=run.name + '-' + segmentation_session_id, 
-                show_segmentations=display_segmentation)        
-
-            # Process and combine masks immediately if valid
-            if segment_mask is not None:
-                # Offset non-zero values by the mask label
-                mask_copy = segment_mask.copy()
-                mask_copy[mask_copy > 0] += mask_label
-                combined_mask = np.maximum(combined_mask, mask_copy)
-                mask_label += 1
-
-        # Apply Adaptive Gaussian Smoothing to the Segmentation Mask              
-        combined_mask = mask_filters.fast_3d_gaussian_smoothing(combined_mask, scale = 0.075, deviceID = deviceID)        
-
-        # Combine masks from all slabs
-        segment_mask = mask_filters.merge_segmentation_masks(combined_mask)
-
-    else:
-        # Single slab case
-        segment_mask = segmenter.segment(
-            vol, slab_thickness, 
-            save_run=run.name + '-' + segmentation_session_id, 
-            show_segmentations=display_segmentation)
-
-        # Check if the segment_mask is None
-        if segment_mask is None:
-            print(f'No Segmentation Found for {run.name}')
-            return
-
-    # Write Segmentation if We aren't Displaying Results
-    if not display_segmentation and segment_mask is not None: 
-
-        # Apply Adaptive Gaussian Smoothing to the Segmentation Mask   
-        segment_mask = mask_filters.fast_3d_gaussian_smoothing(segment_mask, scale = 0.05, deviceID = deviceID)
-        
-        # Convert the Segmentation Mask to a uint8 array
-        segment_mask = segment_mask.astype(np.uint8)
-
-        # print('Saving the Segmentation to a MRC File..')
-        # import mrcfile
-        # mrcfile.write('segment.mrc', segment_mask, overwrite=True) 
-
-        # Write Segmentation to Copick Project
-        write.segmentation(
-            run, 
-            segment_mask,
-            'SABER',
-            name=segmentation_name,
-            session_id=segmentation_session_id,
-            voxel_size=float(voxel_size)
-        )
-
-    # Clear GPU memory
-    del vol
-    del segmenter
-    del segment_mask
-    torch.cuda.empty_cache()
+    print(f"Processing {run.name} on GPU {gpu_id}")
+    
+    # Load models fresh for interactive use
+    torch.cuda.set_device(gpu_id)
+    classifier = common.get_predictor(model_weights, model_config, gpu_id)
+    segmenter = cryoTomoSegmenter(
+        sam2_cfg=sam2_cfg,
+        deviceID=gpu_id,
+        classifier=classifier,
+        target_class=target_class
+    )
+    
+    # Call core function
+    segment_tomogram_core(
+        run=run,
+        voxel_size=voxel_size,
+        tomogram_algorithm=tomogram_algorithm,
+        segmentation_name=segmentation_name,
+        segmentation_session_id=segmentation_session_id,
+        slab_thickness=slab_thickness,
+        num_slabs=num_slabs,
+        display_segmentation=display_segmentation,
+        segmenter=segmenter,
+        gpu_id=gpu_id
+    )
+    
+# Segment Tomograms with GPUPool
+def segment_tomogram_parallel(
+    run,
+    voxel_size: float,
+    tomogram_algorithm: str,
+    segmentation_name: str,
+    segmentation_session_id: str,
+    slab_thickness: int,
+    num_slabs: int,
+    display_segmentation: bool,
+    gpu_id,     # Added by GPUPool
+    models      # Added by GPUPool
+    ):
+    """
+    Parallel version - uses pre-loaded models from GPUPool
+    """
+    
+    # Use pre-loaded segmenter
+    segmenter = models['segmenter']
+    
+    # Call core function
+    segment_tomogram_core(
+        run=run,
+        voxel_size=voxel_size,
+        tomogram_algorithm=tomogram_algorithm,
+        segmentation_name=segmentation_name,
+        segmentation_session_id=segmentation_session_id,
+        slab_thickness=slab_thickness,
+        num_slabs=num_slabs,
+        display_segmentation=display_segmentation,
+        segmenter=segmenter,
+        gpu_id=gpu_id
+    )

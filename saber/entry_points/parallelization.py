@@ -32,7 +32,7 @@ class GPUPool:
     """
     
     def __init__(self, 
-                 approach: str = "multiprocessing",  # "threading", "multiprocessing", or "auto"
+                 approach: str = "threading",  # "threading", "multiprocessing", or "auto"
                  init_fn: Optional[Callable] = None,
                  init_args: tuple = (),
                  init_kwargs: dict = {},

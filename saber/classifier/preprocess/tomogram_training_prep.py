@@ -1,15 +1,11 @@
-import logging
-# Root logger - blocks all INFO messages
-logging.getLogger().setLevel(logging.WARNING)  
-
-from saber.segmenters.tomo import cryoTomoSegmenter
+from saber.entry_points.loaders import preprocess_workflow
+from saber.entry_points.parallelization import GPUPool
+from saber.classifier.preprocess import zarr_writer
 from saber.classifier import validate_odd
 from saber import io, utilities as utils
 from saber.process import slurm_submit
 import copick, click, torch, zarr
 from multiprocessing import Lock
-import multiprocess as mp
-from tqdm import tqdm
 import numpy as np
 
 @click.group()
@@ -17,25 +13,15 @@ import numpy as np
 def cli(ctx):
     pass
 
-# Initialize the global lock at the module level
-lock = Lock()
-
-# Save results to Zarr
-def save_to_zarr(zroot, run_index, image, masks):
-    global lock  # Use the global lock
-    with lock:
-        # Create a group for the run_index
-        run_group = zroot.create_group(str(run_index))
-
-        # Save the image
-        run_group.create_dataset("image", data=image, dtype="float32", overwrite=True)
-        run_group.create_dataset("masks", data=masks, dtype="uint8", overwrite=True)
+# Global zarr writer instance
+_zarr_writer = None
+_writer_lock = threading.Lock()
 
 # Base segmentation function that processes a given slab using the segmenter.
 def segment(segmenter, vol, slab_thickness, zSlice):
     
     # Produce Initialial Segmentations with SAM2
-    masks_list = segmenter.segment_image(
+    masks_list = segmenter.segment_slab(
         vol, slab_thickness, display_image=False, zSlice=zSlice)
     
     # Convert Masks to Numpy Array (Sorted by Area in Ascending Order)
@@ -56,20 +42,16 @@ def extract_sam2_candidates(
     voxel_size: int, 
     tomogram_algorithm: str,
     slab_thickness: int,
-    model_cfg: str,
-    zroot: zarr.Group,
-    deviceID: int,
     multiple_slabs: int,
+    gpu_id,     # Added by GPUPool
+    models      # Added by GPUPool
     ):
+
+    # Use pre-loaded segmenter
+    segmenter = models['segmenter']
 
     # Get Tomogram
     vol = io.get_tomogram(run, voxel_size, algorithm = tomogram_algorithm)
-
-    # Initialize the Segmenter
-    segmenter = cryoTomoSegmenter(
-        sam2_cfg = model_cfg,
-        deviceID = deviceID
-    )    
     
     # Process Multiple Slabs or Single Slab at the Center of the Volume
     if multiple_slabs > 1:
@@ -88,7 +70,14 @@ def extract_sam2_candidates(
             
             # Save to a group with name: run.name + "_{index}"
             group_name = f"{run.name}_{i+1}"
-            save_to_zarr(zroot, group_name, image_seg, masks)
+            # zwriter.write_run_data(group_name, image_seg, masks)
+
+            # zarr_writer.write_run_data(
+            #     run_name=run.name,
+            #     image=run_images,
+            #     masks=run_masks,
+            #     metadata=metadata
+            # )
     else:
         zSlice = int(vol.shape[0] // 2)
         image_seg, masks = segment(segmenter, vol, slab_thickness, zSlice=zSlice)
@@ -111,102 +100,71 @@ def prepare_tomogram_training(
     num_slabs: int,
     ):
     """
-    Prepare Training Data from Tomograms for a Classifier.
+    Prepare Training Data from Tomograms for a Classifier using GPUPool.
     """    
 
-    # Set up multiprocessing - max processs = number of GPUs
-    mp.set_start_method("spawn")
-    n_procs = torch.cuda.device_count()    
-    lock = Lock()  # Initialize the lock (Remove?)
-    print(f'\nRunning SAM2 Organelle Segmentations for the Following Tomograms:\n Algorithm: {tomogram_algorithm}, Voxel-Size: {voxel_size} Å')
-    print(f'Paraellizing the Computation over {n_procs} GPUs\n')
+    print(f'\nRunning SAM2 Training Data Preparation')
+    print(f'Algorithm: {tomogram_algorithm}, Voxel-Size: {voxel_size} Å')
+    print(f'Using {num_slabs} slabs with {slab_thickness} A thickness')
 
     # Open Copick Project and Query All Available Runs
     root = copick.from_file(config)
     run_ids = [run.name for run in root.runs]
+    runs = list(root.runs)
 
-    # Initialize the shared Zarr file with the new structure
-    zarr_store = zarr.DirectoryStore(output)
-    zroot = zarr.group(zarr_store, overwrite=True)
+    print(f'Processing {len(run_ids)} runs for training data extraction')
 
-    iter = 1
-    n_run_ids = len(run_ids)
-    # Main Loop - Segment All Tomograms
-    for _iz in range(0, n_run_ids, n_procs):
-        processes = []
-        for _in in range(n_procs):
-            _iz_this = _iz + _in
-            if _iz_this >= n_run_ids:
-                break
-            run_id = run_ids[_iz_this]
-            run = root.get_run(run_id)
-            print(f'\nProcessing {run_id} ({iter}/{len(run_ids)})')    
-            p = mp.Process(
-                target=extract_sam2_candidates,
-                args=(run, 
-                      voxel_size, 
-                      tomogram_algorithm,
-                      slab_thickness,
-                      sam2_cfg,
-                      zroot,
-                      _in,
-                      num_slabs),
-            )
-            processes.append(p)
-            iter += 1
+    # Initialize the zarr writer 
+    zwriter = zarr_writer.get_zarr_writer(output)
 
-        for p in processes:
-            p.start()
-
-        for p in processes:
-            p.join()
-
-        for p in processes:
-            p.close()
-
-    print('Preparation of Cryo-SAM2 Training Data Complete!')     
-
-
-@click.command(context_settings={"show_default": True})
-@slurm_submit.copick_commands
-@slurm_submit.sam2_inputs
-@click.option('--output', type=str, required=True, help="Path to the saved SAM2 output Zarr file.", 
-              default = '24jul29c_training_data.zarr')
-@click.option('--num-slabs', type=int, default=1, callback=validate_odd, 
-              help="Number of slabs to segment per tomogram.")              
-@slurm_submit.compute_commands
-def prepare_tomogram_training_slurm(
-    config: str,
-    sam2_cfg: str,
-    voxel_size: int, 
-    tomogram_algorithm: str,
-    slab_thickness: int,
-    output: str,
-    num_gpus: int,
-    gpu_constraint: str,
-    num_slabs: int,
-    ):
-
-    # Create Prepare Training Command
-    command = f"""
-classifier prepare-training \\
-    --config {config} \\
-    --sam2-cfg {sam2_cfg} \\
-    --voxel-size {voxel_size} \\
-    --tomogram-algorithm {tomogram_algorithm} \\
-    --slab-thickness {slab_thickness} \\
-    --output {output}
-    """
-    
-    if num_slabs > 1:
-        command += f" --num-slabs {num_slabs}"
-
-    # Create Slurm Submit Script
-    slurm_submit.create_shellsubmit(
-        job_name="prepare-sam2-training",
-        output_file="prepare-sam2-training.out",
-        shell_name="prepare-sam2-training.sh",
-        command=command,
-        num_gpus=num_gpus,
-        gpu_constraint=gpu_constraint
+    # Create pool with model pre-loading
+    pool = GPUPool(
+        init_fn=preprocess_workflow,
+        init_args=(sam2_cfg,),
+        verbose=True
     )
+
+    # Prepare tasks
+    tasks = [
+        (run, voxel_size, tomogram_algorithm, slab_thickness, zroot, num_slabs)
+        for run in runs
+    ]
+
+    # Execute
+    try:
+        results = pool.execute(
+            extract_sam2_candidates,
+            tasks,
+            task_ids=run_ids,
+            progress_desc="Extracting SAM2 Candidates"
+        )
+        
+        # Finalize zarr file
+        zarr_writer.finalize()
+
+        # Handle results
+        successful = [r for r in results if r['success']]
+        failed = [r for r in results if not r['success']]
+        
+        if failed:
+            print(f"Failed runs: {[r['task_id'] for r in failed]}")
+            for failed_run in failed:
+                print(f"  - {failed_run['task_id']}: {failed_run['error']}")
+
+        # Report Results
+        print(f'\n{"="*60}')
+        print('SAM2 EXTRACTION COMPLETE')
+        print(f'{"="*60}')
+        print(f"Total runs: {len(run_ids)}")
+        print(f"Successful: {len(successful)}")
+        print(f"Failed: {len(failed)}")
+        
+    finally:
+        pool.shutdown()
+
+    # Add Function to Create a Gallery of the Training Data
+    # galleries.create_png_gallery(
+    #     f'gallery_sessionID_{segmentation_session_id}/frames',
+    # )
+
+    print('Preparation of SABER Training Data Complete!')     

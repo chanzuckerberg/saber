@@ -13,7 +13,8 @@ def save_slab_segmentation(
 
     # Show 2D Annotations
     plt.imshow(image, cmap='gray'); plt.axis('off')
-    viz.show_anns(masks)
+    if len(masks) > 0: # I Should Update this Function as Well...
+        viz.show_anns(masks) 
     plt.axis('off')
 
     # Save the Figure
