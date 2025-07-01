@@ -1,5 +1,6 @@
-from saber.classifier.preprocess.micrograph_training_prep import prepare_micrograph_training, prepare_micrograph_training_slurm
-from saber.classifier.preprocess.tomogram_training_prep import prepare_tomogram_training, prepare_tomogram_training_slurm
+from saber.classifier.preprocess.slurm import prepare_tomogram_training_slurm, prepare_micrograph_training_slurm
+from saber.classifier.preprocess.micrograph_training_prep import prepare_micrograph_training
+from saber.classifier.preprocess.tomogram_training_prep import prepare_tomogram_training
 from saber.classifier.preprocess.split_merge_data import split_data, merge_data
 from saber.classifier.preprocess.training_data_info import class_info
 from saber.classifier.inference import predict, predict_slurm

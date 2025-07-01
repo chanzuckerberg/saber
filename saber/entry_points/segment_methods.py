@@ -1,5 +1,6 @@
-from saber.entry_points.run_micrograph_segment import micrographs, micrographs_slurm
-from saber.entry_points.run_tomogram_segment import slab, tomograms, tomograms_slurm
+from saber.entry_points.slurm import tomograms_slurm, micrographs_slurm
+from saber.entry_points.run_tomogram_segment import slab, tomograms
+from saber.entry_points.run_micrograph_segment import micrographs
 import click
 
 @click.group(name="segment")

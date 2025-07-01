@@ -10,7 +10,7 @@ Once you've completed the preprocessing and annotation steps, it's time to train
 
 In many research scenarios, you'll have annotated data from multiple sources - different experimental acquisitions, various imaging conditions, or separate copick projects. SABER allows you to combine these datasets for robust classifier training.
 
-<details>
+<details markdown="1">
 <summary><strong>Why merge multiple datasets?</strong></summary>
 
 Combining annotations from multiple data sources creates a more robust and generalizable classifier by:
@@ -73,7 +73,7 @@ saber classifier train \
 
 ### Training Process
 
-<details>
+<details markdown="1">
 <summary><strong>What happens during training?</strong></summary>
 
 The training process involves:
@@ -119,22 +119,25 @@ The prediction output includes:
 - **Visual assessment**: Side-by-side comparisons of predictions vs. annotations
 - **Error analysis**: Identification of common failure modes and edge cases
 
-<details>
+<details markdown="1">
 <summary><strong>Interpreting your results</strong></summary>
 
 **Good signs**:
+
 - High accuracy (>85%) on validation data
 - Consistent performance across different experimental conditions
 - Clear, well-defined segmentation boundaries
 - Accurate classification of challenging cases
 
 **Warning signs**:
+
 - Large gap between training and validation accuracy (overfitting)
 - Poor performance on certain classes (class imbalance)
 - Inconsistent results across different image types
 - Blurry or imprecise segmentation boundaries
 
 **Next steps if results are poor**:
+
 - Add more diverse training examples
 - Balance your class distribution
 - Adjust training hyperparameters

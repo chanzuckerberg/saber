@@ -60,8 +60,8 @@ saber-slurm = "saber.main:slurm_routines"
 source = "vcs"
 
 [project.urls]
-Homepage = "https://github.com/czi-ai/segment-microscopy-sam2"
-Issues = "https://github.com/czi-ai/segment-microscopy-sam2/issues"
+Homepage = "https://github.com/czi-ai/saber"
+Issues = "https://github.com/czi-ai/saber/issues"
 
 [tool.semantic_release]
 version_variables = ["saber/__init__.py:__version__"]

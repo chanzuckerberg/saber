@@ -1,13 +1,13 @@
+from saber.segmenters.loaders import base_microsegmenter
+from saber.entry_points.inference_core import segment_micrograph_core
 from saber.process.downsample import FourierRescale2D
-from saber.segmenters.micro import cryoMicroSegmenter
-from saber import io, utilities as utils
+from saber.classifier.preprocess import zarr_writer
+from saber.entry_points import parallelization
+from saber.visualization import galleries
 from saber.process import slurm_submit
 from saber.process import mask_filters
-import click, torch, zarr, os, glob
 from saber.io import read_micrograph
-from multiprocessing import Lock
-import multiprocess as mp
-from tqdm import tqdm
+import click, glob, os
 import numpy as np
 
 @click.group()
@@ -22,6 +22,8 @@ def micrograph_options(func):
                       help="Path to Micrograph or Project, in the case of project provide the file extention (e.g. 'path/*.mrc')"),
         click.option("--output", type=str, required=False, default='saber_training_data.zarr',
                       help="Path to the output Zarr file (if input points to a folder)."),
+        click.option("--scale-factor", type=float, required=False, default=None, 
+                      help="Scale Factor to Downsample Images. If not provided, no downsampling will be performed."),
         click.option("--target-resolution", type=float, required=False, default=None, 
                       help="Desired Resolution to Segment Images [Angstroms]. If not provided, no downsampling will be performed."),
     ]
@@ -29,60 +31,50 @@ def micrograph_options(func):
         func = option(func)
     return func
 
-# Initialize the global lock at the module level
-lock = Lock()
-
-# Save results to Zarr
-def save_to_zarr(zroot, run_index, image, masks):
-    global lock  # Use the global lock
-    with lock:
-        # Create a group for the run_index
-        run_group = zroot.create_group(str(run_index))
-
-        # Save the image
-        run_group.create_dataset("image", data=image, dtype="float32", overwrite=True)
-        run_group.create_dataset("masks", data=masks, dtype="uint8", overwrite=True)
-
-# Base segmentation function that processes a given slab using the segmenter.
-def segment(segmenter, image):
+# # Base segmentation function that processes a given slab using the segmenter.
+# def segment(segmenter, image):
     
-    # Produce Initialial Segmentations with SAM2
-    masks_list = segmenter.segment_image(
-        image, display_image=False)
+#     # Produce Initialial Segmentations with SAM2
+#     segmenter.segment( image, display_image=False )
+#     (image0, masks_list) = (segmenter.image0, segmenter.masks)
 
-    # Convert Masks to Numpy Array
-    masks = mask_filters.convert_mask_list_to_array(masks_list)
+#     # Convert Masks to Numpy Array
+#     masks = mask_filters.masks_to_array(masks_list)
+
+#     return image0, masks
+
+# def extract_sam2_candidates(
+#     fName: str,
+#     output: str,
+#     target_resolution: float,
+#     scale_factor: float,
+#     gpu_id,         # Added by GPUPool
+#     models          # Added by GPUPool
+#     ):
+
+#     # Get the Global Zarr Writer
+#     zwriter = zarr_writer.get_zarr_writer(output)
+
+#     # Use pre-loaded segmenter
+#     segmenter = models['segmenter']    
+
+#     # Read the Micrograph
+#     image, pixel_size = read_micrograph(fName)
+#     image = image.astype(np.float32)
+
+#     # Downsample if desired resolution is larger than current resolution
+#     if target_resolution is not None and target_resolution > pixel_size:
+#         scale = target_resolution / pixel_size
+#         image = FourierRescale2D.run(image, scale)
+#     elif scale_factor is not None:
+#         image = FourierRescale2D.run(image, scale_factor)
     
-    # Return the Segmented Image and Masks
-    image_seg = segmenter.image
-    return image_seg, masks
-
-def extract_sam2_candidates(
-    fName: str,
-    target_resolution: float,
-    model_cfg: str,
-    zroot: zarr.Group,
-    deviceID: int = 0,
-    ):
-
-    # Read the Micrograph
-    image, pixel_size = read_micrograph(fPath)
-    image = image.astype(np.float32)
-
-    # Downsample if desired resolution is larger than current resolution
-    if target_resolution is not None and target_resolution > pixel_size:
-        scale = target_resolution / pixel_size
-        image = FourierRescale2D.run(image, scale)
-
-    # Initialize the Segmenter
-    segmenter = cryoMicroSegmenter(
-        sam2_cfg = model_cfg,
-        deviceID = deviceID
-    )    
+#     # Process Multiple Slabs or Single Slab at the Center of the Volume
+#     image_seg, masks = segment(segmenter, image)
     
-    # Process Multiple Slabs or Single Slab at the Center of the Volume
-    image_seg, masks = segment(segmenter, image)
-    save_to_zarr(zroot, fName, image_seg, masks)
+#     # Write Run to Zarr
+#     fName = os.path.splitext(os.path.basename(fName))[0]
+#     zwriter.write(run_name=fName, image=image_seg, masks=masks.astype(np.uint8))
 
 @click.command(context_settings={"show_default": True})
 @micrograph_options
@@ -91,99 +83,59 @@ def prepare_micrograph_training(
     input: str, 
     output: str,
     target_resolution: float,
+    scale_factor: float,
     sam2_cfg: str,
     ):
     """
     Prepare Training Data from Micrographs for a Classifier.
     """    
 
-    # Set up multiprocessing - max processs = number of GPUs
-    mp.set_start_method("spawn")
-    n_procs = torch.cuda.device_count()    
-    lock = Lock()  # Initialize the lock (Remove?)
-    print(f'\nRunning Saber Segmentations for the Following MRC Path: {mrc_path}')
-    print(f'Parallelizing the Computation over {n_procs} GPUs\n')
+    # Check to Make Sure Only One of the Inputs is Provided
+    if target_resolution is not None and scale_factor is not None:
+        raise ValueError("Please provide either target_resolution OR scale_factor input, not both.")
 
-    # Get All MRC Files in the Directory
-    fNames = glob.glob(input)
-    if len(fNames) == 0:
+    # Get All Files in the Directory
+    print(f'\nRunning SAM2 Training Data Preparation\nfor the Following Search Path: {input}')
+    files = glob.glob(input)
+    if len(files) == 0:
         raise ValueError(f"No files found in {input}")
 
-    # Initialize the shared Zarr file with the new structure
-    zarr_store = zarr.DirectoryStore(output)
-    zroot = zarr.group(zarr_store, overwrite=True)
-
-    iter = 1
-    n_fNames = len(fNames)
-    # Main Loop - Segment All Tomograms
-    for _iz in range(0, n_fNames, n_procs):
-        processes = []
-        for _in in range(n_procs):
-            _iz_this = _iz + _in
-            if _iz_this >= n_fNames:
-                break
-            fName = fNames[_iz_this]
-            print(f'\nProcessing {fName} ({iter}/{len(fNames)})')   
-            p = mp.Process(
-                target=extract_sam2_candidates,
-                args=(
-                      fName,
-                      target_resolution, 
-                      sam2_cfg,
-                      zroot,
-                      _in),
-            )
-            processes.append(p)
-            iter += 1
-
-        for p in processes:
-            p.start()
-
-        for p in processes:
-            p.join()
-
-        for p in processes:
-            p.close()
-
-    print('Preparation of Saber Training Data Complete!')     
-
-
-@click.command(context_settings={"show_default": True}, name='prepare-micrograph-training')
-@micrograph_options
-@slurm_submit.sam2_inputs
-@slurm_submit.compute_commands
-def prepare_micrograph_training_slurm(
-    input: str,
-    output: str,
-    target_resolution: float,
-    sam2_cfg: str,
-    num_gpus: int,
-    gpu_constraint: str,
-    ):
-    """
-    Prepare Training Data from Micrographs for a Classifier.
-    """
-
-    # Create Prepare Training Command
-    command = f"""
-saber classifier prepare-micrograph-training \\
-    --input {input} \\
-    --output {output} \\
-    --sam2-cfg {sam2_cfg} \\
-    --num-gpus {num_gpus} \\
-    --gpu-constraint {gpu_constraint} \\
-    """
-
+    # Check to see if we can use target_resolution input
     if target_resolution is not None:
-        command += f" --target-resolution {target_resolution}"
+        image, pixel_size = read_micrograph(files[0])
+        if pixel_size is None:
+            raise ValueError(f"Pixel size is not provided for {files[0]}. Please provide scale factor input instead.")
 
-    # Create Slurm Submit Script
-    slurm_submit.create_shellsubmit(
-        job_name="prepare-micrograph-training",
-        output_file="prepare-micrograph-training.out",
-        shell_name="prepare-micrograph-training.sh",
-        command=command,
-        num_gpus=num_gpus,
-        gpu_constraint=gpu_constraint
+    # Create pool with model pre-loading
+    pool = parallelization.GPUPool(
+        init_fn=base_microsegmenter,
+        init_args=(sam2_cfg,),
+        verbose=True
     )
 
+    # Prepare tasks
+    if target_resolution is not None:
+        print(f'Running SABER Segmentations with a Target Resolution of: {target_resolution} Å.')
+        tasks = [ (fName, output, target_resolution, None, False, False) for fName in files ]
+    elif scale_factor is not None:
+        print(f'Running SABER Segmentations with a Downsampling Scale Factor of: {scale_factor}.')
+        tasks = [ (fName, output, None, scale_factor, False, False) for fName in files ]
+    else:  # We're not downsampling
+        print('Running the Segmentations at the full micrograph resolution.')
+        tasks = [ (fName, output, None, None, False, False) for fName in files ]
+
+    # Execute
+    try:
+        pool.execute(
+            segment_micrograph_core,
+            tasks, task_ids=files,
+            progress_desc="Extracting SAM2 Candidates"
+        )
+
+    finally:
+        pool.shutdown()
+
+    # Create a Gallery of the Training Data
+    galleries.convert_zarr_to_gallery(output)
+
+    print('Preparation of Saber Training Data Complete!')     
