@@ -31,7 +31,7 @@ saber download sam2-weights
 
 ## 📚 Documentation
 
-For detailed documentation, tutorials, CLI and API reference, visit our [documentation](https://redesigned-journey-jn1nq38.pages.github.io/)
+For detailed documentation, tutorials, CLI and API reference, visit our [documentation](https://czi-ai.github.io/saber/)
 
 
 ## 🤝 Contributing
