@@ -187,6 +187,41 @@ def _semantic_segmentation2(masks, predictions):
     
     return output_masks
 
+def masks_to_array(mask_list):
+    """
+    Convert list of masks to single label matrix
+    """
+    if not isinstance(mask_list, list):
+        print('Returning None')
+        return None
+
+    # Convert Masks to Numpy Array 
+    (nx, ny) = mask_list[0]['segmentation'].shape
+    masks = np.zeros([len(mask_list), nx, ny], dtype=np.uint8)
+
+    # Populate the numpy array
+    for j, mask in enumerate(mask_list):
+        masks[j] = mask['segmentation'].astype(np.uint8) * (j + 1)
+    
+    return masks
+
+def masks_to_list(masks):
+
+    # If already a list, return original masks
+    if isinstance(masks, list):
+        return masks
+
+    # Convert masks to list of dictionaries
+    masks_list = []
+    vals = np.unique(masks)
+    for val in vals:
+        mask = masks == val
+        masks_list.append({
+            'segmentation': mask,
+            'area': np.sum(mask > 0)})
+    
+    return masks_list
+
 def convert_mask_array_to_list(mask_array):
     """
     Convert a 3D mask array to a list of masks.

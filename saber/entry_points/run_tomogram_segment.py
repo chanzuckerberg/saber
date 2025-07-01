@@ -1,8 +1,8 @@
 from saber.entry_points.inference_core import segment_tomogram_core
-from saber.entry_points.loaders import tomogram_workflow
-from saber.entry_points.parallelization import GPUPool
+from saber.segmenters.loaders import base_tomosegmenter
 from saber.segmenters.tomo import cryoTomoSegmenter
 import saber.process.slurm_submit as slurm_submit
+from saber.entry_points import parallelization
 import copick, click, torch, os, matplotlib
 from saber.classifier.models import common
 from saber.visualization import galleries 
@@ -111,7 +111,7 @@ def tomograms(
     matplotlib.use('Agg')
 
     # Create pool with model pre-loading
-    pool = GPUPool(
+    pool = parallelization.GPUPool(
         init_fn=tomogram_workflow,
         approach="threading",
         init_args=(model_weights, model_config, target_class, sam2_cfg),
@@ -128,28 +128,17 @@ def tomograms(
 
     # Execute
     try:
-        results = pool.execute(
+        pool.execute(
             segment_tomogram_parallel,
-            tasks,
-            task_ids=run_ids,
+            tasks, task_ids=run_ids,
             progress_desc="Segmenting Tomograms"
         )
-        
-        # Handle results
-        failed_runs = [r for r in results if not r['success']]
-        if failed_runs:
-            print(f"Failed runs: {[r['task_id'] for r in failed_runs]}")
             
     finally:
         pool.shutdown()
     
-    # Check results
-    successful = [r for r in results if r['success']]
-    failed = [r for r in results if not r['success']]
-
     # Report Results to User
     print('Completed the Orgnalle Segmentations with Cryo-SAM2!')
-    print(f"Processed {len(successful)} successfully, {len(failed)} failed")    
 
     # Create a gallery of the tomograms
     galleries.create_png_gallery(

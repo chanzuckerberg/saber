@@ -190,42 +190,6 @@ class saber2Dsegmenter:
                 windows.append((y1, x1, y2, x2))
                 
         return windows
-
-    # def masks_to_array(self, masks):
-    #     """
-    #     Convert list of masks to single label matrix
-    #     """
-    #     if not masks or not isinstance(masks, list):
-    #         return None
-    
-    #     # Get shape from first mask
-    #     h, w = masks[0]['segmentation'].shape
-    #     n_masks = len(masks)
-        
-    #     # Create array
-    #     masks_array = np.zeros((n_masks, h, w), dtype=np.uint8)
-    #     for i, mask in enumerate(masks):
-    #         masks_array[i] = mask['segmentation']
-    #         masks_array[i]
-        
-    #     return masks_array
-
-    # def masks_to_list(self, masks):
-
-    #     # If already a list, return original masks
-    #     if isinstance(masks, list):
-    #         return masks
-
-    #     # Convert masks to list of dictionaries
-    #     masks_list = []
-    #     vals = np.unique(masks)
-    #     for val in vals:
-    #         mask = masks == val
-    #         masks_list.append({
-    #             'segmentation': mask,
-    #             'area': np.sum(mask > 0)})
-        
-    #     return masks_list
     
 class saber3Dsegmenter(saber2Dsegmenter):
     def __init__(self,

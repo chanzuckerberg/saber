@@ -1,9 +1,12 @@
+from saber.segmenters.micro import cryoMicroSegmenter
+from saber.process.downsample import FourierRescale2D
 from saber.segmenters.tomo import cryoTomoSegmenter
+from saber.classifier.preprocess import zarr_writer
 from saber.process import mask_filters
 from copick_utils.writers import write
 from saber import io
 import numpy as np
-import torch
+import torch, os
 
 def segment_tomogram_core(
     run,
@@ -117,3 +120,40 @@ def segment_tomogram_core(
     
     return f"Successfully processed {run.name}"
 
+
+def segment_micrograph_core(
+    input:str, output: str,
+    scale_factor: float, target_resolution: float,
+    display_image: bool, use_sliding_window: bool,
+    gpu_id, models):
+
+    # Get the Global Zarr Writer
+    zwriter = zarr_writer.get_zarr_writer(output)
+
+    # Use pre-loaded segmenter
+    segmenter = models['segmenter']        
+
+    # Ensure we're on the correct GPU
+    torch.cuda.set_device(gpu_id)
+    
+    # Read the Micrograph
+    image, pixel_size = io.read_micrograph(input)
+    image = image.astype(np.float32)
+
+    # Downsample if desired resolution is larger than current resolution
+    if target_resolution is not None and target_resolution > pixel_size:
+        scale = target_resolution / pixel_size
+        image = FourierRescale2D.run(image, scale)
+    elif scale_factor is not None:
+        image = FourierRescale2D.run(image, scale_factor)   
+
+    # Produce Initialial Segmentations with SAM2
+    segmenter.segment( image, display_image=False, use_sliding_window=use_sliding_window )
+    (image0, masks_list) = (segmenter.image0, segmenter.masks)
+
+    # Convert Masks to Numpy Array
+    masks = mask_filters.masks_to_array(masks_list)
+
+    # Write Run to Zarr
+    input = os.path.splitext(os.path.basename(input))[0]
+    zwriter.write(run_name=input, image=image0, masks=masks.astype(np.uint8))

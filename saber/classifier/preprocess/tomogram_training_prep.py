@@ -1,12 +1,11 @@
-from saber.entry_points.loaders import preprocess_workflow
-from saber.entry_points.parallelization import GPUPool
+from saber.segmenters.loaders import base_tomosegmenter
+from saber.process import slurm_submit, mask_filters
 from saber.classifier.preprocess import zarr_writer
+from saber.entry_points import parallelization
 from saber.classifier import validate_odd
 from saber.visualization import galleries
-from saber import io, utilities as utils
-from saber.process import slurm_submit
-import copick, click, torch, zarr
-from multiprocessing import Lock
+from saber import io
+import copick, click
 import numpy as np
 
 @click.group()
@@ -18,21 +17,14 @@ def cli(ctx):
 def segment(segmenter, vol, slab_thickness, zSlice):
     
     # Produce Initialial Segmentations with SAM2
-    masks_list = segmenter.segment_slab(
-        vol, slab_thickness, display_image=False, zSlice=zSlice)[1]
-    masks_list = sorted(masks_list, key=lambda mask: mask['area'], reverse=False)
+    segmenter.segment_slab(
+        vol, slab_thickness, display_image=False, zSlice=zSlice)
+    (image0, masks_list) = (segmenter.image0, segmenter.masks)
     
-    # Convert Masks to Numpy Array (Sorted by Area in Ascending Order)
-    (nx, ny) = masks_list[0]['segmentation'].shape
-    masks = np.zeros([len(masks_list), nx, ny], dtype=np.uint8)
+    # Convert Masks to Numpy Array
+    masks = mask_filters.masks_to_array(masks_list)
 
-    # Populate the numpy array
-    for j, mask in enumerate(masks_list):
-        masks[j] = mask['segmentation'].astype(np.uint8) * (j + 1)
-    
-    # Return the Segmented Image and Masks
-    image_seg = segmenter.image
-    return image_seg, masks
+    return image0, masks
 
 def extract_sam2_candidates(
     run, 
@@ -74,13 +66,13 @@ def extract_sam2_candidates(
             
             # Save to a group with name: run.name + "_{index}"
             group_name = f"{run.name}_{i+1}"
-            zwriter.write(run_name=group_name, image=image_seg, masks=masks)            
+            zwriter.write(run_name=group_name, image=image_seg, masks=masks.astype(np.uint8))            
     else:
         zSlice = int(vol.shape[0] // 2)
         image_seg, masks = segment(segmenter, vol, slab_thickness, zSlice=zSlice)
 
         # Write Run to Zarr
-        zwriter.write(run_name=run.name, image=image_seg, masks=masks)
+        zwriter.write(run_name=run.name, image=image_seg, masks=masks.astype(np.uint8))
 
 @click.command(context_settings={"show_default": True})
 @slurm_submit.copick_commands
@@ -109,16 +101,11 @@ def prepare_tomogram_training(
     # Open Copick Project and Query All Available Runs
     root = copick.from_file(config)
     run_ids = [run.name for run in root.runs]
-    runs = list(root.runs)
-
     print(f'Processing {len(run_ids)} runs for training data extraction')
 
-    # Initialize the zarr writer 
-    zwriter = zarr_writer.get_zarr_writer(output)
-
     # Create pool with model pre-loading
-    pool = GPUPool(
-        init_fn=preprocess_workflow,
+    pool = parallelization.GPUPool(
+        init_fn=base_tomosegmenter,
         init_args=(sam2_cfg,),
         verbose=True
     )
@@ -126,38 +113,17 @@ def prepare_tomogram_training(
     # Prepare tasks
     tasks = [
         (run, output, voxel_size, tomogram_algorithm, slab_thickness, num_slabs)
-        for run in runs
+        for run in root.runs
     ]
 
     # Execute
     try:
-        results = pool.execute(
+        pool.execute(
             extract_sam2_candidates,
-            tasks,
-            task_ids=run_ids,
+            tasks, task_ids=run_ids,
             progress_desc="Extracting SAM2 Candidates"
         )
-        
-        # Finalize zarr file
-        zarr_writer.finalize()
 
-        # Handle results
-        successful = [r for r in results if r['success']]
-        failed = [r for r in results if not r['success']]
-        
-        if failed:
-            print(f"Failed runs: {[r['task_id'] for r in failed]}")
-            for failed_run in failed:
-                print(f"  - {failed_run['task_id']}: {failed_run['error']}")
-
-        # Report Results
-        print(f'\n{"="*60}')
-        print('SAM2 EXTRACTION COMPLETE')
-        print(f'{"="*60}')
-        print(f"Total runs: {len(run_ids)}")
-        print(f"Successful: {len(successful)}")
-        print(f"Failed: {len(failed)}")
-        
     finally:
         pool.shutdown()
 

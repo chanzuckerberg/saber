@@ -390,6 +390,11 @@ class GPUPool:
         print(f"Total tasks: {len(results)}")
         print(f"Successful: {len(successful)}")
         print(f"Failed: {len(failed)}")
+
+        if failed:
+            print(f"Failed runs: {[r['task_id'] for r in failed]}")
+            for failed_run in failed:
+                print(f"  - {failed_run['task_id']}: {failed_run['error']}")        
         
         if successful:
             gpu_stats = {}

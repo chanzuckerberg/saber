@@ -35,7 +35,7 @@ def tomograms_slurm(
     """
 
     command = f"""
-segment tomograms \\
+saber segment tomograms \\
     --config {config} \\
     --slab-thickness {slab_thickness} \\
     --voxel-size {voxel_size} --tomogram-algorithm {tomogram_algorithm} \\

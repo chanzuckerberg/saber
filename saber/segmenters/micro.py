@@ -30,7 +30,7 @@ class cryoMicroSegmenter(saber2Dsegmenter):
     def segment(self,
         image0,
         display_image: bool = True,
-        use_sliding_window: bool = True
+        use_sliding_window: bool = False
     ):
         """
         Segment image using sliding window approach
@@ -41,24 +41,25 @@ class cryoMicroSegmenter(saber2Dsegmenter):
             use_sliding_window: Whether to use sliding window (True) or single inference (False)
         """
 
-
-        # Fourier Crop the Image to the Desired Resolution
+        # Store the Original Image
+        self.image0 = image0
         (nx, ny) = image0.shape
+
+        # (Optional)Fourier Crop the Image to the Desired Resolution
         if not use_sliding_window and (nx > 1536 or ny > 1536):
             scale_factor =  max(nx, ny) / 1024 
-            image0 = FourierRescale2D.run(image0, scale_factor)
-            (nx, ny) = image0.shape
+            self.image0 = FourierRescale2D.run(self.image0, scale_factor)
+            (nx, ny) = self.image0.shape
 
         # Increase Contrast of Image and Normalize the Image to [0,1]        
-        image0 = utils.contrast(image0, std_cutoff=2)
-        image0 = utils.normalize(image0, rgb = False)
+        self.image0 = utils.contrast(self.image0, std_cutoff=2)
+        self.image0 = utils.normalize(self.image0, rgb = False)
 
         # Extend From Grayscale to RGB 
-        image = np.repeat(image0[..., None], 3, axis=2)   
+        self.image = np.repeat(self.image0[..., None], 3, axis=2)   
 
         # Segment Image
         self.segment_image(
-            image, 
             display_image = display_image, 
             use_sliding_window = use_sliding_window)
 
