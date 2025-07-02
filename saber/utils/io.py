@@ -1,4 +1,4 @@
-import mrcfile, skimage
+import mrcfile, skimage, torch
 import numpy as np
 
 # Try to import hyperspy for Material Science dataset
@@ -172,3 +172,61 @@ def read_stem_micrograph(input: str):
         raise ValueError(f"Unsupported unit: {units}")
 
     return data, pixel_size
+
+def get_available_devices(deviceID: int = None):
+    """
+    Get the available devices for the current system.
+    """
+    # Set device
+    if deviceID is None:
+        if torch.cuda.is_available():           device_type = 'cuda'
+        elif torch.backends.mps.is_available(): device_type = "mps" 
+        else:                                   device_type = "cpu" 
+        device = torch.device(device_type)
+    else:
+        device = determine_device(deviceID)
+    return device
+
+def determine_device(deviceID: int = 0):
+    """
+    Determine the device for the given deviceID.
+    """
+
+    # First check if CUDA is available at all
+    if torch.cuda.is_available():
+        try:
+
+            # Make sure the device ID is valid
+            device_count = torch.cuda.device_count()
+            if deviceID >= device_count:
+                print(f"Warning: Requested CUDA device {deviceID} but only {device_count} devices available")
+                print(f"Falling back to device 0")
+                deviceID = 0
+
+            # Safely try to get the device properties
+            props = torch.cuda.get_device_properties(deviceID)
+            device = torch.device(f"cuda:{deviceID}")
+            
+            # Enable TF32 for Ampere GPUs if available
+            if props.major >= 8:
+                torch.backends.cuda.matmul.allow_tf32 = True
+                torch.backends.cudnn.allow_tf32 = True
+                # Only set up autocast after confirming device works
+                # torch.autocast(device_type="cuda", dtype=torch.bfloat16).__enter__()
+            
+        except Exception as e:
+            print(f"Error accessing CUDA device {deviceID}: {e}")
+            print("Falling back to CPU")
+            device = torch.device("cpu")
+    elif torch.backends.mps.is_available():
+        device = torch.device("mps")
+        print(
+            "\nSupport for MPS devices is preliminary. SAM 2 is trained with CUDA and might "
+            "give numerically different outputs and sometimes degraded performance on MPS. "
+            "See e.g. https://github.com/pytorch/pytorch/issues/84936 for a discussion."
+        )
+    else:
+        device = torch.device("cpu")
+        print("Using CPU for computation (no GPU available)")
+
+    return device

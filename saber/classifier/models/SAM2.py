@@ -1,9 +1,10 @@
-from saber import pretrained_weights, utilities as utils
 import saber.classifier.models.common as common
+from saber import pretrained_weights
 import torch.nn.functional as F
-import torch, os, saber
+from saber.utils import io
 import torch.nn as nn
 import numpy as np
+import torch
 
 # Suppress Warning for Post Processing from SAM2 - 
 # Explained Here: https://github.com/facebookresearch/sam2/blob/main/INSTALL.md
@@ -33,7 +34,7 @@ class SAM2Classifier(nn.Module):
         self.input_mode = 'separate'
 
         # Get Device
-        self.device = utils.get_available_devices(deviceID)
+        self.device = io.get_available_devices(deviceID)
 
         # Build SAM2 model
         (cfg, checkpoint) = pretrained_weights.get_sam2_checkpoint(backbone_type)

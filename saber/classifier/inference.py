@@ -1,7 +1,7 @@
-from saber.classifier.models.predictor import Predictor
-from saber.process import slurm_submit, mask_filters
 from saber.visualization import galleries, classifier as classviz
-import saber.utilities as utils
+from saber.classifier.models.predictor import Predictor
+from saber.filters import masks as mask_filters
+from saber.utils import slurm_submit
 import zarr, click, torch, os
 from tqdm import tqdm
 import numpy as np

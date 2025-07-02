@@ -1,14 +1,8 @@
-from saber.segmenters.loaders import base_microsegmenter
 from saber.entry_points.inference_core import segment_micrograph_core
-from saber.process.downsample import FourierRescale2D
-from saber.classifier.preprocess import zarr_writer
-from saber.entry_points import parallelization
+from saber.segmenters.loaders import micrograph_workflow
+from saber.utils import parallelization, slurm_submit
 from saber.visualization import galleries
-from saber.process import slurm_submit
-from saber.process import mask_filters
-from saber.io import read_micrograph
-import click, glob, os
-import numpy as np
+import click, glob
 
 @click.group()
 @click.pass_context
@@ -30,51 +24,6 @@ def micrograph_options(func):
     for option in reversed(options):  # Add options in reverse order to preserve correct order
         func = option(func)
     return func
-
-# # Base segmentation function that processes a given slab using the segmenter.
-# def segment(segmenter, image):
-    
-#     # Produce Initialial Segmentations with SAM2
-#     segmenter.segment( image, display_image=False )
-#     (image0, masks_list) = (segmenter.image0, segmenter.masks)
-
-#     # Convert Masks to Numpy Array
-#     masks = mask_filters.masks_to_array(masks_list)
-
-#     return image0, masks
-
-# def extract_sam2_candidates(
-#     fName: str,
-#     output: str,
-#     target_resolution: float,
-#     scale_factor: float,
-#     gpu_id,         # Added by GPUPool
-#     models          # Added by GPUPool
-#     ):
-
-#     # Get the Global Zarr Writer
-#     zwriter = zarr_writer.get_zarr_writer(output)
-
-#     # Use pre-loaded segmenter
-#     segmenter = models['segmenter']    
-
-#     # Read the Micrograph
-#     image, pixel_size = read_micrograph(fName)
-#     image = image.astype(np.float32)
-
-#     # Downsample if desired resolution is larger than current resolution
-#     if target_resolution is not None and target_resolution > pixel_size:
-#         scale = target_resolution / pixel_size
-#         image = FourierRescale2D.run(image, scale)
-#     elif scale_factor is not None:
-#         image = FourierRescale2D.run(image, scale_factor)
-    
-#     # Process Multiple Slabs or Single Slab at the Center of the Volume
-#     image_seg, masks = segment(segmenter, image)
-    
-#     # Write Run to Zarr
-#     fName = os.path.splitext(os.path.basename(fName))[0]
-#     zwriter.write(run_name=fName, image=image_seg, masks=masks.astype(np.uint8))
 
 @click.command(context_settings={"show_default": True})
 @micrograph_options

@@ -4,8 +4,8 @@ from saber.classifier.models import common
 from torch.utils.data import DataLoader
 from monai.transforms import Compose
 import torch, click, yaml, os, csv
-import saber.utilities as utils
 import torch.nn.functional as F
+from saber.utils import io
 from tqdm import tqdm
 import numpy as np
 
@@ -132,7 +132,7 @@ def evaluate(test, model_config, model_weights, beta, output):
     model.load_state_dict(torch.load(model_weights, weights_only=True))
 
     # Create the Evaluator
-    device = utils.get_available_devices()
+    device = io.get_available_devices()
     model = model.to(device)
     evaluator = ClassifierEvaluator(test, model, device, beta)
 

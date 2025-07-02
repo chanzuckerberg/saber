@@ -36,10 +36,9 @@ High-level functions that provide complete segmentation workflows:
 ### 3. **Utility Modules**
 Supporting functionality for data handling and visualization:
 
-- **`saber.io`** - Data loading and saving utilities
-- **`saber.utilities`** - Image processing and helper functions
+- **`saber.utils.io`** - Data loading and saving utilities
+- **`saber.utils.preprocessing`** - Image processing and helper functions
 - **`saber.visualization`** - Result visualization and galleries
-- **`saber.process`** - Preprocessing and postprocessing tools
 
 ## 🚀 Quick Start Paths
 
@@ -60,7 +59,7 @@ Ideal for cryo-ET, FIB-SEM, or any 3D volume data:
 ### **Flexible Input Formats**
 ```python
 # Support for various microscopy data formats
-from saber import io
+from saber.utils import io
 
 # Load micrographs
 image, pixel_size = io.read_micrograph("path/to/image.mrc")

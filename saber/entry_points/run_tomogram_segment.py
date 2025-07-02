@@ -1,12 +1,11 @@
 from saber.entry_points.inference_core import segment_tomogram_core
-from saber.segmenters.loaders import base_tomosegmenter
+from saber.segmenters.loaders import tomogram_workflow
 from saber.segmenters.tomo import cryoTomoSegmenter
-import saber.process.slurm_submit as slurm_submit
-from saber.entry_points import parallelization
+import saber.utils.slurm_submit as slurm_submit
 import copick, click, torch, os, matplotlib
 from saber.classifier.models import common
 from saber.visualization import galleries 
-from saber import io
+from saber.utils import io, parallelization
 
 @click.group()
 @click.pass_context
@@ -44,8 +43,8 @@ def slab(
     run = root.get_run(run_id)
 
     # Get Tomogram
-    print(f'Getting {tomogram_algorithm} Tomogram with {voxel_size} A voxel size for the associated runID: {run.name}')
-    vol = io.get_tomogram(run, voxel_size, tomogram_algorithm)
+    print(f'Getting {tomo_alg} Tomogram with {voxel_size} A voxel size for the associated runID: {run.name}')
+    vol = io.get_tomogram(run, voxel_size, tomo_alg)
 
     # Create an instance of cryoTomoSegmenter
     segmenter = cryoTomoSegmenter(

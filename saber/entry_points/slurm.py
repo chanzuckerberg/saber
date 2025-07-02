@@ -1,4 +1,4 @@
-import saber.process.slurm_submit as slurm_submit
+import saber.utils.slurm_submit as slurm_submit
 import click
 
 @click.group()

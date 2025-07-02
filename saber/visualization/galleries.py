@@ -1,8 +1,7 @@
-import time, math, argparse, glob, os, click, zarr
 import saber.visualization.classifier as viz
+import time, math, glob, os, zarr
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-import numpy as np
 
 def initialize_page(figsize=(12, 12), dpi=150):
     """

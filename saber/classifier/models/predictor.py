@@ -1,7 +1,7 @@
 from saber.classifier.datasets.RandMaskCrop import crop_and_resize_adaptive
 from monai.transforms import NormalizeIntensity
 from saber.classifier.models import common
-import saber.utilities as utils
+from saber.utils import io
 import numpy as np
 import torch, yaml
 
@@ -34,7 +34,7 @@ class Predictor:
             self.config = yaml.safe_load(f)
 
         # Set device
-        self.device = utils.get_available_devices(deviceID)
+        self.device = io.get_available_devices(deviceID)
         
         # Load the model architecture with the specified number of classes
         self.model = common.get_classifier_model(

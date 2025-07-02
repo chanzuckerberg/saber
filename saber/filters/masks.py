@@ -1,17 +1,9 @@
-from saber.process.gaussian_smooth import gaussian_smoothing_3d
-from saber import utilities as utils
+from saber.filters.gaussian import gaussian_smoothing_3d
+from saber.utils import io
 from scipy import ndimage
+import torch, gc, skimage
 import numpy as np
-import torch, gc
 
-def overlap(img1, img2):
-    ints = np.logical_and(img1, img2).sum()
-    return ints / min(img1.sum(), img2.sum())
-
-def calculate_iou(mask1, mask2):
-    intersection = np.logical_and(mask1, mask2).sum()
-    union = np.logical_or(mask1, mask2).sum()
-    return intersection / union if union != 0 else 0    
 
 def apply_classifier(image, masks, classifier, desired_class: int = None, min_mask_area: int = 100):
     """
@@ -31,7 +23,7 @@ def apply_classifier(image, masks, classifier, desired_class: int = None, min_ma
 def convert_predictions_to_masks(predictions, masks, desired_class: int = None, min_mask_area: int = 100):
 
     if isinstance(masks, np.ndarray):
-        masks = convert_mask_array_to_list(masks)
+        masks = masks_to_list(masks)
 
      # Get predicted class for each mask
     predicted_classes = np.argmax(predictions, axis=1)  
@@ -65,7 +57,7 @@ def convert_predictions_to_masks(predictions, masks, desired_class: int = None, 
         else:
             return np.array([])  # Return empty array if no masks
 
-        masks = _semantic_segmentation2(masks, predictions)
+        masks = _semantic_segmentation(masks, predictions)
 
     return masks
 
@@ -131,32 +123,6 @@ def _consensus_based_resolution(image_shape, masks, confidences):
 def _semantic_segmentation(masks, predictions):
     """
     Get array that returns the masks as semantic segmentation.
-    """
-
-    # Get predicted class and confidence for each mask
-    predicted_classes = np.argmax(predictions, axis=1)
-    confidence_scores = np.max(predictions, axis=1)
-
-    # Create semantic segmentation
-    output_masks = np.zeros(masks[0]['segmentation'].shape, dtype=np.uint8)
-    confidence_map = np.zeros(masks[0]['segmentation'].shape, dtype=np.float32)
-
-    for ii in range(len(masks)):
-        if predicted_classes[ii] > 0:
-            mask = masks[ii]['segmentation']
-            confidence = confidence_scores[ii]
-            
-            # Only update pixels where this mask has higher confidence
-            update_pixels = mask & (confidence > confidence_map)
-            
-            output_masks[update_pixels] = predicted_classes[ii]
-            confidence_map[update_pixels] = confidence
-
-    return output_masks
-
-def _semantic_segmentation2(masks, predictions):
-    """
-    Get array that returns the masks as semantic segmentation.
     Merges all masks belonging to each predicted class.
     """
     predicted_classes = np.argmax(predictions, axis=1)
@@ -206,6 +172,9 @@ def masks_to_array(mask_list):
     return masks
 
 def masks_to_list(masks):
+    """
+    Convert a 3D mask array to a list of masks.
+    """
 
     # If already a list, return original masks
     if isinstance(masks, list):
@@ -222,33 +191,16 @@ def masks_to_list(masks):
     
     return masks_list
 
-def convert_mask_array_to_list(mask_array):
-    """
-    Convert a 3D mask array to a list of masks.
-    """
-    masks = []
-    nMasks = mask_array.shape[0]
-    for iMask in range(nMasks):
-        mask = {
-            'segmentation': mask_array[iMask],
-            'area': np.sum(mask_array[iMask]),
-        }
-        masks.append(mask)
-    return masks
+def segments_to_mask(video_segments, masks, mask_shape, nMasks):
 
-
-def convert_mask_list_to_array(masks_list):
-    """
-    Convert a mask list to a numpy array.
-    """
-
-    # Convert Masks to Numpy Array 
-    (nx, ny) = masks_list[0]['segmentation'].shape
-    masks = np.zeros([len(masks_list), nx, ny], dtype=np.uint8)
-
-    # Populate the numpy array
-    for j, mask in enumerate(masks_list):
-        masks[j] = mask['segmentation'].astype(np.uint8) * (j + 1)
+    for frame_idx in list(video_segments):
+        for jj in range(nMasks):
+            resized_mask = skimage.transform.resize(
+                video_segments[frame_idx][jj+1][0,], 
+                (mask_shape[1], mask_shape[2]), anti_aliasing=False
+            )
+            mask_update = resized_mask > 0
+            masks[frame_idx,:,:][mask_update] = jj + 1    
 
     return masks
 
@@ -312,73 +264,6 @@ def merge_segmentation_masks(segmentation, min_volume_threshold=100):
     
     return new_segmentation
 
-
-def apply_physical_contraints(
-    masks, 
-    min_area_threshold: float = 0.1, 
-    max_area_threshold: float = 0.9, 
-    min_mask_area: float = None):
-
-    # Filter masks based on the area key
-    if min_mask_area is not None:
-        mask_filtered = []
-        for mask in masks:
-            _x1, _y1, w, h = mask['bbox']
-            if ( (mask['area'] < min_mask_area) 
-                  or ( w > 0.9 * image.shape[1] )
-                  or ( w < 0.1 * image.shape[1])
-                  or ( h > 0.9 * image.shape[0] )
-                  or ( h < 0.1 * image.shape[1]) ):
-                  continue
-            mask_filtered.append(mask)
-        masks = mask_filtered
-    
-    # Remove Large Masks Corresponding to Background
-    masks = filter_overlapping_masks(masks)    
-
-    # Merge Masks that Are Overlapping
-    masks = merge_masks(masks, distance_threshold = 100)
-
-    return masks
-
-def filter_overlapping_masks(masks,
-                             overlap_threshold = 0.9,
-                             min_area_threshold = 0.4):
-    """
-    Filter overlapping masks based on overlap score and minimum area threshold.
-    """
-    (nx,ny) = masks[0]['segmentation'].shape 
-
-    masks_to_remove = set()  # Use a set to avoid duplicates
-
-    # Filter based on the overlap
-    for _i1, _mask1 in enumerate(masks):
-        if _i1 in masks_to_remove:
-            continue
-        for _i2, _mask2 in enumerate(masks):
-            if _i1 >= _i2 or _i2 in masks_to_remove:
-                continue
-            overlap_score = overlap(_mask1["segmentation"], _mask2["segmentation"])
-
-            if overlap_score > overlap_threshold:
-
-                # Mark the smaller mask for removal based on area
-                mask1_area = _mask1["area"] / (nx * ny)
-                mask2_area = _mask2['area'] / (nx * ny) 
-
-                if mask1_area > min_area_threshold:
-                    masks_to_remove.add(_i1)  # Remove the smaller mask
-                elif mask2_area > min_area_threshold:
-                    masks_to_remove.add(_i2)
-                    break  # Skip further checks for _mask1, since it's to be removed
-
-    # Remove all masks with the highest overlap
-    masks_to_remove = sorted(masks_to_remove, reverse=True)  # Sort in reverse to avoid index shift when popping
-    for index in masks_to_remove:
-        masks.pop(index)
-
-    return masks      
-
 def fast_3d_gaussian_smoothing(volume, scale=0.075, deviceID = None):
     """
     Apply fast 3D Gaussian smoothing to a volume.
@@ -396,7 +281,7 @@ def fast_3d_gaussian_smoothing(volume, scale=0.075, deviceID = None):
     """
     
     # Check if CUDA is available
-    device = utils.get_available_devices(deviceID)
+    device = io.get_available_devices(deviceID)
     
     # Check if input is 3D
     if volume.ndim != 3:
@@ -460,3 +345,52 @@ def _estimate_feature_size_3d(binary_volume, scale=0.075):
     sigma = scale * approx_diameter
     return sigma
 
+# def _semantic_segmentation(masks, predictions):
+#     """
+#     Get array that returns the masks as semantic segmentation.
+#     """
+
+#     # Get predicted class and confidence for each mask
+#     predicted_classes = np.argmax(predictions, axis=1)
+#     confidence_scores = np.max(predictions, axis=1)
+
+#     # Create semantic segmentation
+#     output_masks = np.zeros(masks[0]['segmentation'].shape, dtype=np.uint8)
+#     confidence_map = np.zeros(masks[0]['segmentation'].shape, dtype=np.float32)
+
+#     for ii in range(len(masks)):
+#         if predicted_classes[ii] > 0:
+#             mask = masks[ii]['segmentation']
+#             confidence = confidence_scores[ii]
+            
+#             # Only update pixels where this mask has higher confidence
+#             update_pixels = mask & (confidence > confidence_map)
+            
+#             output_masks[update_pixels] = predicted_classes[ii]
+#             confidence_map[update_pixels] = confidence
+
+#     return output_masks
+
+
+# def overlap(img1, img2):
+#     ints = np.logical_and(img1, img2).sum()
+#     return ints / min(img1.sum(), img2.sum())
+
+# def calculate_iou(mask1, mask2):
+#     intersection = np.logical_and(mask1, mask2).sum()
+#     union = np.logical_or(mask1, mask2).sum()
+#     return intersection / union if union != 0 else 0    
+
+# def convert_mask_array_to_list(mask_array):
+#     """
+#     Convert a 3D mask array to a list of masks.
+#     """
+#     masks = []
+#     nMasks = mask_array.shape[0]
+#     for iMask in range(nMasks):
+#         mask = {
+#             'segmentation': mask_array[iMask],
+#             'area': np.sum(mask_array[iMask]),
+#         }
+#         masks.append(mask)
+#     return masks

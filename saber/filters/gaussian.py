@@ -1,5 +1,5 @@
-from saber import utilities as utils
 import torch.nn.functional as F
+from saber.utils import io
 import torch.nn as nn
 import numpy as np
 import torch, gc
@@ -88,7 +88,7 @@ def gaussian_smoothing_3d(volume, sigma, device = None):
     
     # Determine device
     if device is None:
-        device = utils.get_available_devices()
+        device = io.get_available_devices()
 
     # Convert numpy array to PyTorch tensor with explicit data type
     x = torch.from_numpy(volume.astype(np.float32)).to(device=device, dtype=torch.float32)

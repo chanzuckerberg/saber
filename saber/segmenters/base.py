@@ -1,10 +1,10 @@
-import saber.process.estimate_thickness as estimate_thickness
+import saber.analysis.estimate_thickness as estimate_thickness
 from saber.visualization import classifier as viz
-import saber.process.mask_filters as filters
 from saber.sam2 import tomogram_predictor
+import saber.filters.masks as filters
 from saber import pretrained_weights
-import saber.utilities as utils
 from typing import List, Tuple
+from saber.utils import io
 from tqdm import tqdm
 import numpy as np
 import torch
@@ -48,7 +48,7 @@ class saber2Dsegmenter:
         self.iou_threshold = 0.5        
 
         # Determine device
-        self.device = utils.get_available_devices(deviceID)
+        self.device = io.get_available_devices(deviceID)
 
         # Build SAM2 model
         (cfg, checkpoint) = pretrained_weights.get_sam2_checkpoint(sam2_cfg)
@@ -236,8 +236,7 @@ class saber3Dsegmenter(saber2Dsegmenter):
             self.current_frame = out_frame_idx
             video_segments1[out_frame_idx] = {
                 out_obj_id: (out_mask_logits[i] > 0.0).cpu().numpy() for i, out_obj_id in enumerate(out_obj_ids)
-            }
-        # vol_mask = utils.convert_segments_to_mask(video_segments1, vol_mask, mask_shape, nMasks)               
+            }      
 
         # run propagation throughout the video and collect the results in a dict
         video_segments2 = {}  # video_segments contains the per-frame segmentation results
@@ -248,11 +247,10 @@ class saber3Dsegmenter(saber2Dsegmenter):
             video_segments2[out_frame_idx] = {
                 out_obj_id: (out_mask_logits[i] > 0.0).cpu().numpy() for i, out_obj_id in enumerate(out_obj_ids)
             }
-        # vol_mask = utils.convert_segments_to_mask(video_segments2, vol_mask, mask_shape, nMasks)
 
         # Merge Video Segments to Return for Visualization / Analysis    
         video_segments = video_segments1 | video_segments2   
-        vol_mask = utils.convert_segments_to_mask(video_segments, vol_mask, mask_shape, nMasks)
+        vol_mask = filters.segments_to_mask(video_segments, vol_mask, mask_shape, nMasks)
 
         return vol_mask, video_segments
 
@@ -293,7 +291,7 @@ class saber3Dsegmenter(saber2Dsegmenter):
         # Convert Video Segments into Mask
         nFrames = len(video_segments)
         masks = np.zeros([nFrames, mask_shape[1], mask_shape[2]], dtype=np.uint8)
-        masks = utils.convert_segments_to_mask(filtered_video_segments, masks, mask_shape, nMasks)
+        masks = filters.segments_to_mask(filtered_video_segments, masks, mask_shape, nMasks)
 
         return masks, filtered_video_segments
     

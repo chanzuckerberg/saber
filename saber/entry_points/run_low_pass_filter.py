@@ -1,9 +1,7 @@
-from saber.process.tomogram_filters import Filter3D
-import saber.process.slurm_submit as slurm_submit
+from saber.filters.tomograms import Filter3D
 from copick_utils.writers import write
+from saber.utils import io, slurm_submit
 import click, mrcfile, os, glob, json
-import saber.utilities as utils
-import saber.io as sio
 from tqdm import tqdm
 
 @click.group(name="filter3d")
@@ -98,9 +96,6 @@ def copick(
 
     input_check(lp_freq, hp_freq, voxel_size)
 
-    # Set Device
-    device = utils.get_available_devices()
-
     # Load Copick Project
     if os.path.exists(config):  root = copick.from_file(config)
     else:                       raise ValueError(f"Config file {config} does not exist.")
@@ -112,12 +107,12 @@ def copick(
     else:               run_ids = run_ids.split(",")
 
     # Determine Write Algorithm
-    write_algorithm = tomo_algo
+    write_algorithm = tomo_alg
     if lp_freq > 0: write_algorithm = write_algorithm + f'-lp{lp_freq:0.0f}A'
     if hp_freq > 0: write_algorithm = write_algorithm + f'-hp{hp_freq:0.0f}A'
 
     # Get Tomogram for Initializing 3D Filter
-    vol = sio.get_tomogram(root.get_run(run_ids[0]), voxel_size, tomo_alg)
+    vol = io.get_tomogram(root.get_run(run_ids[0]), voxel_size, tomo_alg)
 
     # Create 3D Filter
     filter = Filter3D(
@@ -133,7 +128,7 @@ def copick(
     for run_id in tqdm(run_ids):
 
         run = root.get_run(run_id)
-        vol = sio.get_tomogram(run, voxel_size, tomo_alg)
+        vol = io.get_tomogram(run, voxel_size, tomo_alg)
 
         # Apply Low-pass Filter
         vol = filter.apply(vol)
@@ -205,9 +200,6 @@ def mrc(
     ):
 
     input_check(lp_freq, hp_freq, voxel_size)
-
-    # Set Device
-    device = utils.get_available_devices()
 
     # Get Tomogram Paths
     run_ids = glob.glob(os.path.join(read_path, '*.mrc'))

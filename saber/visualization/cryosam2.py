@@ -1,6 +1,5 @@
 from saber.visualization import sam2 as viz
 from matplotlib.widgets import Slider
-import saber.utilities as utils
 import matplotlib.pyplot as plt
 import torch, cv2, zarr, os
 import numpy as np
