@@ -21,9 +21,8 @@ Use `prepare-tomogram-training` to generate 2D segmentations from a tomogram usi
 ```bash
 saber classifier prepare-tomogram-training \
     --config config.json \
-    --num-slabs 3 \
     --voxel-size 10 --tomo-alg denoised \
-    --output training_data.zarr \
+    --num-slabs 3 --output training_data.zarr \
 ```
 This will save slab-wise segmentations in a Zarr volume that can be reviewed or refined further.
 

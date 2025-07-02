@@ -1,6 +1,5 @@
 from saber.entry_points.inference_core import segment_micrograph_core
-import saber.process.slurm_submit as slurm_submit
-from saber.entry_points import parallelization
+from saber.utils import slurm_submit, parallelization, io
 from saber.visualization import galleries 
 import glob, click
 import numpy as np
@@ -110,9 +109,9 @@ def interactive_segment_micrograph(
     use_sliding_window: bool = False,
     ):
     from saber.segmenters.micro import cryoMicroSegmenter
-    from saber.process.downsample import FourierRescale2D
+    from saber.filters.downsample import FourierRescale2D
     from saber.classifier.models import common
-    import saber.io as io
+    import saber.utils.io as io
     """
     Segment a single micrograph using SABER.
     """

@@ -1,7 +1,6 @@
 from sam2.build_sam import build_sam2_video_predictor
 from typing import Optional, Tuple, Any, Dict
 from collections import OrderedDict
-import saber.utilities as utils
 import skimage.transform
 from tqdm import tqdm
 import numpy as np

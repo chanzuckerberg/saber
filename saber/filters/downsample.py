@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 
-class FourierRescale:
+class FourierRescale3D:
     def __init__(self, input_voxel_size, output_voxel_size):
         """
         Initialize the FourierRescale operation with voxel sizes.

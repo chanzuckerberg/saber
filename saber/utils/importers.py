@@ -1,7 +1,6 @@
-from saber.process.downsample import FourierRescale
-import copick, argparse, mrcfile, glob, os, click
+from saber.filters.downsample import FourierRescale3D
+import copick, mrcfile, glob, os, click
 from copick_utils.writers import write
-# from saber.entry_points import common
 from tqdm import tqdm
 
 @click.group(name="preprocess")
@@ -41,7 +40,7 @@ def run_from_mrcs(
     # Prepare rescaler if needed
     rescale = None
     if input_voxel_size is not None and output_voxel_size > input_voxel_size:
-        rescale = FourierRescale(input_voxel_size, output_voxel_size)        
+        rescale = FourierRescale3D(input_voxel_size, output_voxel_size)        
 
     # Check if the mrcs file exists
     if not os.path.exists(mrcs_path):

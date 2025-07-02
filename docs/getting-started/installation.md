@@ -9,7 +9,13 @@ Saber runs on Python 3.10 and above on Linux or Windows with CUDA12.
 Saber is available on PyPI and can be installed using pip:
 
 ```bash
-pip install saber
+pip install saber-em
+```
+
+**⚠️ Note** By default, the GUI is not included in the base installation.
+To enable the graphical interface for manual annotation, install with:
+```bash
+pip install saber-em[gui]
 ```
 
 ## Development Installation
@@ -17,7 +23,7 @@ pip install saber
 If you want to contribute to saber or need the latest development version, you can install from source:
 
 ```bash
-git clone https://github.com/czi-ai/segment-microscopy-sam2.git
+git clone https://github.com/czi-ai/saber.git
 cd saber
 pip install -e .
 ```
@@ -29,7 +35,7 @@ After installation, download the required SAM2 model weights:
 ```bash
 saber download sam2-weights 
 ```
-This downloads the model weights to `~/saber/checkpoints/`
+This downloads the model weights to `path/to/site-packages/saber/checkpoints/`
 
 ## Verification
 

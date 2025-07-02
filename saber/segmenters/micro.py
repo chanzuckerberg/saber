@@ -1,11 +1,7 @@
+from saber.utils import io, preprocessing as preprocess
+from saber.filters.downsample import FourierRescale2D
 from saber.segmenters.base import saber2Dsegmenter
-from saber.process.downsample import FourierRescale2D
-from saber.visualization import classifier as viz
-import saber.process.mask_filters as filters
-from saber import pretrained_weights
-import saber.utilities as utils
-from typing import List, Tuple
-from tqdm import tqdm
+import saber.filters.masks as filters
 import numpy as np
 import torch
 
@@ -52,8 +48,8 @@ class cryoMicroSegmenter(saber2Dsegmenter):
             (nx, ny) = self.image0.shape
 
         # Increase Contrast of Image and Normalize the Image to [0,1]        
-        self.image0 = utils.contrast(self.image0, std_cutoff=2)
-        self.image0 = utils.normalize(self.image0, rgb = False)
+        self.image0 = preprocess.contrast(self.image0, std_cutoff=2)
+        self.image0 = preprocess.normalize(self.image0, rgb = False)
 
         # Extend From Grayscale to RGB 
         self.image = np.repeat(self.image0[..., None], 3, axis=2)   

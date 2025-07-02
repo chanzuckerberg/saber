@@ -1,8 +1,7 @@
 from saber.classifier.datasets import singleZarrDataset, multiZarrDataset, augment
 from saber.classifier.trainer import ClassifierTrainer
 from saber.classifier.models import common
-from saber.process import slurm_submit
-import saber.utilities as utils
+from saber.utils import io, slurm_submit
 
 from torch.optim.lr_scheduler import CosineAnnealingLR
 import torch, click, yaml, os, zarr, json
@@ -30,7 +29,7 @@ def run(
     ):
 
     # Set device
-    device = utils.get_available_devices()
+    device = io.get_available_devices()
 
     # Initialize model
     model = common.get_classifier_model(backbone, num_classes, model_size)

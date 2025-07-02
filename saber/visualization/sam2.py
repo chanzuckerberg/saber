@@ -1,5 +1,4 @@
 from matplotlib.widgets import Slider
-import saber.utilities as utils
 import matplotlib.pyplot as plt
 import numpy as np
 import torch

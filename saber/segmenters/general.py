@@ -1,6 +1,6 @@
 from saber.segmenters.base import saber3Dsegmenter
 from saber.visualization import sam2 as viz
-import saber.utilities as utils
+from saber.filters import masks as filters
 from scipy import ndimage
 import numpy as np
 import torch
@@ -124,7 +124,7 @@ class generalSegmenter(saber3Dsegmenter):
             self.frame_scores = np.zeros([vol.shape[0], len(self.masks)])
             vol_masks, video_segments = self.filter_video_segments(video_segments, captured_scores, mask_shape)
         else: # Convert Video Segments to Masks (Without Filtering)
-            vol_masks = utils.convert_segments_to_mask(video_segments, vol_masks, mask_shape, len(self.masks))
+            vol_masks = filters.segments_to_mask(video_segments, vol_masks, mask_shape, len(self.masks))
 
         # Display Segmentations
         if show_segmentations:

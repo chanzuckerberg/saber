@@ -1,8 +1,8 @@
+from saber.utils import io, preprocessing as preprocess
 from saber.segmenters.base import saber3Dsegmenter
-import saber.visualization.cryosam2 as cryoviz
-import saber.process.gaussian_smooth as gauss
+import saber.visualization.results as cryoviz
+import saber.filters.gaussian as gauss
 import saber.visualization.sam2 as viz
-import saber.utilities as utils
 from scipy import ndimage
 import numpy as np
 import torch
@@ -30,9 +30,9 @@ class cryoTomoSegmenter(saber3Dsegmenter):
         """
 
         # Project a Single Slab 
-        self.image0 = utils.project_tomogram(vol, zSlice, slab_thickness)
-        self.image0 = utils.contrast(self.image0, std_cutoff=3)
-        self.image0 = utils.normalize(self.image0)
+        self.image0 = preprocess.project_tomogram(vol, zSlice, slab_thickness)
+        self.image0 = preprocess.contrast(self.image0, std_cutoff=3)
+        self.image0 = preprocess.normalize(self.image0)
         self.image = np.stack([self.image0, self.image0, self.image0], axis=-1)
 
         return self.image
@@ -45,7 +45,7 @@ class cryoTomoSegmenter(saber3Dsegmenter):
 
         # 1D Smoothing along Z-Dimension
         vol = gauss.gaussian_smoothing(vol, 5, dim=0)
-        vol = utils.normalize(vol)
+        vol = preprocess.normalize(vol)
 
         # If No Z-Slice is Provided, Use the Middle of the Tomogram
         if zSlice is None:
@@ -169,7 +169,7 @@ class cryoTomoSegmenter(saber3Dsegmenter):
             self.frame_scores = np.zeros([vol.shape[0], len(self.masks)])
             vol_masks, video_segments = self.filter_video_segments(video_segments, captured_scores, mask_shape)
         else: # Convert Video Segments to Masks (Without Filtering)
-            vol_masks = utils.convert_segments_to_mask(video_segments, vol_masks, mask_shape, len(self.masks))
+            vol_masks = filters.segments_to_mask(video_segments, vol_masks, mask_shape, len(self.masks))
 
         # (Optional) Display Segmentations
         if show_segmentations:
@@ -187,15 +187,15 @@ class cryoTomoSegmenter(saber3Dsegmenter):
         """
         
         # Option 1: Project Multiple Slabs to Provide Z-Context
-        image1 = utils.project_tomogram(vol, zSlice - slab_thickness/3, slab_thickness)
-        image2 = utils.project_tomogram(vol, zSlice, slab_thickness)
-        image3 = utils.project_tomogram(vol, zSlice + slab_thickness/3, slab_thickness)
+        image1 = preprocess.project_tomogram(vol, zSlice - slab_thickness/3, slab_thickness)
+        image2 = preprocess.project_tomogram(vol, zSlice, slab_thickness)
+        image3 = preprocess.project_tomogram(vol, zSlice + slab_thickness/3, slab_thickness)
 
         # # Extend From Grayscale to RGB 
         image = np.stack([image1, image2, image3], axis=-1)
-        image = utils.contrast(image, std_cutoff=3)
+        image = preprocess.contrast(image, std_cutoff=3)
         # Normalize the Image to [0,1]        
-        image = utils.normalize(image, rgb = True)
+        image = preprocess.normalize(image, rgb = True)
 
         # Hold Onto Original Image for Training
         self.image = image
