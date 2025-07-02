@@ -46,8 +46,11 @@ Use SABER from the command line for quick, scriptable workflows:
 ### 🐍 API Tutorials
 Integrate SABER into your own Python scripts and notebooks:
 
-- [API Quickstart](api/quickstart.md): Learn how to use SABER programmatically for segmentation tasks.
-- [Advanced API Usage](api/advanced.md): Explore advanced features and custom workflows using the SABER Python API.
+- **[API Overview](api/overview.md)**: Comprehensive introduction to the SABER Python API
+- **[2D Quickstart](api/quickstart2d.md)**: Learn how to segment 2D micrographs programmatically
+- **[2D Workflow Tutorial](api/micrograph-workflow.md)**: Complete 2D pipeline with preprocessing, training, and inference
+- **[3D Quickstart](api/quickstart3d.md)**: Learn how to segment 3D tomograms programmatically
+- **[3D Workflow Tutorial](api/volume-workflow.md)**: Complete 3D pipeline with video propagation and advanced features
 
 ---
 
@@ -57,5 +60,5 @@ Visit our [GitHub repository](https://github.com/czi-ai/segment-microscopy-sam2)
 
 ---
 
-_Ready to get started? Check out the [Quick Start](getting-started/quickstart.md) or the [API Quickstart](api/quickstart.md)!_
+_Ready to get started? Check out the [Quick Start](getting-started/quickstart.md) or the [API Overview](api/overview.md)!_
 

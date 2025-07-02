@@ -12,16 +12,18 @@ Apply your custom-trained classifier for domain-specific results:
 - **Semantic segmentation**: Identify all learned biological classes simultaneously.
 - **Instance segmentation**: Focus on specific objects of interest with individual instance masks.
 
-<details>
+<details markdown="1">
 <summary><strong>Semantic vs Instance Segmentation</strong></summary>
 
 **Semantic Segmentation** (`--target-class -1`):
+
 - Assigns every pixel to a biological class (background, lysosome, carbon, etc.)
 - Produces a single mask with different colors/values for each class
 - Ideal for understanding tissue composition and spatial relationships
 - Answers: "What types of structures are present and where?"
 
 **Instance Segmentation** (`--target-class N` where N > 0):
+
 - Identifies individual objects of a specific class
 - Each object gets a unique instance ID
 - Enables counting, size analysis, and individual object tracking
@@ -84,7 +86,7 @@ When no `--run-ids` are provided, SABER will segment the entire project and save
 |-----------|-------------|---------|
 | `--config` | Path to Copick config file | `copick_config.json` |
 | `--voxel-size` | Resolution of tomograms to process | `10` |
-| `--tomogram-algorithm` | Reconstruction algorithm to query | `denoised` |
+| `--tomo-alg` | Reconstruction algorithm to query | `denoised` |
 | `--slab-thickness` | Thickness of slab for initial segmentation | `10` |
 | `--segmentation-name` | Name of segmentation session | `organelles` |
 | `--segmentation-session-id` | Session ID for segmentation mask | `1` |

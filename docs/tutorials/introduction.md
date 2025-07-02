@@ -68,7 +68,7 @@ Follow the complete workflow:
 - **[Skip to Inference →](inference.md)** - If you have pre-trained classifiers
 
 ### 🐍 **Python developer?**
-- **[Explore the API →](../api/quickstart.md)** - For programmatic usage
+- **[Explore the API →](../api/overview.md)** - For programmatic usage
 
 ### ⚡ **Want immediate results?**
 - **[Try the Quick Start →](../getting-started/quickstart.md)** - See SABER in action in 30 minutes

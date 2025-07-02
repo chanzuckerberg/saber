@@ -84,7 +84,7 @@ def extract_sam2_candidates(
 def prepare_tomogram_training(
     config: str, 
     voxel_size: int, 
-    tomogram_algorithm: str, 
+    tomo_alg: str, 
     slab_thickness: int,
     output: str,
     sam2_cfg: str,
@@ -95,7 +95,7 @@ def prepare_tomogram_training(
     """    
 
     print(f'\nRunning SAM2 Training Data Preparation')
-    print(f'Algorithm: {tomogram_algorithm}, Voxel-Size: {voxel_size} Å')
+    print(f'Algorithm: {tomo_alg}, Voxel-Size: {voxel_size} Å')
     print(f'Using {num_slabs} slabs with {slab_thickness} A thickness')
 
     # Open Copick Project and Query All Available Runs
@@ -112,7 +112,7 @@ def prepare_tomogram_training(
 
     # Prepare tasks
     tasks = [
-        (run, output, voxel_size, tomogram_algorithm, slab_thickness, num_slabs)
+        (run, output, voxel_size, tomo_alg, slab_thickness, num_slabs)
         for run in root.runs
     ]
 

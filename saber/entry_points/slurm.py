@@ -38,7 +38,7 @@ def tomograms_slurm(
 saber segment tomograms \\
     --config {config} \\
     --slab-thickness {slab_thickness} \\
-    --voxel-size {voxel_size} --tomogram-algorithm {tomogram_algorithm} \\
+    --voxel-size {voxel_size} --tomo-alg {tomogram_algorithm} \\
     --segmentation-name {segmentation_name} --segmentation-session-id {segmentation_session_id} \\
     """
 

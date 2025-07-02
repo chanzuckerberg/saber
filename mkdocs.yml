@@ -27,7 +27,7 @@ nav:
   - 🏡 Home: 
       - Overview: index.md
 
-  - 📦 Getting Started:
+  - 🛠️ Getting Started:
       - Installation: getting-started/installation.md
       - Import Tomograms: getting-started/import-tomos.md
       - Quickstart: getting-started/quickstart.md
@@ -40,8 +40,11 @@ nav:
 
   - 📦 API Reference:
       - Overview: api/overview.md
-      - API Quickstart: api/quickstart.md
-      - API Reference: api/reference.md
+      - Importing Tomograms: api/import-tomos.md
+      - 2D Quickstart: api/quickstart2d.md
+      - 3D Quickstart: api/quickstart3d.md
+      - Training Domain Expert Classifiers: api/training.md
+      - Parallel Inference: api/parallel-inference.md
 
 theme:
   logo: assets/logo.png

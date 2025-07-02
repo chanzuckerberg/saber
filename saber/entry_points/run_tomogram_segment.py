@@ -23,7 +23,7 @@ def slab(
     config: str,
     run_id: str, 
     voxel_size: int, 
-    tomogram_algorithm: str,
+    tomo_alg: str,
     slab_thickness: int,
     model_weights: str,
     model_config: str,
@@ -70,7 +70,7 @@ def tomograms(
     config: str,
     run_ids: str,
     voxel_size: float, 
-    tomogram_algorithm: str,
+    tomo_alg: str,
     segmentation_name: str,
     segmentation_session_id: str,
     slab_thickness: int,
@@ -84,7 +84,7 @@ def tomograms(
     Generate a 3D Segmentation of a tomogram.
     """
 
-    print(f'\nRunning SAM2 Organelle Segmentations for the Following Tomograms:\n Algorithm: {tomogram_algorithm}, Voxel-Size: {voxel_size} Å')
+    print(f'\nRunning SAM2 Organelle Segmentations for the Following Tomograms:\n Algorithm: {tomo_alg}, Voxel-Size: {voxel_size} Å')
 
     # Open Copick Project and Query All Available Runs
     root = copick.from_file(config)
@@ -97,7 +97,7 @@ def tomograms(
         run = root.get_run(run_ids)
         display_segmentation = True   
         segment_tomogram_interactive(
-            run, voxel_size, tomogram_algorithm,
+            run, voxel_size, tomo_alg,
             segmentation_name, segmentation_session_id,
             slab_thickness, num_slabs,
             display_segmentation,
@@ -120,7 +120,7 @@ def tomograms(
 
     # Prepare tasks (same format as your existing code)
     tasks = [
-        (run, voxel_size, tomogram_algorithm, segmentation_name,
+        (run, voxel_size, tomo_alg, segmentation_name,
          segmentation_session_id, slab_thickness, num_slabs, 
          display_segmentation)
         for run in root.runs
@@ -149,7 +149,7 @@ def tomograms(
 def segment_tomogram_interactive(
     run,
     voxel_size: float,
-    tomogram_algorithm: str,
+    tomo_alg: str,
     segmentation_name: str,
     segmentation_session_id: str,
     slab_thickness: int,
@@ -181,7 +181,7 @@ def segment_tomogram_interactive(
     segment_tomogram_core(
         run=run,
         voxel_size=voxel_size,
-        tomogram_algorithm=tomogram_algorithm,
+        tomogram_algorithm=tomo_alg,
         segmentation_name=segmentation_name,
         segmentation_session_id=segmentation_session_id,
         slab_thickness=slab_thickness,
@@ -195,7 +195,7 @@ def segment_tomogram_interactive(
 def segment_tomogram_parallel(
     run,
     voxel_size: float,
-    tomogram_algorithm: str,
+    tomo_alg: str,
     segmentation_name: str,
     segmentation_session_id: str,
     slab_thickness: int,
@@ -215,7 +215,7 @@ def segment_tomogram_parallel(
     segment_tomogram_core(
         run=run,
         voxel_size=voxel_size,
-        tomogram_algorithm=tomogram_algorithm,
+        tomogram_algorithm=tomo_alg,
         segmentation_name=segmentation_name,
         segmentation_session_id=segmentation_session_id,
         slab_thickness=slab_thickness,

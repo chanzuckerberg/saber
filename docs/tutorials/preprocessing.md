@@ -51,7 +51,7 @@ SABER uses copick to access tomographic volumes. You have two options for assess
 ```bash
 saber segment slab \
     --config config.json \
-    --voxel-size 10 --tomogram-algorithm denoised --slab-thickness 10 \
+    --voxel-size 10 --tomo-alg denoised --slab-thickness 10 \
     --run-id Position_10_Vol
 ```
 
@@ -59,7 +59,7 @@ saber segment slab \
 ```bash
 saber segment tomograms \
     --config config.json \
-    --voxel-size 10 --tomogram-algorithm denoised --slab-thickness 10 \
+    --voxel-size 10 --tomo-alg denoised --slab-thickness 10 \
     --run-id Position_10_Vol
 ```
 
@@ -87,7 +87,7 @@ saber classifier prepare-micrograph-training \
 <details>
 <summary><strong>💡 Why SABER's Preprocessing is Different</strong></summary>
 
-Traditional workflows require you to manually draw every mask from scratch. SABER precomputes ALL possible segments using SAM2's foundation model, then lets you focus on the science - simply assigning biological meaning to structures that are already perfectly segmented.
+Traditional workflows require you to manually draw every mask from scratch. SABER precomputes ALL possible segments using SAM2's foundation model, then lets you focus on the science -- simply assigning biological meaning to structures that are already perfectly segmented.
 
 </details>
 
@@ -103,12 +103,13 @@ This will save multiple slab-wise segmentations across different z-depths, store
 
 ![SABER GUI](../assets/multi_slab.png)
 
-<details>
+<details markdown="1">
 <summary><strong>💡 Why multiple slabs?</strong></summary>
 Small objects or sparse structures might not be present in a single slab projection. By generating multiple 2D slab projections at different z-depths, SABER captures as many segmentations and instances of your target objects as possible. This is particularly important for:
-* Small organelles that appear sporadically through the volume
-* Thin structures that might be missed in thick slab averages  
-* Objects with variable density that become more visible at certain depths
+
+- Small organelles that appear sporadically through the volume
+- Thin structures that might be missed in thick slab averages  
+- Objects with variable density that become more visible at certain depths
 </details>
 
 ---

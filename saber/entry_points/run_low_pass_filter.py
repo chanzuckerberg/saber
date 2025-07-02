@@ -37,7 +37,7 @@ def copick_commands(func):
                     help="Path to Copick Config for Processing Data"),
         click.option("--run-ids", type=str, required=False, default=None,  
                     help="Run ID to process (No Input would process the entire dataset.)"),    
-        click.option("--tomogram-algorithm", type=str, required=True, 
+        click.option("--tomo-alg", type=str, required=True, 
                     help="Tomogram Algorithm to use"),
         click.option("--voxel-size", type=float, required=False, default=10, 
                     help="Voxel Size to Query the Data"),   
@@ -90,7 +90,7 @@ def copick(
     lp_decay: float,
     hp_freq: float,
     hp_decay: float,
-    tomogram_algorithm: str,
+    tomo_alg: str,
     voxel_size: float,
     show_filter: bool 
     ):
@@ -112,12 +112,12 @@ def copick(
     else:               run_ids = run_ids.split(",")
 
     # Determine Write Algorithm
-    write_algorithm = tomogram_algorithm
+    write_algorithm = tomo_algo
     if lp_freq > 0: write_algorithm = write_algorithm + f'-lp{lp_freq:0.0f}A'
     if hp_freq > 0: write_algorithm = write_algorithm + f'-hp{hp_freq:0.0f}A'
 
     # Get Tomogram for Initializing 3D Filter
-    vol = sio.get_tomogram(root.get_run(run_ids[0]), voxel_size, tomogram_algorithm)
+    vol = sio.get_tomogram(root.get_run(run_ids[0]), voxel_size, tomo_alg)
 
     # Create 3D Filter
     filter = Filter3D(
@@ -133,7 +133,7 @@ def copick(
     for run_id in tqdm(run_ids):
 
         run = root.get_run(run_id)
-        vol = sio.get_tomogram(run, voxel_size, tomogram_algorithm)
+        vol = sio.get_tomogram(run, voxel_size, tomo_alg)
 
         # Apply Low-pass Filter
         vol = filter.apply(vol)
@@ -153,15 +153,15 @@ def copick_slurm(
     lp_decay: float,
     hp_freq: float,
     hp_decay: float,
-    tomogram_algorithm: str,
+    tomo_alg: str,
     voxel_size: float,
     show_filter: bool):
 
-    check_input(lp_freq, hp_freq, voxel_size)
+    input_check(lp_freq, hp_freq, voxel_size)
     
     command = f"""filter3d copick \\
     --config {config} \\
-    --tomogram-algorithm {tomogram_algorithm} \\
+    --tomo-alg {tomo_alg} \\
     --voxel-size {voxel_size} \\
     """
 
@@ -204,7 +204,7 @@ def mrc(
     show_filter: bool = False
     ):
 
-    check_input(lp_freq, hp_freq, voxel_size)
+    input_check(lp_freq, hp_freq, voxel_size)
 
     # Set Device
     device = utils.get_available_devices()

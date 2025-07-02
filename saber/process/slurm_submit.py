@@ -53,7 +53,7 @@ def copick_commands(func):
                  help="Path to Copick Config for Processing Data"),
     click.option("--voxel-size", type=float, required=False, default=10, 
                  help="Resolution of Desired Tomograms to Process"),
-    click.option("--tomogram-algorithm", type=str, required=False, default='denoised', 
+    click.option("--tomo-alg", type=str, required=False, default='denoised', 
                  help="Reconstrution Algorithm to Query Tomgorams"),    
     click.option("--slab-thickness", type=float, required=False, default=10, 
                  help="Thickness of Slab for Producing Initial Segmentation"),                              

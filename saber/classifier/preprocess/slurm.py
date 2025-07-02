@@ -67,7 +67,7 @@ saber classifier prepare-training \\
     --config {config} \\
     --sam2-cfg {sam2_cfg} \\
     --voxel-size {voxel_size} \\
-    --tomogram-algorithm {tomogram_algorithm} \\
+    --tomo-alg {tomogram_algorithm} \\
     --slab-thickness {slab_thickness} \\
     --output {output}
     """

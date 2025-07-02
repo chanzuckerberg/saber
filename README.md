@@ -19,6 +19,12 @@ Saber is available on PyPI and can be installed using pip:
 pip install saber-em
 ```
 
+⚠️ **Note**: By default, the GUI is not included in the base installation.
+To enable the graphical interface for manual annotation, install with:
+```bash
+pip install saber-em[gui]
+```
+
 ### Basic Usage
 SABER provides a clean, scriptable command-line interface. Run the following command to view all available subcommands:
 ```
