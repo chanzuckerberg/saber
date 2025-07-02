@@ -1,4 +1,4 @@
-from saber.visualization import classifier as viz
+from saber.visualization import classifier, sam2 
 from matplotlib.colors import ListedColormap
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -14,7 +14,7 @@ def save_slab_segmentation(
     # Show 2D Annotations
     plt.imshow(image, cmap='gray'); plt.axis('off')
     if len(masks) > 0: # I Should Update this Function as Well...
-        viz.show_anns(masks) 
+        sam2.show_anns(masks) 
     plt.axis('off')
 
     # Save the Figure
@@ -41,7 +41,7 @@ def export_movie(vol, vol_masks, output_path='segmentation_movie.gif', fps=5):
         return masks
 
     # Get colors
-    colors = viz.get_colors()
+    colors = classifier.get_colors()
     max_mask_value = np.max(vol_masks)
     cmap_colors = [(1, 1, 1, 0)] + colors[:max_mask_value]  # 0 is transparent
     cmap = ListedColormap(cmap_colors)

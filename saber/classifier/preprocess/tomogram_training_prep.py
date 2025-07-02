@@ -1,5 +1,5 @@
 from saber.utils import zarr_writer, parallelization, slurm_submit, io
-from saber.segmenters.loaders import tomogram_workflow
+from saber.segmenters.loaders import base_tomosegmenter
 from saber.filters import masks as mask_filters
 from saber.classifier import validate_odd
 from saber.visualization import galleries

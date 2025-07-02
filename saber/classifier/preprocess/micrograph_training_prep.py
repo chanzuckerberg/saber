@@ -1,6 +1,6 @@
 from saber.entry_points.inference_core import segment_micrograph_core
-from saber.segmenters.loaders import micrograph_workflow
-from saber.utils import parallelization, slurm_submit
+from saber.utils import parallelization, slurm_submit, io
+from saber.segmenters.loaders import base_microsegmenter
 from saber.visualization import galleries
 import click, glob
 
@@ -51,7 +51,7 @@ def prepare_micrograph_training(
 
     # Check to see if we can use target_resolution input
     if target_resolution is not None:
-        image, pixel_size = read_micrograph(files[0])
+        image, pixel_size = io.read_micrograph(files[0])
         if pixel_size is None:
             raise ValueError(f"Pixel size is not provided for {files[0]}. Please provide scale factor input instead.")
 

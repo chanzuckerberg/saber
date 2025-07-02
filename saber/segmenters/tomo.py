@@ -1,6 +1,6 @@
 from saber.utils import io, preprocessing as preprocess
 from saber.segmenters.base import saber3Dsegmenter
-import saber.visualization.cryosam2 as cryoviz
+import saber.visualization.results as cryoviz
 import saber.filters.gaussian as gauss
 import saber.visualization.sam2 as viz
 from scipy import ndimage
