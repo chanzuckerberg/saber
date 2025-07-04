@@ -1,6 +1,5 @@
 from saber.analysis.organelle_statistics import extract_organelle_statistics
 from saber.utils import slurm_submit, io
-from copick_utils.writers import write
 from typing import List, Optional
 import copick, click, zarr
 import multiprocess as mp
@@ -187,7 +186,7 @@ def statistics(
     run_ids: str,
     n_procs: int
 ):
-    """Extract organelle statistics without saving coordinates to Copick."""
+    """Measure the size distribution of the measured organelles."""
     process_organelles(
         config=config,
         organelle_name=organelle_name,

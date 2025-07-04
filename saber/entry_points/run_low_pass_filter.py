@@ -1,7 +1,7 @@
 from saber.filters.tomograms import Filter3D
-from copick_utils.writers import write
 from saber.utils import io, slurm_submit
 import click, mrcfile, os, glob, json
+from copick_utils.io import writers
 from tqdm import tqdm
 
 @click.group(name="filter3d")
@@ -134,7 +134,7 @@ def copick(
         vol = filter.apply(vol)
 
         # Write Tomogram
-        write.tomogram(run, vol.cpu().numpy(), voxel_size, write_algorithm)
+        writers.tomogram(run, vol.cpu().numpy(), voxel_size, write_algorithm)
 
     print('Applying Filters to All Tomograms Complete...')
 

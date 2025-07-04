@@ -81,7 +81,7 @@ class cryoTomoSegmenter(saber3Dsegmenter):
         vol = self.segment_slab(vol, slab_thickness, zSlice, display_image=False)[0]
 
         # Optional: Save Save Segmentation to PNG or Plot Segmentation with Matplotlib
-        if save_mask: # TODO: Figure out a better name / method for this.
+        if save_mask and save_run is not None: # TODO: Figure out a better name / method for this.
             cryoviz.save_slab_segmentation(save_run, self.image, self.masks)        
             
         # Check to Make Sure Masks are Found

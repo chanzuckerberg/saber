@@ -1,6 +1,6 @@
 from saber.filters.downsample import FourierRescale3D
 import copick, mrcfile, glob, os, click
-from copick_utils.writers import write
+from copick_utils.io import writers
 from tqdm import tqdm
 
 @click.group(name="preprocess")
@@ -72,7 +72,7 @@ def run_from_mrcs(
             voxel_size_to_write = input_voxel_size
 
         # Write the tomogram
-        write.tomogram(run, vol, voxel_size_to_write, target_tomo_type)
+        writers.tomogram(run, vol, voxel_size_to_write, target_tomo_type)
     print(f"Processed {len(mrc_files)} files from {mrcs_path}")
 
 @cli.command(context_settings={"show_default": True})

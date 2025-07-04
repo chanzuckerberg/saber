@@ -271,7 +271,7 @@ class saber3Dsegmenter(saber2Dsegmenter):
             self.frame_scores[frame_idx, ] = score_values
 
         # Determine the Range Along Z-Axis for Each Organelle
-        self.mask_boundaries = estimate_thickness.fit_organelle_boundaries(self.frame_scores)
+        self.mask_boundaries = estimate_thickness.fit_organelle_boundaries(self.frame_scores, plot=self.confidence_debug)
 
         # Now, filter the video_segments.
         # For each frame, if the score for the first mask is above the threshold, keep the segmentation;

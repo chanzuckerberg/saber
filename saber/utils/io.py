@@ -1,4 +1,5 @@
 import mrcfile, skimage, torch
+from skimage import io as skio
 import numpy as np
 
 # Try to import hyperspy for Material Science dataset
@@ -230,3 +231,10 @@ def determine_device(deviceID: int = 0):
         print("Using CPU for computation (no GPU available)")
 
     return device
+
+
+def mask3D_to_tiff(mask3D, output_path: str):
+    """
+    Convert a 3D mask to a TIFF file.
+    """
+    skio.imsave(output_path, mask3D)

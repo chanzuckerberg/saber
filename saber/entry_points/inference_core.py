@@ -3,7 +3,7 @@ from saber.filters.downsample import FourierRescale2D
 from saber.segmenters.tomo import cryoTomoSegmenter
 from saber.filters import masks as mask_filters
 from saber.utils import zarr_writer, io
-from copick_utils.writers import write
+from copick_utils.io import writers
 import numpy as np
 import torch, os
 
@@ -103,10 +103,10 @@ def segment_tomogram_core(
         segment_mask = segment_mask.astype(np.uint8)
 
         # Write Segmentation to Copick Project
-        write.segmentation(
+        writers.segmentation(
             run, 
             segment_mask,
-            'SABER',
+            'saber',
             name=segmentation_name,
             session_id=segmentation_session_id,
             voxel_size=float(voxel_size)
