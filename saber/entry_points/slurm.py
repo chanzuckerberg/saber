@@ -79,3 +79,15 @@ def micrographs_slurm(
     """
         
     pass
+
+@cli.command(context_settings={"show_default": True})
+def refine_membranes_slurm(
+    config: str,
+    org_info: str,
+    mem_info: str,
+    ):
+    pass
+
+
+if __name__ == '__main__':
+    cli()

@@ -37,6 +37,7 @@ nav:
       - Pre-processing: tutorials/preprocessing.md
       - Training a Classifier: tutorials/training.md
       - Inference (2D & 3D): tutorials/inference.md
+      - Membrane Refinement: tutorials/membrane-refinement.md
 
   - 📦 API Reference:
       - Overview: api/overview.md

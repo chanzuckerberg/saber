@@ -2,8 +2,8 @@ from saber.segmenters.micro import cryoMicroSegmenter
 from saber.filters.downsample import FourierRescale2D
 from saber.segmenters.tomo import cryoTomoSegmenter
 from saber.filters import masks as mask_filters
+from copick_utils.io import writers, readers
 from saber.utils import zarr_writer, io
-from copick_utils.writers import write
 import numpy as np
 import torch, os
 
@@ -33,7 +33,7 @@ def segment_tomogram_core(
     """
     
     # Get Tomogram, Return None if No Tomogram is Found
-    vol = io.get_tomogram(run, voxel_size, algorithm=tomogram_algorithm)
+    vol = readers.tomogram(run, voxel_size, algorithm=tomogram_algorithm)
     if vol is None:
         print(f'No Tomogram Found for {run.name}')
         return None
@@ -103,10 +103,10 @@ def segment_tomogram_core(
         segment_mask = segment_mask.astype(np.uint8)
 
         # Write Segmentation to Copick Project
-        write.segmentation(
+        writers.segmentation(
             run, 
             segment_mask,
-            'SABER',
+            'saber',
             name=segmentation_name,
             session_id=segmentation_session_id,
             voxel_size=float(voxel_size)

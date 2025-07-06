@@ -59,13 +59,14 @@ Ideal for cryo-ET, FIB-SEM, or any 3D volume data:
 ### **Flexible Input Formats**
 ```python
 # Support for various microscopy data formats
+from copick_utils.io import readers
 from saber.utils import io
 
 # Load micrographs
 image, pixel_size = io.read_micrograph("path/to/image.mrc")
 
 # Load tomograms from Copick projects
-vol = io.get_tomogram(run, voxel_size=10, algorithm="denoised")
+vol = readers.tomogram(run, voxel_size=10, algorithm="denoised")
 ```
 
 ### **SAM2 Integration**

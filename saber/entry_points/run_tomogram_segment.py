@@ -5,7 +5,8 @@ import saber.utils.slurm_submit as slurm_submit
 import copick, click, torch, os, matplotlib
 from saber.classifier.models import common
 from saber.visualization import galleries 
-from saber.utils import io, parallelization
+from saber.utils import parallelization
+from copick_utils.io import readers
 
 @click.group()
 @click.pass_context
@@ -44,7 +45,7 @@ def slab(
 
     # Get Tomogram
     print(f'Getting {tomo_alg} Tomogram with {voxel_size} A voxel size for the associated runID: {run.name}')
-    vol = io.get_tomogram(run, voxel_size, tomo_alg)
+    vol = readers.tomogram(run, voxel_size, tomo_alg)
 
     # Create an instance of cryoTomoSegmenter
     segmenter = cryoTomoSegmenter(

@@ -1,5 +1,5 @@
 from saber.filters.tomograms import Filter3D
-from copick_utils.writers import write
+from copick_utils.io import writers, readers
 from saber.utils import io, slurm_submit
 import click, mrcfile, os, glob, json
 from tqdm import tqdm
@@ -112,7 +112,7 @@ def copick(
     if hp_freq > 0: write_algorithm = write_algorithm + f'-hp{hp_freq:0.0f}A'
 
     # Get Tomogram for Initializing 3D Filter
-    vol = io.get_tomogram(root.get_run(run_ids[0]), voxel_size, tomo_alg)
+    vol = readers.tomogram(root.get_run(run_ids[0]), voxel_size, tomo_alg)
 
     # Create 3D Filter
     filter = Filter3D(
@@ -128,13 +128,13 @@ def copick(
     for run_id in tqdm(run_ids):
 
         run = root.get_run(run_id)
-        vol = io.get_tomogram(run, voxel_size, tomo_alg)
+        vol = readers.tomogram(run, voxel_size, tomo_alg)
 
         # Apply Low-pass Filter
         vol = filter.apply(vol)
 
         # Write Tomogram
-        write.tomogram(run, vol.cpu().numpy(), voxel_size, write_algorithm)
+        writers.tomogram(run, vol.cpu().numpy(), voxel_size, write_algorithm)
 
     print('Applying Filters to All Tomograms Complete...')
 

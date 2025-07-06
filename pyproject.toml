@@ -20,6 +20,7 @@ dependencies = [
     "mrcfile",
     "starfile",
     "matplotlib",
+    "kornia",
     "opencv-python",
     "multiprocess",
     "torchmetrics",
@@ -37,6 +38,10 @@ gui = [
 ]
 materials = [
     "hyperspy"
+]
+membranes = [
+    "membrain-seg",
+    "kornia",
 ]
 
 [tool.hatch.metadata]

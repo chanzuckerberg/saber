@@ -42,6 +42,7 @@ Use SABER from the command line for quick, scriptable workflows:
 - [Pre-processing Your Data](tutorials/preprocessing.md): Prepare your EM/cryo-ET datasets for segmentation and annotation. Use the interactive GUI to annotate segmentations and 
 - [Training a Classifier](tutorials/training.md): With the annotations, train a domain expert classifier.
 - [Inference in 2D & 3D](tutorials/inference.md): Apply your trained models to generate high-quality segmentations in both 2D and 3D.
+- [Refine Membranes](tutorials/membrane-refinement.md):
 
 ### 🐍 API Tutorials
 Integrate SABER into your own Python scripts and notebooks:
