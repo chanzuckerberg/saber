@@ -54,6 +54,7 @@ def refine_membranes(
 
     # Open Copick Project and Query All Available Runs
     root = copick.from_file(config)
+    run_ids = [run.name for run in root.runs]
     
     # Create pool with model pre-loading
     pool = parallelization.GPUPool(
@@ -80,7 +81,9 @@ def refine_membranes(
     # Report Results to User
     print('Completed the Membrane Refinement!')        
 
-def run_refinement(run, org_info, mem_info, voxel_size, save_session_id, gpu_id, refiner):
+def run_refinement(run, org_info, mem_info, voxel_size, save_session_id, gpu_id, models):
+
+    refiner = models
 
     # Get the Segmentations
     org_seg = readers.segmentation(run, voxel_size, org_info[0], session_id=org_info[2], user_id=org_info[1])

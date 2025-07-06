@@ -374,7 +374,7 @@ class OrganelleMembraneFilter:
                 morph_ball_size = ball_size
 
             # Enhance membrane by dilating slightly
-            dilate_kernel = self._get_ball_kernel(dilate_size, organelle_masks.device)
+            dilate_kernel = self._get_ball_kernel(dilate_size)
             dilated_membrane = self._torch_dilation_3d(mem_roi.float(), dilate_kernel)
             
             # Constrain to organelle vicinity
@@ -408,7 +408,7 @@ class OrganelleMembraneFilter:
             comb_mask_roi[comb_mask_roi != 0] = torch.maximum(comb_mask_roi, torch.ones_like(comb_mask_roi))[comb_mask_roi != 0]
 
             # Apply morphological opening with adaptive ball size
-            ball_kernel = self._get_ball_kernel(morph_ball_size, org_roi.device)
+            ball_kernel = self._get_ball_kernel(morph_ball_size)
             comb_mask_roi_out = self._morphological_opening(comb_mask_roi.float(), ball_kernel)
 
             if comb_mask_roi_out.sum() == 0:
@@ -445,9 +445,16 @@ class OrganelleMembraneFilter:
     def run(
         self,
         organelle_seg: TensorLike,
-        membrane_seg: TensorLike
+        membrane_seg: TensorLike, 
+        batch_processing: bool = False
     ) -> Dict[str, torch.Tensor]:
         """Main filtering pipeline with GPU-optimized processing loop."""
+        
+        # Suppress the Logger 
+        if batch_processing:
+            # logger = logging.getLogger()
+            logger.disabled = True
+
         logger.info("Starting organelle-membrane filtering pipeline")
         
         # Check if input is numpy array and convert to torch tensor + device
