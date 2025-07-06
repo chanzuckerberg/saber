@@ -1,6 +1,6 @@
 # Membrane Refinement
 
-Membrane refinement is a crucial post-processing step that improves the quality and consistency of organelle and membrane segmentations. This tutorial covers how to use SABER's GPU-optimized membrane refinement pipeline to clean up and enhance your segmentation results.
+Membrane refinement is a post-processing step that improves the quality and consistency of organelle and membrane segmentations. This tutorial covers how to use SABER's GPU-optimized membrane refinement pipeline to clean up and enhance your segmentation results.
 
 ---
 
@@ -17,7 +17,7 @@ Raw segmentation outputs often contain artifacts and inconsistencies that can af
 
 ### The Combined Mask Approach
 
-SABER's membrane refinement uses an innovative "combined mask" strategy:
+SABER's membrane refinement uses a "combined mask" strategy:
 
 <details markdown="1">
 <summary><strong>How the combined mask approach works</strong></summary>
@@ -38,6 +38,10 @@ This approach ensures that:
 
 ---
 
+## 📋 Generating Initial Segmentations
+
+For quick results, we recommend using **[MemBrain-seg](https://github.com/teamtomo/membrain-seg)** to generate initial membrane segmentations. MemBrain-seg is specifically designed for membrane segmentation in cryo-electron tomography and provides high-quality starting points for refinement.
+
 ## 🚀 Running Membrane Refinement
 
 ### Basic Command
@@ -50,8 +54,60 @@ saber analysis refine-membranes \
     --org-info "organelles,saber,1" \
     --mem-info "membranes,membrane-seg,1" \
     --voxel-size 10 \
-    --save-session-id "refined-1"
+    --save-session-id "1"
 ```
+
+<details markdown="1">
+<summary><strong>Expected Output</strong></summary>
+
+The refinement process will create new segmentations in your copick project with the same object names but under the specified session ID. 
+
+For example, if you run the command above:
+
+- **Input**: `organelles` segmentation in session `1` with user `saber`
+- **Input**: `membranes` segmentation in session `1` with user `membrane-seg`
+- **Output**: `organelles` segmentation in session `refined-1` with user `saber-refined`
+- **Output**: `membranes` segmentation in session `refined-1` with user `membrane-seg-refined`
+
+The refined segmentations will have the same voxel size and coordinate system as your input data, but with improved quality through morphological filtering and topological consistency.
+
+</details>
+
+### Input Query Specification
+
+SABER provides two flexible methods for specifying your input segmentations through the `--org-info` and `--mem-info` parameters:
+
+#### Option 1: Simple Name Query (Uses Defaults)
+
+When you only specify the segmentation name, SABER will use default values for user ID and session ID:
+
+```bash
+# Simple format - uses default user and session
+--org-info "organelles"
+--mem-info "membranes"
+```
+
+The default behavior will use **the first available userID and sessionID** found in the project. This is ideal for copick projects with single segmentations for the given segmentation names.
+
+#### Option 2: Full Specification (Explicit Control)
+
+For precise control over which segmentations to use, provide the complete query string:
+
+```bash
+# Full format: "name,userID,sessionID"
+--org-info "mitochondria,saber,3"
+--mem-info "membranes,membrain-seg,2"
+```
+
+<details markdown="1">
+<summary><strong>Advantages of full specification</strong></summary>
+
+- **Reproducibility**: Ensures you always use the same segmentations
+- **Multi-user projects**: Specify exactly which user's segmentations to use
+- **Version control**: Target specific session versions of your segmentations
+- **Mixed sources**: Use organelle and membrane segmentations from different users/sessions
+
+</details>
 
 ### Parameter Explanation
 
@@ -63,21 +119,9 @@ saber analysis refine-membranes \
 | `--voxel-size` | Voxel size in Angstroms | `10` | `5.2` |
 | `--save-session-id` | Session ID for refined results | `1` | `refined-v2` |
 
-### Information Format
-
-The `--org-info` and `--mem-info` parameters use a specific format:
-
-```bash
-# Format: "name,userID,sessionID"
---org-info "mitochondria,user1,session2"
-
-# If no userID/sessionID specified, uses defaults
---org-info "organelles"  # Uses default user and session
-```
-
 ---
 
-## 🔧 Customizing Refinement Parameters
+## 🔧 API Call
 
 ### Using the Analysis Module Directly
 
@@ -133,7 +177,7 @@ refined_membranes = results['membranes']
 
 ---
 
-## 📊 Understanding the Results
+<!-- ## 📊 Understanding the Results
 
 ### Output Structure
 
@@ -172,9 +216,9 @@ The refinement process produces:
 
 </details>
 
----
+--- -->
 
-## 🎯 Best Practices
+<!-- ## 🎯 Best Practices
 
 ### When to Use Membrane Refinement
 
@@ -197,7 +241,7 @@ The refinement process produces:
 3. **Iterate gradually**: Make small parameter changes and assess results
 4. **Consider your goals**: Balance between cleaning and detail preservation
 
----
+--- -->
 
 ## 🚀 What's Next?
 
@@ -209,5 +253,11 @@ After membrane refinement, you can:
 - **Iterate and improve**: Adjust parameters based on results and re-run if needed
 
 **Integration with other SABER tools**: Refined segmentations work seamlessly with SABER's analysis and visualization modules.
+
+---
+
+## 🔗 Related Resources
+
+- **[MemBrain-seg Documentation](https://teamtomo.org/membrain-seg/)**: Learn how to generate high-quality membrane segmentations
 
 
