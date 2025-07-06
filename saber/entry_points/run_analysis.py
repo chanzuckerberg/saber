@@ -1,5 +1,6 @@
 from saber.analysis.organelle_statistics import extract_organelle_statistics
-from saber.utils import slurm_submit, io
+from saber.utils import slurm_submit
+from copick_utils.io import readers
 from typing import List, Optional
 import copick, click, zarr
 import multiprocess as mp
@@ -101,7 +102,7 @@ def process_organelles(
                 run = root.get_run(run_id)
 
                 # Get Segmentation Array
-                seg = io.get_segmentation_array(
+                seg = readers.segmentation(
                     run, 
                     voxel_size,
                     organelle_name,

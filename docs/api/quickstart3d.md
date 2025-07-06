@@ -18,6 +18,7 @@ Before starting, ensure you have SABER installed and import the necessary module
 from saber.segmenters.tomo import cryoTomoSegmenter
 from saber.classifier.models import common
 from saber.visualization import cryosam2 as cryoviz
+from copick_utils.io import readers
 from saber import io
 import numpy as np
 import torch
@@ -26,10 +27,10 @@ import copick
 # Option 1: Load from Copick project
 root = copick.from_file("path/to/copick_config.json")
 run = root.get_run("your_run_id")
-vol = io.get_tomogram(run, voxel_size=10, algorithm="denoised")
+vol = readers.tomogram(run, voxel_size=10, algorithm="denoised")
 
 # Option 2: Load directly from file
-vol = io.read_tomogram("path/to/tomogram.mrc")
+# Use MRC-file, or any other data reader.
 print(f"Volume shape: {vol.shape}")
 ```
 

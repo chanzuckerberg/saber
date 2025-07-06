@@ -3,6 +3,7 @@ from saber.segmenters.loaders import base_tomosegmenter
 from saber.filters import masks as mask_filters
 from saber.classifier import validate_odd
 from saber.visualization import galleries
+from copick_utils.io import readers
 from saber.utils import io
 import copick, click
 import numpy as np
@@ -43,7 +44,7 @@ def extract_sam2_candidates(
     segmenter = models['segmenter']
 
     # Get Tomogram
-    vol = io.get_tomogram(run, voxel_size, algorithm = tomogram_algorithm)
+    vol = readers.tomogram(run, voxel_size, tomogram_algorithm)
     if vol is None:
         print('No Tomogram Found for Run: ', run.name)
         return
