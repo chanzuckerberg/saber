@@ -29,7 +29,7 @@ nav:
 
   - 🛠️ Getting Started:
       - Installation: getting-started/installation.md
-      - Import Tomograms: getting-started/import-tomos.md
+      - Importing Volumes: getting-started/import-tomos.md
       - Quickstart: getting-started/quickstart.md
 
   - 📓 User Guide:
@@ -41,7 +41,7 @@ nav:
 
   - 📦 API Reference:
       - Overview: api/overview.md
-      - Importing Tomograms: api/import-tomos.md
+      - Importing Volumes: api/import-tomos.md
       - 2D Quickstart: api/quickstart2d.md
       - 3D Quickstart: api/quickstart3d.md
       - Training Domain Expert Classifiers: api/training.md

@@ -2,6 +2,10 @@
 
 Membrane refinement is a post-processing step that improves the quality and consistency of organelle and membrane segmentations. This tutorial covers how to use SABER's GPU-optimized membrane refinement pipeline to clean up and enhance your segmentation results.
 
+![Membrane Refinement Example](../assets/memrefine_demo.png)
+*Membrane refinement eliminates false positive membrane detections and creates topologically consistent organelle-membrane pairs. This workflow takes raw binary segmentation with spurious membrane fragments and produces masks with clean boundaries and unique instance labels matching each organelle.*
+
+
 ---
 
 ## 🔬 Understanding Membrane Refinement
