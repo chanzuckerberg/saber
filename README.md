@@ -1,4 +1,10 @@
 # SABER⚔️
+
+[![License](https://img.shields.io/pypi/l/saber-em.svg?color=green)](https://github.com/czi-ai/saber/blob/main/LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/saber-em.svg?color=green)](https://pypi.org/project/saber-em/)
+[![Python Version](https://img.shields.io/pypi/pyversions/saber-em.svg?color=green)](https://www.python.org/)
+
+
 **S**egment **A**nything **B**ased **E**lectron tomography **R**ecognition is a robust platform designed for autonomous segmentation of organelles from cryo-electron tomography (cryo-ET) or electron microscopy (EM) datasets. 
 
 ## Introduction

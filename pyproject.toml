@@ -9,7 +9,7 @@ packages = ["saber"]
 name = "saber-em"
 description = "Segment Anything Based Electron Recognition"
 requires-python = ">=3.10"
-version = "0.1.0"
+dynamic = ["version"]
 dependencies = [
     "sam2",
     "tqdm",
@@ -40,8 +40,7 @@ materials = [
     "hyperspy"
 ]
 membranes = [
-    "membrain-seg",
-    "kornia",
+    "membrain-seg"
 ]
 
 [tool.hatch.metadata]
@@ -62,10 +61,11 @@ saber = "saber.main:routines"
 saber-slurm = "saber.main:slurm_routines"
 
 [tool.hatch.version]
-source = "vcs"
+path = "saber/__init__.py"
 
 [project.urls]
 Homepage = "https://github.com/czi-ai/saber"
+Documentation = "https://czi-ai.github.io/saber"
 Issues = "https://github.com/czi-ai/saber/issues"
 
 [tool.semantic_release]
