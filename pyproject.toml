@@ -67,7 +67,3 @@ path = "saber/__init__.py"
 Homepage = "https://github.com/czi-ai/saber"
 Documentation = "https://czi-ai.github.io/saber"
 Issues = "https://github.com/czi-ai/saber/issues"
-
-[tool.semantic_release]
-version_variables = ["saber/__init__.py:__version__"]
-build_command = "pip install build && python -m build"
