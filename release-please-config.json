@@ -22,7 +22,7 @@
       "bump-patch-for-minor-pre-major": false,
       "draft": false,
       "prerelease": false,
-      "pull-request-footer": "Merging this PR will release copick on PyPI."
+      "pull-request-footer": "Merging this PR will release saber on PyPI."
     }
   }
 }
