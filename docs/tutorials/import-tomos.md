@@ -148,7 +148,3 @@ If your data doesn't meet the standard requirements (flat directory structure + 
 - Different file formats (TIFF, HDF5, etc.)
 - Custom import scripts
 - Batch processing workflows
-
----
-
-*For more detailed workflows, see our [User Guide](../tutorials/introduction.md) and [API Documentation](../api/overview.md).*

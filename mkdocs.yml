@@ -34,6 +34,7 @@ nav:
 
   - 📓 User Guide:
       - Overview: tutorials/introduction.md
+      - Importing Volumes: tutorials/import-tomos.md
       - Pre-processing: tutorials/preprocessing.md
       - Training a Classifier: tutorials/training.md
       - Inference (2D & 3D): tutorials/inference.md
