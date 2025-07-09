@@ -30,7 +30,7 @@ jobs:
           manifest-file: ".release-please-manifest.json"
           config-file: "release-please-config.json"
           target-branch: "main"
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
     outputs:
       paths_released: ${{ steps.release.outputs.paths_released }}
       release_created: ${{ steps.release.outputs.release_created }}
