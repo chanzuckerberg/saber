@@ -9,21 +9,37 @@ try:
 except:
     hyperspy_available = False
 
-def read_micrograph(input: str):
+def read_micrograph(fname: str):
+    """
+    Read a micrograph from a file.
+    Supports: MRC (.mrc), TIFF (.tif/.tiff), STEM (.dm4/.ser)
+    Returns:
+        data: np.ndarray
+        pixel_size: float or None [Angstroms]
+    """
 
-    if input.endswith('.mrc'):
-        with mrcfile.open(input, permissive=True) as mrc:
+    if fname.endswith('.mrc'):                 # MRC file
+        with mrcfile.open(fname, permissive=True) as mrc:
             data = mrc.data
             pixel_size = mrc.voxel_size.x
         return data, pixel_size
-    elif input.endswith('.tif') or input.endswith('.tiff'):
-        return skimage.io.imread(input), None
-    elif hyperspy_available and (input.endswith('.dm4') or input.endswith('.ser')):
-        return read_stem_micrograph(input)
-    else:
-        raise ValueError(f"Unsupported file type: {input}")
+    elif fname.endswith(('.tif', '.tiff')):     # TIFF file
+        return skimage.io.imread(fname), None
+    elif fname.endswith(('.dm4', '.ser')):     # STEM file
+        if not hyperspy_available:
+            raise ValueError("Hyperspy is not installed. Please install it to read .dm4 or .ser files. (pip install hyperspy)")
+        return read_stem_micrograph(fname)
+
+    # Unsupported file
+    raise ValueError(f"Unsupported file type: {fname}")
 
 def read_stem_micrograph(input: str):
+    """
+    Read a STEM micrograph from a file.
+    Returns:
+        data: np.ndarray
+        pixel_size: float or None [Angstroms]
+    """
 
     signal = hs.load(input)
     data = signal.data

@@ -70,8 +70,8 @@ For example, if you run the command above:
 
 - **Input**: `organelles` segmentation in session `1` with user `saber`
 - **Input**: `membranes` segmentation in session `1` with user `membrane-seg`
-- **Output**: `organelles` segmentation in session `refined-1` with user `saber-refined`
-- **Output**: `membranes` segmentation in session `refined-1` with user `membrane-seg-refined`
+- **Output**: `organelles` segmentation in session `1` with user `saber-refined`
+- **Output**: `membranes` segmentation in session `1` with user `membrane-seg-refined`
 
 The refined segmentations will have the same voxel size and coordinate system as your input data, but with improved quality through morphological filtering and topological consistency.
 
