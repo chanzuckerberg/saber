@@ -10,6 +10,18 @@ name = "saber-em"
 description = "Segment Anything Based Electron Recognition"
 requires-python = ">=3.10"
 dynamic = ["version"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+    "Topic :: Scientific/Engineering :: Deep Learning",
+]
 dependencies = [
     "sam2",
     "tqdm",
@@ -65,5 +77,5 @@ path = "saber/__init__.py"
 
 [project.urls]
 Homepage = "https://github.com/czi-ai/saber"
-Documentation = "https://czi-ai.github.io/saber"
+Documentation = "http://chanzuckerberg.github.io/saber/"
 Issues = "https://github.com/czi-ai/saber/issues"

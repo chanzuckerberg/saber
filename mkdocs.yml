@@ -1,6 +1,6 @@
 site_name: SABER - Segment Anything Based Electron Recognition 
-repo_url: "https://github.com/czi-ai/saber"
-repo_name: "czi-ai/saber"
+repo_url: "https://github.com/chanzuckerberg/saber"
+repo_name: "chanzuckerberg/saber"
 copyright: "2025, Jonathan Schwartz"
 theme:
   name: material
@@ -100,7 +100,7 @@ plugins:
       type: datetime
       enable_creation_date: true
   - git-committers:
-      repository: chanzuckerberg/octopi
+      repository: chanzuckerberg/saber
       branch: main
   - git-authors
   - minify:
@@ -109,4 +109,4 @@ plugins:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/czi-ai/segment-microscopy-sam2
+      link: https://github.com/chanzuckerberg/saber

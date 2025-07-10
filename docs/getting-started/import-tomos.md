@@ -2,13 +2,6 @@
 
 SABER leverages [copick](https://github.com/copick/copick) to provide a flexible and unified interface for accessing tomographic data, whether it's stored locally or remotely on HPC servers or on our [CryoET Data Portal](https://cryoetdataportal.czscience.com). This guide explains how to work with both data sources.
 
-## Getting Started
-
-If you need help creating configuration files, detailed tutorials are available:
-
-- [Copick Quickstart](https://copick.github.io/copick/quickstart/) - Basic configuration and setup 
-- [Data Portal Tutorial](https://copick.github.io/copick/examples/tutorials/data_portal/) - Working with CryoET Data Portal
-
 ## Starting a New Copick Project
 
 The copick configuration file points to a directory that stores all tomograms, coordinates, and segmentations in an overlay root. Generate a config file using the command line:
@@ -27,19 +20,8 @@ copick config filesystem \
     --objects membrane,False
 ```
 
-This structure supports both particle picking for sub-tomogram averaging and broader 3D segmentation tasks. Our deep learning platform [Octopi 🐙](https://github.com/chanzuckerberg/octopi) is designed to train models from copick projects for:
-
-- Object 3D localization and particle picking
-- Volumetric segmentation of cellular structures
-- General 3D dataset annotation and analysis
-
-**Directory Structure:**
-
-- **Overlay root:** Writable directory where new results can be added, modified, or deleted
-- **Static root:** Read-only directory that never gets manipulated (frozen data)
-
 <details markdown="1">
-<summary><strong>💡 Example Copick Config File (config.json)</strong></summary>
+<summary><strong>👀 Example Copick Config File (`config.json`)</strong></summary>
 
 The resulting `config.json` file would look like this:
 
@@ -81,6 +63,10 @@ The resulting `config.json` file would look like this:
     }    
 }
 ```
+**Directory Structure:**
+
+- **Overlay root:** Writable directory where new results can be added, modified, or deleted
+- **Static root:** Read-only directory that never gets manipulated (frozen data)
 
 **Path Types:**
 
@@ -90,6 +76,23 @@ The resulting `config.json` file would look like this:
 The `copick config filesystem` command assumes local paths, but you can edit the config file to specify remote locations.
 
 </details>
+
+<details markdown="1">
+<summary><strong> 💡 Understanding the `--objects` flag</strong></summary>
+
+The `--objects` flag accepts 2-4 elements separated by commas:
+
+1. **Particle name** (required): e.g., `ribosome`
+2. **Is pickable** (required): `True` for particles, `False` for continuous segmentations
+3. **Particle radius** (optional): in Ångströms, e.g., `130`
+4. **PDB ID** (optional): reference structure, e.g., `6QZP`
+</details>
+
+This structure supports both particle picking for sub-tomogram averaging and broader 3D segmentation tasks. Our deep learning platform [Octopi 🐙](https://github.com/chanzuckerberg/octopi) is designed to train models from copick projects for:
+
+- Object 3D localization and particle picking
+- Volumetric segmentation of cellular structures
+- General 3D dataset annotation and analysis
 
 ## Starting a Copick Project Linked to the Data Portal
 
@@ -142,7 +145,7 @@ copick add tomogram \
 
 ## Advanced Import Options
 
-If your data doesn't meet the standard requirements (flat directory structure + MRC format), please refer to our [Advanced Import Workflows](../api/import-tomos.md) documentation, which covers:
+If your data doesn't meet the standard requirements (flat directory structure + MRC format), please refer to our [API Import Documentation](../api/import-tomos.md), which covers:
 
 - Nested directory structures
 - Different file formats (TIFF, HDF5, etc.)
