@@ -1,6 +1,6 @@
 # SABER⚔️
 
-[![License](https://img.shields.io/pypi/l/saber-em.svg?color=green)](https://github.com/czi-ai/saber/blob/main/LICENSE)
+[![License](https://img.shields.io/pypi/l/saber-em.svg?color=green)](https://github.com/chanzuckerberg/saber/blob/main/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/saber-em.svg?color=green)](https://pypi.org/project/saber-em/)
 [![Python Version](https://img.shields.io/pypi/pyversions/saber-em.svg?color=green)](https://www.python.org/)
 
