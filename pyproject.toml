@@ -65,5 +65,5 @@ path = "saber/__init__.py"
 
 [project.urls]
 Homepage = "https://github.com/czi-ai/saber"
-Documentation = "https://czi-ai.github.io/saber"
+Documentation = "http://chanzuckerberg.github.io/saber/"
 Issues = "https://github.com/czi-ai/saber/issues"
