@@ -23,6 +23,13 @@ jobs:
       issues: write
       pull-requests: write
     steps:
+      - name: Generate token
+        id: generate_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.GH_ACTIONS_HELPER_APP_ID }}
+          private-key: ${{ secrets.GH_ACTIONS_HELPER_PK }}
+
       - name: Release Please
         uses: googleapis/release-please-action@v4
         id: release
@@ -30,7 +37,7 @@ jobs:
           manifest-file: ".release-please-manifest.json"
           config-file: "release-please-config.json"
           target-branch: "main"
-          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          token: ${{ steps.generate_token.outputs.token }}
     outputs:
       paths_released: ${{ steps.release.outputs.paths_released }}
       release_created: ${{ steps.release.outputs.release_created }}
