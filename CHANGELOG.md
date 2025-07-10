@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.6.0](https://github.com/chanzuckerberg/saber/compare/saber-v0.5.0...saber-v0.6.0) (2025-07-10)
+
+
+### ✨ Features
+
+* add release-please configuration ([16da577](https://github.com/chanzuckerberg/saber/commit/16da5771c2ba345ba0b2ebd0ec6d7e5e63280da4))
+* add release-please configuration ([6e8d558](https://github.com/chanzuckerberg/saber/commit/6e8d55899533ed950433fee339c951a9a31d59b9))
+* prepare for v0.5.0 release ([6cafc31](https://github.com/chanzuckerberg/saber/commit/6cafc31c4f3a5f71b490779aaed795a0f394ef8e))
+
+
+### 🐞 Bug Fixes
+
+* make sure packages get submitted to pypi ([231361e](https://github.com/chanzuckerberg/saber/commit/231361eebab8a35b42e6f1466c5439a357f8b6df))
+* make sure search pattern is correct ([2ffbb53](https://github.com/chanzuckerberg/saber/commit/2ffbb53c9aa64528095e331cd3203f5d151a1a78))
+* rename release-please config file ([9403ffb](https://github.com/chanzuckerberg/saber/commit/9403ffbb3d293bc2b171828df81c8196ad977cb8))
+* rename release-please config file ([03fe8c2](https://github.com/chanzuckerberg/saber/commit/03fe8c2f6df1b80b48d4ac696dbde85dc507eed0))
+* resolve release please CI ([43a6847](https://github.com/chanzuckerberg/saber/commit/43a68470b266cfb9583be17d926549af7af7b09e))
+* resolve release please CI ([dd26ff5](https://github.com/chanzuckerberg/saber/commit/dd26ff5230c636a61d5c34dff28d5fcfd554e1d0))
+* use PAT for release-please to bypass org permissions ([c135a97](https://github.com/chanzuckerberg/saber/commit/c135a97bd76cfdcbf2a2edfa5ea38ed97bc3be3f))
+* use PAT for release-please to bypass org permissions ([24b18d3](https://github.com/chanzuckerberg/saber/commit/24b18d30027315c9007d9db38b6b8637a3832a55))
+* use the organization token ([b4b9d11](https://github.com/chanzuckerberg/saber/commit/b4b9d1179817c79b48af7b623fc1a9c82a9ca88d))
+
+
+### 📝 Documentation
+
+* better description for importing data to copick ([e5e9b64](https://github.com/chanzuckerberg/saber/commit/e5e9b64c514e9b8f5d7172d39dcb8f0e6b6d35c6))
+
+
+### 🧹 Miscellaneous Chores
+
+* **main:** release saber 0.3.0 ([0121f88](https://github.com/chanzuckerberg/saber/commit/0121f887643c6e78d7f619d86981c6bac4adda62))
+* **main:** release saber 0.3.0 ([d94c1ed](https://github.com/chanzuckerberg/saber/commit/d94c1eda84bf0f14a001a2c2ee9d1017d8ee49b5))
+* **main:** release saber-em 0.2.0 ([0c1858c](https://github.com/chanzuckerberg/saber/commit/0c1858c9d61f64a159e2da3a52c0e7e288db7edc))
+* **main:** release saber-em 0.2.0 ([fcf3161](https://github.com/chanzuckerberg/saber/commit/fcf3161d5c2353c701ff460e81c53a7ac1a753f8))
+
 ## [0.3.0](https://github.com/chanzuckerberg/saber/compare/saber-v0.2.0...saber-v0.3.0) (2025-07-10)
 
 
