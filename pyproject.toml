@@ -51,12 +51,12 @@ gui = [
 materials = [
     "hyperspy"
 ]
-membranes = [
-    "membrain-seg"
-]
 
 [tool.hatch.metadata]
 allow-direct-references = true
+dependency-overrides = [
+    "numpy>=2"  # or whatever version you need
+]
 
 authors = [
   {name = "Jonathan Schwartz", email = "jonathan.schwartz@czii.org"},
