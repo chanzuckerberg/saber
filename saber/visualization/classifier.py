@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import cv2
 
-def display_mask_list(image: np.ndarray, masks: list):
+def display_mask_list(image: np.ndarray, masks: list, display_image: str):
     """
     Display a list of masks in a single image.
     """
@@ -26,22 +26,27 @@ def display_mask_list(image: np.ndarray, masks: list):
         masks = _masks_to_array(masks)
 
         # Display the Masks
-        display_mask_array(image, masks)
+        display_mask_array(image, masks, display_image)
 
-def display_mask_array(image: np.ndarray, masks: np.ndarray):
+def display_mask_array(image: np.ndarray, masks: np.ndarray, display_image: str):
 
     # Get colors
     colors = get_colors()
 
     # Generate Figure and Plot Image
-    plt.figure(figsize=(10, 10))
+    fig = plt.figure(figsize=(10, 10))
     plt.imshow(image, cmap='gray')
-
+    
     # Plot the Segmentations over the Image
     cmap_colors = [(1, 1, 1, 0)] + colors[:np.max(masks)]  # 0 is transparent
     cmap = ListedColormap(cmap_colors)
     plt.imshow(masks, cmap=cmap, alpha=0.6)
-    plt.axis('off'); plt.show()
+    plt.axis('off')
+
+    if display_image is True:
+        plt.show()
+    else:
+        plt.savefig(display_image)
 
 def _masks_to_array(masks):
     """
