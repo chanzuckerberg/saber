@@ -151,8 +151,6 @@ class saber2Dsegmenter:
 
         # Apply Classifier Model or Physical Constraints to Filter False Positives
         if self.classifier is not None:
-            print(len(self.masks))
-            # self.masks = filters.apply_classifier(self.image, self.masks, self.classifier, self.target_class)
             masks_batched = [self.masks[i:i+self.classifier_batchsize] 
                              for i in range(0, len(self.masks), self.classifier_batchsize)]
             masks_filtered = [filters.apply_classifier(self.image, masks_batch, self.classifier, self.target_class) 
