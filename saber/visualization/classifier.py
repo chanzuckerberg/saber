@@ -17,7 +17,11 @@ def display_mask_list(image: np.ndarray, masks: list, display_image: str):
         print("No masks found")
         plt.figure(figsize=(10, 10))
         plt.imshow(image, cmap='gray')
-        plt.axis('off'); plt.show()
+        plt.axis('off')
+        if display_image is True:
+            plt.show()
+        else:
+            plt.savefig(display_image)
     else:
         # Sort Masks so that smallest masks are on top. 
         masks = sorted(masks, key=lambda mask: mask['area'], reverse=True)
