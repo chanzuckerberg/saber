@@ -5,7 +5,7 @@ import torch, gc, skimage
 import numpy as np
 
 
-def apply_classifier(image, masks, classifier, desired_class: int = None, min_mask_area: int = 100):
+def apply_classifier(image, masks, classifier, desired_class: int = None, classifier_batchsize: int = None, min_mask_area: int = 100):
     """
     Apply a domain expert classifier to a segmentation mask and return the masks that match the desired class.
     """
@@ -15,8 +15,16 @@ def apply_classifier(image, masks, classifier, desired_class: int = None, min_ma
     sam2_masks = np.array(sam2_masks)
 
     # Run predictions using your classifier and Determine predicted class for each mask
-    with torch.no_grad():
-        predictions = classifier.predict(image[:,:,0], sam2_masks)
+    if classifier_batchsize is None:
+        with torch.no_grad():
+            predictions = classifier.predict(image[:,:,0], sam2_masks)
+    else: # Split masks into batches
+        sam2_masks_batches = [sam2_masks[i:i+classifier_batchsize, :, :]
+                              for i in range(0, sam2_masks.shape[0], classifier_batchsize)]
+        with torch.no_grad():
+            predictions = [classifier.predict(image[:,:,0], sam2_masks_batch) 
+                           for sam2_masks_batch in sam2_masks_batches]
+        predictions = np.vstack(predictions)
 
     return convert_predictions_to_masks(predictions, masks, desired_class, min_mask_area)   
 
