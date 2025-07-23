@@ -15,18 +15,10 @@ def apply_classifier(image, masks, classifier, desired_class: int = None, classi
     sam2_masks = np.array(sam2_masks)
 
     # Run predictions using your classifier and Determine predicted class for each mask
-    if classifier_batchsize is None:
-        with torch.no_grad():
-            predictions = classifier.predict(image[:,:,0], sam2_masks)
-    else: # Split masks into batches
-        sam2_masks_batches = [sam2_masks[i:i+classifier_batchsize, :, :]
-                              for i in range(0, sam2_masks.shape[0], classifier_batchsize)]
-        with torch.no_grad():
-            predictions = [classifier.predict(image[:,:,0], sam2_masks_batch) 
-                           for sam2_masks_batch in sam2_masks_batches]
-        predictions = np.vstack(predictions)
+    with torch.no_grad():
+        predictions = classifier.batch_predict(image[:,:,0], sam2_masks)
 
-    return convert_predictions_to_masks(predictions, masks, desired_class, min_mask_area)   
+    return convert_predictions_to_masks(predictions, masks, desired_class, min_mask_area) 
 
 def convert_predictions_to_masks(predictions, masks, desired_class: int = None, min_mask_area: int = 100):
 
