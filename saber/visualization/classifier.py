@@ -63,10 +63,16 @@ def display_mask_array(image: np.ndarray, masks: np.ndarray):
 
 def save_image(fig, ax_img, masks, textbox, ax_status):
     """Handle saving the image with the specified filename."""
+    
+    # Get the filename from the textbox
     filename = textbox.text.strip()
+    
+    # If the filename is empty, use the default filename
     if not filename:
-        filename = f'masks_overlay_{len(masks)}.png'
-    elif not filename.endswith(('.png', '.jpg', '.jpeg')):
+        filename = f'saber_segmentation.png'
+    
+    # If the filename does not end with a valid image extension, add .png
+    if not filename.endswith(('.png', '.jpg', '.jpeg', '.tiff', '.tif')):
         filename += '.png'
     
     try:
