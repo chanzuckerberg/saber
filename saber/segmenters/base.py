@@ -160,7 +160,7 @@ class saber2Dsegmenter:
 
         # Optional: Save Save Segmentation to PNG or Plot Segmentation with Matplotlib
         if display_image:
-            viz.display_mask_list(self.image, self.masks, display_image)
+            viz.display_mask_list(self.image, self.masks)
 
         # Return the Masks
         return self.masks  

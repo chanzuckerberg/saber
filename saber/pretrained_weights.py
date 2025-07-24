@@ -9,6 +9,9 @@ def cli(ctx):
 
 @cli.command(context_settings={"show_default": True})
 def sam2_weights():
+    download_sam2_weights()
+
+def download_sam2_weights():
     """
     Downloads SAM 2.1 checkpoints using either wget or curl.
     """
@@ -64,7 +67,6 @@ def get_sam2_checkpoint(sam2_cfg: str):
     Get the checkpoint path for the SAM 2.1 model based on the provided configuration.
     """
     
-    
     # Determine the directory where checkpoint files are stored
     checkpoint_dir = os.path.join(os.path.dirname(saber.__file__), 'checkpoints')
 
@@ -82,6 +84,10 @@ def get_sam2_checkpoint(sam2_cfg: str):
     except KeyError:
         # If sam2_cfg is not a valid key in the dictionary, raise a ValueError with an informative message.
         raise ValueError(f'Invalid SAM2 Model Config: {sam2_cfg}')
+
+    # Ensure the checkpoint file exists, if not, download the weights.
+    if not os.path.exists(checkpoint):
+        download_sam2_weights()
 
     # Return the full path to the configuration file and the checkpoint file.
     return os.path.join('configs/sam2.1', cfg), checkpoint
