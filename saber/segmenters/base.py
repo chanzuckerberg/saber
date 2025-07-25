@@ -33,7 +33,7 @@ class saber2Dsegmenter:
         target_class: int = 1,
         min_mask_area: int = 50,
         window_size: int = 256,
-        overlap_ratio: float = 0.25,
+        overlap_ratio: float = 0.25
     ):
         """
         Class for Segmenting Micrographs or Images using SAM2
@@ -80,12 +80,14 @@ class saber2Dsegmenter:
         if classifier:
             self.classifier = classifier
             self.target_class = target_class
+            self.batchsize = 32
             # Also set classifier to eval mode
             if hasattr(self.classifier, 'eval'):
                 self.classifier.eval()
         else:
             self.classifier = None
             self.target_class = None
+            self.batchsize = None
 
         # Initialize Image and Masks
         self.image = None
@@ -148,7 +150,8 @@ class saber2Dsegmenter:
 
         # Apply Classifier Model or Physical Constraints to Filter False Positives
         if self.classifier is not None:
-            self.masks = filters.apply_classifier(self.image, self.masks, self.classifier, self.target_class)
+            self.masks = filters.apply_classifier(self.image, self.masks, self.classifier,
+                                                  self.target_class, self.batchsize)
         else: # Since Order Doesn't Matter, Sort by Area for Saber GUI. 
             self.masks = sorted(self.masks, key=lambda mask: mask['area'], reverse=False)
 

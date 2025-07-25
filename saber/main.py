@@ -19,7 +19,6 @@ def routines():
 
 # Add subcommands to the group
 routines.add_command(analysis)
-routines.add_command(download)
 routines.add_command(filter3d)
 routines.add_command(classifier)
 if gui_available: routines.add_command(gui)

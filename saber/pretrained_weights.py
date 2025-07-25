@@ -9,6 +9,9 @@ def cli(ctx):
 
 @cli.command(context_settings={"show_default": True})
 def sam2_weights():
+    download_sam2_weights()
+
+def download_sam2_weights():
     """
     Downloads SAM 2.1 checkpoints using either wget or curl.
     """
@@ -64,7 +67,6 @@ def get_sam2_checkpoint(sam2_cfg: str):
     Get the checkpoint path for the SAM 2.1 model based on the provided configuration.
     """
     
-    
     # Determine the directory where checkpoint files are stored
     checkpoint_dir = os.path.join(os.path.dirname(saber.__file__), 'checkpoints')
 
@@ -83,65 +85,69 @@ def get_sam2_checkpoint(sam2_cfg: str):
         # If sam2_cfg is not a valid key in the dictionary, raise a ValueError with an informative message.
         raise ValueError(f'Invalid SAM2 Model Config: {sam2_cfg}')
 
+    # Ensure the checkpoint file exists, if not, download the weights.
+    if not os.path.exists(checkpoint):
+        download_sam2_weights()
+
     # Return the full path to the configuration file and the checkpoint file.
     return os.path.join('configs/sam2.1', cfg), checkpoint
 
-@cli.command(context_settings={"show_default": True})
-def membrain_weights():
-    """
-    Downloads the MemBrain checkpoint either wget or curl.
-    """
-    import gdown, saber
+# @cli.command(context_settings={"show_default": True})
+# def membrain_weights():
+#     """
+#     Downloads the MemBrain checkpoint either wget or curl.
+#     """
+#     import gdown, saber
     
-    download_dir = os.path.join(os.path.dirname(saber.__file__), 'checkpoints')
-    os.makedirs(download_dir, exist_ok=True)
+#     download_dir = os.path.join(os.path.dirname(saber.__file__), 'checkpoints')
+#     os.makedirs(download_dir, exist_ok=True)
 
-    # Correct file ID
-    file_id = "1kaN9ihB62OfHLFnyI2_t6Ya3kJm7Wun9"
-    output_path = os.path.join(download_dir, "membrain_seg_v10.ckpt")
-    url = f"https://drive.google.com/uc?id={file_id}"
+#     # Correct file ID
+#     file_id = "1kaN9ihB62OfHLFnyI2_t6Ya3kJm7Wun9"
+#     output_path = os.path.join(download_dir, "membrain_seg_v10.ckpt")
+#     url = f"https://drive.google.com/uc?id={file_id}"
 
-    print("Downloading MemBrain weights...")
-    gdown.download(url, output_path, quiet=False)
-    print("Download complete.")
+#     print("Downloading MemBrain weights...")
+#     gdown.download(url, output_path, quiet=False)
+#     print("Download complete.")
 
-    # # Create the download directory if it does not exist.
-    # download_dir = os.path.join(os.path.dirname(saber.__file__), 'checkpoints')
-    # os.makedirs(download_dir, exist_ok=True)
+#     # # Create the download directory if it does not exist.
+#     # download_dir = os.path.join(os.path.dirname(saber.__file__), 'checkpoints')
+#     # os.makedirs(download_dir, exist_ok=True)
     
-    # # Google Drive file ID from the provided link.
-    # google_drive_file_id = "1kaN9ihB62OfHLFnyI2_t6Ya3kJm7Wun9"
+#     # # Google Drive file ID from the provided link.
+#     # google_drive_file_id = "1kaN9ihB62OfHLFnyI2_t6Ya3kJm7Wun9"
     
-    # # Output file name (you can change this to your desired file name)
-    # google_drive_output = os.path.join(download_dir, "membrain_seg_v10.ckpt")
+#     # # Output file name (you can change this to your desired file name)
+#     # google_drive_output = os.path.join(download_dir, "membrain_seg_v10.ckpt")
 
 
-    # # Construct the Google Drive download URL.
-    # # Note: This method works for files that do not require a confirmation token.
-    # download_url = f"https://docs.google.com/uc?export=download&id={google_drive_file_id}"
+#     # # Construct the Google Drive download URL.
+#     # # Note: This method works for files that do not require a confirmation token.
+#     # download_url = f"https://docs.google.com/uc?export=download&id={google_drive_file_id}"
 
-    # # Use wget or curl depending on what's available.
-    # if shutil.which("wget"):
-    #     # Using wget with --no-check-certificate.
-    #     cmd = ["wget", "--no-check-certificate", download_url, "-O", google_drive_output]
-    # elif shutil.which("curl"):
-    #     # Using curl with the -L flag to follow redirects.
-    #     cmd = ["curl", "-L", download_url, "-o", google_drive_output]
-    # else:
-    #     print("Please install wget or curl to download the file.")
-    #     sys.exit(1)
+#     # # Use wget or curl depending on what's available.
+#     # if shutil.which("wget"):
+#     #     # Using wget with --no-check-certificate.
+#     #     cmd = ["wget", "--no-check-certificate", download_url, "-O", google_drive_output]
+#     # elif shutil.which("curl"):
+#     #     # Using curl with the -L flag to follow redirects.
+#     #     cmd = ["curl", "-L", download_url, "-o", google_drive_output]
+#     # else:
+#     #     print("Please install wget or curl to download the file.")
+#     #     sys.exit(1)
 
-    # print(f"Downloading MemBrain weights from Google Drive file ID: {google_drive_file_id}...")
-    # result = subprocess.call(cmd)
-    # if result != 0:
-    #     print("Failed to download the MemBrain weights.")
-    #     sys.exit(1)
-    # print("MemBrain weights downloaded successfully.")
+#     # print(f"Downloading MemBrain weights from Google Drive file ID: {google_drive_file_id}...")
+#     # result = subprocess.call(cmd)
+#     # if result != 0:
+#     #     print("Failed to download the MemBrain weights.")
+#     #     sys.exit(1)
+#     # print("MemBrain weights downloaded successfully.")
 
 
-def get_membrain_checkpoint():
-    """
-    Get the checkpoint path for the MemBrain model.
-    """
-    checkpoint_dir = os.path.join(os.path.dirname(saber.__file__), 'checkpoints')
-    return os.path.join(checkpoint_dir, 'membrain_seg_v10.ckpt')
+# def get_membrain_checkpoint():
+#     """
+#     Get the checkpoint path for the MemBrain model.
+#     """
+#     checkpoint_dir = os.path.join(os.path.dirname(saber.__file__), 'checkpoints')
+#     return os.path.join(checkpoint_dir, 'membrain_seg_v10.ckpt')

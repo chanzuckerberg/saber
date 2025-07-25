@@ -37,7 +37,7 @@ class SAM2Classifier(nn.Module):
         self.device = io.get_available_devices(deviceID)
 
         # Build SAM2 model
-        (cfg, checkpoint) = pretrained_weights.get_sam2_checkpoint(backbone_type)
+        (cfg, checkpoint) = pretrained_weights.get_sam2_checkpoint(backbone_type)      
         sam2_model = build_sam2(cfg, checkpoint, device=self.device)
         self.backbone = SAM2ImagePredictor(sam2_model)
         

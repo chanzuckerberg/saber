@@ -1,7 +1,7 @@
+from matplotlib.widgets import TextBox, Button
 from matplotlib.colors import ListedColormap
 import matplotlib.pyplot as plt
 import numpy as np
-import cv2
 
 def display_mask_list(image: np.ndarray, masks: list):
     """
@@ -29,19 +29,70 @@ def display_mask_list(image: np.ndarray, masks: list):
         display_mask_array(image, masks)
 
 def display_mask_array(image: np.ndarray, masks: np.ndarray):
-
-    # Get colors
     colors = get_colors()
-
-    # Generate Figure and Plot Image
-    plt.figure(figsize=(10, 10))
-    plt.imshow(image, cmap='gray')
-
-    # Plot the Segmentations over the Image
-    cmap_colors = [(1, 1, 1, 0)] + colors[:np.max(masks)]  # 0 is transparent
+    
+    # Create figure with extra space for widgets
+    fig = plt.figure(figsize=(9, 7))
+    
+    # Main image axes
+    ax_img = plt.axes([0.1, 0.2, 0.8, 0.75])
+    ax_img.imshow(image, cmap='gray')
+    
+    cmap_colors = [(1, 1, 1, 0)] + colors[:np.max(masks)]
     cmap = ListedColormap(cmap_colors)
-    plt.imshow(masks, cmap=cmap, alpha=0.6)
-    plt.axis('off'); plt.show()
+    ax_img.imshow(masks, cmap=cmap, alpha=0.6)
+    ax_img.axis('off')
+    
+    # Text input box
+    ax_textbox = plt.axes([0.3, 0.05, 0.5, 0.04])
+    textbox = TextBox(ax_textbox, 'Filename: ', 
+                     initial=f'saber_segmentation.png')
+    
+    # Save button
+    ax_button = plt.axes([0.75, 0.05, 0.1, 0.04])
+    button = Button(ax_button, 'Save')
+    
+    # Status text
+    ax_status = plt.axes([0.8, 0.05, 0.15, 0.04])
+    ax_status.axis('off')
+    
+    # Connect the button to the external save function
+    button.on_clicked(lambda event: save_image(fig, ax_img, masks, textbox, ax_status))
+    
+    plt.show()
+
+def save_image(fig, ax_img, masks, textbox, ax_status):
+    """Handle saving the image with the specified filename."""
+    
+    # Get the filename from the textbox
+    filename = textbox.text.strip()
+    
+    # If the filename is empty, use the default filename
+    if not filename:
+        filename = f'saber_segmentation.png'
+    
+    # If the filename does not end with a valid image extension, add .png
+    if not filename.endswith(('.png', '.jpg', '.jpeg', '.tiff', '.tif')):
+        filename += '.png'
+    
+    try:
+        # Save just the image part, not the widgets
+        extent = ax_img.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+        fig.savefig(filename, bbox_inches=extent.expanded(1.1, 1.1), dpi=300)
+        
+        # Update status
+        ax_status.clear()
+        ax_status.text(0, 0.5, f'✓ Saved!', transform=ax_status.transAxes, 
+                      color='green', verticalalignment='center')
+        ax_status.axis('off')
+        fig.canvas.draw()
+        
+    except Exception as e:
+        ax_status.clear()
+        ax_status.text(0, 0.5, f'Error!', transform=ax_status.transAxes, 
+                      color='red', verticalalignment='center')
+        ax_status.axis('off')
+        fig.canvas.draw()
 
 def _masks_to_array(masks):
     """
