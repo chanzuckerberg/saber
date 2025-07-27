@@ -92,8 +92,8 @@ class cryoTomoSegmenter(saber3Dsegmenter):
         # If A Mask is Found, Follow to 3D Segmentation Propagation
 
         # Initialize Video Predictor
-        # if self.inference_state is None:
-        self.inference_state = self.video_predictor.create_inference_state_from_tomogram(vol)                    
+        if self.inference_state is None:
+            self.inference_state = self.video_predictor.create_inference_state_from_tomogram(vol)                    
 
         # Set up a dictionary to capture the object score logits from the mask decoder.
         # The keys will be frame indices and the values will be a list of score arrays from that frame.
