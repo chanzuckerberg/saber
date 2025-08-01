@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.7.0](https://github.com/chanzuckerberg/saber/compare/saber-v0.6.0...saber-v0.7.0) (2025-08-01)
+
+
+### ✨ Features
+
+* Image Saving and SAM2 Mask Batching ([df4ab57](https://github.com/chanzuckerberg/saber/commit/df4ab57d693af2451416ab5306ed596e936e5827))
+
+
+### 🐞 Bug Fixes
+
+* add README to PyPI description ([d9556fb](https://github.com/chanzuckerberg/saber/commit/d9556fb25453f2f15fbada3e1ccb51696d4aed4f))
+
+
+### 🧹 Miscellaneous Chores
+
+* CCIE-4984 conform to open sourcing guidelines ([0badd9c](https://github.com/chanzuckerberg/saber/commit/0badd9c579bd2cf94f57d977c482343bb5e79206))
+* CCIE-4984 conform to open sourcing guidelines ([34fdf98](https://github.com/chanzuckerberg/saber/commit/34fdf9885140778f57667672358458744b6581cd))
+
 ## [0.6.0](https://github.com/chanzuckerberg/saber/compare/saber-v0.5.0...saber-v0.6.0) (2025-07-10)
 
 
