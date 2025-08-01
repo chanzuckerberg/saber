@@ -58,12 +58,12 @@ class saber2Dsegmenter:
         # Build Mask Generator
         self.mask_generator = SAM2AutomaticMaskGenerator(
             model=self.sam2,
-            points_per_side=32,
-            points_per_batch=64,
+            points_per_side=32,             # 16
+            points_per_batch=64,            # 128
             pred_iou_thresh=0.7,
             stability_score_thresh=0.92,
             stability_score_offset=0.7,
-            crop_n_layers=2,
+            crop_n_layers=2,                # 1
             box_nms_thresh=0.7,
             crop_n_points_downscale_factor=2,
             use_m2m=True,
@@ -212,6 +212,9 @@ class saber3Dsegmenter(saber2Dsegmenter):
         # Initialize Inference State
         self.inference_state = None
 
+        # Minimum Logits Threshold for Confidence
+        self.min_logits = 0.5        
+
         # Flag to Plot the Z-Slice Confidence Estimations
         self.confidence_debug = False
         
@@ -238,7 +241,7 @@ class saber3Dsegmenter(saber2Dsegmenter):
             # Update current frame
             self.current_frame = out_frame_idx
             video_segments1[out_frame_idx] = {
-                out_obj_id: (out_mask_logits[i] > 0.0).cpu().numpy() for i, out_obj_id in enumerate(out_obj_ids)
+                out_obj_id: (out_mask_logits[i] > self.min_logits).cpu().numpy() for i, out_obj_id in enumerate(out_obj_ids)
             }      
 
         # run propagation throughout the video and collect the results in a dict
@@ -248,7 +251,7 @@ class saber3Dsegmenter(saber2Dsegmenter):
             # Update current frame
             self.current_frame = out_frame_idx
             video_segments2[out_frame_idx] = {
-                out_obj_id: (out_mask_logits[i] > 0.0).cpu().numpy() for i, out_obj_id in enumerate(out_obj_ids)
+                out_obj_id: (out_mask_logits[i] > self.min_logits).cpu().numpy() for i, out_obj_id in enumerate(out_obj_ids)
             }
 
         # Merge Video Segments to Return for Visualization / Analysis    

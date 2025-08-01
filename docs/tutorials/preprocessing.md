@@ -31,14 +31,14 @@ Before committing to the full SABER workflow, quickly assess whether your data w
 For micrograph (2D data), we have the option to either directly segment the full image or downsample the data prior to running segmentation. `*.mrc` files or other file formats where the metadata is available we can provide the `--target-resolution` flag in Angstrom.
 
 ```bash
-saber segment micrograph \
+saber segment micrographs \
     --input path/to/image.mrc \
     --target-resolution 10 # Angstroms
 ```
 For `*.tif` images, or data where the pixel size is unavailable in the meta-data, we need to provid the scale that we want to downsample our data.
 
 ```bash
-saber segment micrograph \
+saber segment micrographs \
     --input path/to/image.mrc \
     --scale 3 # Downsample by factor of 3
 ```
@@ -73,7 +73,6 @@ For single-particle datasets, ADF/BF signals from S/TEM, or FIB-SEM micrographs 
 
 ```bash
 saber classifier prepare-micrograph-training \
-    --config config.json \
     --input 'path/to/*.mrc' \
     --output training.zarr
 ```
