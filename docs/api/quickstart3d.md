@@ -17,9 +17,8 @@ Before starting, ensure you have SABER installed and import the necessary module
 ```python
 from saber.segmenters.tomo import cryoTomoSegmenter
 from saber.classifier.models import common
-from saber.visualization import cryosam2 as cryoviz
 from copick_utils.io import readers
-from saber import io
+from saber.utils import io
 import numpy as np
 import torch
 import copick
@@ -112,7 +111,6 @@ masks3D = segmenter.segment(
     masks2D,           # Initial Segmentation Prompt
     zSlice             # Initial Slice where the segmentation features are present 
 )
-
 ```
 
 ## 🔧 Advanced Configuration
