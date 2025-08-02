@@ -25,6 +25,9 @@ class cryoTomoSegmenter(saber3Dsegmenter):
         # Flag to Bound the Segmentation to the Tomogram
         self.filter_segmentation = True
 
+        # Show the Progress Bar? 
+        self.progress = True
+
     def generate_slab(self, vol, zSlice, slab_thickness):
         """
         Generate a Slab of the Tomogram at a Given Depth
