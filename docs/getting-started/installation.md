@@ -23,19 +23,10 @@ pip install saber-em[gui]
 If you want to contribute to saber or need the latest development version, you can install from source:
 
 ```bash
-git clone https://github.com/czi-ai/saber.git
+git clone https://github.com/chanzuckerberg/saber.git
 cd saber
 pip install -e .
 ```
-
-## Download Pre-trained Models
-
-After installation, download the required SAM2 model weights:
-
-```bash
-saber download sam2-weights 
-```
-This downloads the model weights to `path/to/site-packages/saber/checkpoints/`
 
 ## Verification
 

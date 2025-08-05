@@ -61,7 +61,7 @@ def slab(
 @slurm_submit.copick_commands
 @slurm_submit.tomogram_segment_commands
 @click.option("--run-ids", type=str, required=False, default=None,
-              help="Path to Copick Config for Processing Data")
+              help="(Optional) RunIDs to Process and Immediately Display Results")
 @slurm_submit.classifier_inputs
 @click.option("--num-slabs", type=int, default=1, callback=slurm_submit.validate_odd,
               required=False, help="Number of Slabs to Segment")
@@ -95,7 +95,7 @@ def tomograms(
         run_ids = [run.name for run in root.runs]
     else:
         run = root.get_run(run_ids)
-        display_segmentation = True   
+        display_segmentation = True
         segment_tomogram_interactive(
             run, voxel_size, tomo_alg,
             segmentation_name, segmentation_session_id,

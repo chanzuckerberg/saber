@@ -93,7 +93,7 @@ When no `--run-ids` are provided, SABER will segment the entire project and save
 | `--model-config` | Path to classifier model config | `results/model_config.yaml` |
 | `--model-weights` | Path to trained classifier weights | `results/best_model.pth` |
 | `--target-class` | Target class (-1 for semantic, N>0 for instance) | `2` |
-| `--num-slabs` | Number of slabs to segment | 0 |
+| `--num-slabs` | Number of slabs to segment | 1 |
 | `--run-ids` | Specific tomogram runs to process | None | `Position_10_Vol,Position_15_Vol` |
 
 ---
