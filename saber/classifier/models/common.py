@@ -2,19 +2,11 @@ from saber.classifier.models import ( SwinTransformer, ConvNeXt, SAM2 )
 import torch.nn as nn
 import os
 
-# Try to import cryoDinoV2, if not available, pass
-try: 
-    from saber.classifier.models import ( cryoDinoV2 )
-    dinov2_available = True
-except:
-    dinov2_available = False
-
 def get_classifier_model(backbone, num_classes, model_size, deviceID=0, **kwargs):
     model_map = {
         'ConvNeXt': ConvNeXt.ConvNeXtClassifier,
         'SwinTransformer': SwinTransformer.SwinTransformerClassifier,
         'SAM2': SAM2.SAM2Classifier,
-        'cryoDinoV2': cryoDinoV2.DinoV2Classifier if dinov2_available else None
     }
     if backbone not in model_map:
         raise ValueError(f"Unsupported backbone type: {backbone}")
