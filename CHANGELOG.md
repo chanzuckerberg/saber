@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.1](https://github.com/chanzuckerberg/saber/compare/saber-v0.7.0...saber-v0.7.1) (2025-08-07)
+
+
+### 🐞 Bug Fixes
+
+* release-please ([10e89a6](https://github.com/chanzuckerberg/saber/commit/10e89a6a06850e29a3d196a421ae3c4d84f25324))
+* release-please ([90052a3](https://github.com/chanzuckerberg/saber/commit/90052a3984eddad8314f35f5ec158fb54dbd621f))
+
 ## [0.7.0](https://github.com/chanzuckerberg/saber/compare/saber-v0.6.0...saber-v0.7.0) (2025-08-07)
 
 
