@@ -9,7 +9,7 @@ packages = ["saber"]
 name = "saber-em"
 description = "Segment Anything Based Electron Recognition"
 requires-python = ">=3.10"
-dynamic = ["version"]
+version = "0.6.0"
 readme = "README.md"
 license = {file = "LICENSE"}
 classifiers = [
