@@ -16,7 +16,7 @@
   "packages": {
     ".": {
       "package-name": "saber",
-      "version-file": "saber/__init__.py",      
+      "extra-files": ["saber/__init__.py"],      
       "changelog-path": "CHANGELOG.md",
       "bump-minor-pre-major": false,
       "bump-patch-for-minor-pre-major": false,
