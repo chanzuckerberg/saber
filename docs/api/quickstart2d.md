@@ -17,7 +17,7 @@ Before starting, ensure you have SABER installed and import the necessary module
 from saber.segmenters.micro import cryoMicroSegmenter
 from saber.classifier.models import common
 from saber.visualization import classifier as viz
-from saber import io
+from saber.utils import io
 import numpy as np
 import torch
 

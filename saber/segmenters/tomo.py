@@ -1,8 +1,9 @@
-from saber.utils import io, preprocessing as preprocess
+from saber.utils import preprocessing as preprocess
 from saber.segmenters.base import saber3Dsegmenter
 import saber.visualization.results as cryoviz
 import saber.filters.gaussian as gauss
 import saber.visualization.sam2 as viz
+from saber.filters import masks
 from scipy import ndimage
 import numpy as np
 import torch
@@ -23,6 +24,9 @@ class cryoTomoSegmenter(saber3Dsegmenter):
 
         # Flag to Bound the Segmentation to the Tomogram
         self.filter_segmentation = True
+
+        # Show the Progress Bar? 
+        self.progress = True
 
     def generate_slab(self, vol, zSlice, slab_thickness):
         """
@@ -92,8 +96,8 @@ class cryoTomoSegmenter(saber3Dsegmenter):
         # If A Mask is Found, Follow to 3D Segmentation Propagation
 
         # Initialize Video Predictor
-        # if self.inference_state is None:
-        self.inference_state = self.video_predictor.create_inference_state_from_tomogram(vol)                    
+        if self.inference_state is None:
+            self.inference_state = self.video_predictor.create_inference_state_from_tomogram(vol)                    
 
         # Set up a dictionary to capture the object score logits from the mask decoder.
         # The keys will be frame indices and the values will be a list of score arrays from that frame.
@@ -169,7 +173,7 @@ class cryoTomoSegmenter(saber3Dsegmenter):
             self.frame_scores = np.zeros([vol.shape[0], len(self.masks)])
             vol_masks, video_segments = self.filter_video_segments(video_segments, captured_scores, mask_shape)
         else: # Convert Video Segments to Masks (Without Filtering)
-            vol_masks = filters.segments_to_mask(video_segments, vol_masks, mask_shape, len(self.masks))
+            vol_masks = masks.segments_to_mask(video_segments, vol_masks, mask_shape, len(self.masks))
 
         # (Optional) Display Segmentations
         if show_segmentations:

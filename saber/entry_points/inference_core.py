@@ -116,6 +116,9 @@ def segment_tomogram_core(
     del vol
     del segment_mask
     torch.cuda.empty_cache()
+
+    # Reset the Inference State
+    segmenter.inference_state = None
     
     return f"Successfully processed {run.name}"
 

@@ -42,10 +42,6 @@ SABER provides a clean, scriptable command-line interface. Run the following com
 ```
 saber --help
 ```
-We can begin by downloading the pre-trained SAM2 weights:
-```
-saber download sam2-weights
-```
 
 ## 📚 Documentation
 
