@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.1](https://github.com/chanzuckerberg/saber/compare/saber-em-v0.6.0...saber-em-v0.6.1) (2025-08-07)
+
+
+### 🐞 Bug Fixes
+
+* versioning ([55882a4](https://github.com/chanzuckerberg/saber/commit/55882a4d938dce8075f25e764dc2197d25eb075a))
+* versioning ([fc672ca](https://github.com/chanzuckerberg/saber/commit/fc672cabfd756b5775e6b41d138eed2857ed254a))
+
 ## [0.6.0](https://github.com/chanzuckerberg/saber/compare/saber-em-v0.5.0...saber-em-v0.6.0) (2025-08-07)
 
 
