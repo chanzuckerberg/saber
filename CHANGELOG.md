@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.2](https://github.com/chanzuckerberg/saber/compare/saber-v0.7.1...saber-v0.7.2) (2025-08-07)
+
+
+### 🐞 Bug Fixes
+
+* dynamic versioning ([cf280dd](https://github.com/chanzuckerberg/saber/commit/cf280dd2dca03eb645e5bd7fa6d1b5d554173cc4))
+* dynamic versioning ([d1a67c8](https://github.com/chanzuckerberg/saber/commit/d1a67c808a05e606718624d587279260d12fe289))
+
 ## [0.7.1](https://github.com/chanzuckerberg/saber/compare/saber-v0.7.0...saber-v0.7.1) (2025-08-07)
 
 
