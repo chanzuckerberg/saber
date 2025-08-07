@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling", "hatch-vcs"]
+requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
@@ -74,6 +74,7 @@ saber-slurm = "saber.main:slurm_routines"
 
 [tool.hatch.version]
 path = "saber/__init__.py"
+pattern = "__version__ = ['\"](?P<version>[^'\"]*)['\"]"
 
 [project.urls]
 Homepage = "https://github.com/czi-ai/saber"
