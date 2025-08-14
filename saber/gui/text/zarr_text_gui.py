@@ -222,7 +222,7 @@ class TextAnnotationWindow(QMainWindow):
 @click.command(context_settings={"show_default": True})
 @click.option('--input', type=str, required=True, 
               help="Path to the Reading Zarr file.")
-@click.option('--output', type=str, required=False, default=None, 
+@click.option('--output', type=str, required=False, default='labels.zarr', 
               help="Path to the Saving Zarr file.")
 def text_gui(input: str, output: str):
     """GUI for Annotating Individual SAM2 Segmentations with Hashtag-Based Text Descriptions."""
