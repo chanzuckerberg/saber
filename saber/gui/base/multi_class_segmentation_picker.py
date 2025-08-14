@@ -1,4 +1,4 @@
-from saber.gui.segmentation_picker import SegmentationViewer
+from saber.gui.base.segmentation_picker import SegmentationViewer
 from pyqtgraph.Qt import QtCore, QtGui, QtWidgets
 import pyqtgraph as pg
 import numpy as np

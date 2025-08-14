@@ -3,8 +3,9 @@ from PyQt5.QtWidgets import (
     QVBoxLayout, QPushButton, QHBoxLayout, QLabel, QComboBox, QMessageBox
 )
 from PyQt5.QtCore import Qt
-from saber.gui.multi_class_segmentation_picker import MultiClassSegmentationViewer
-from saber.gui.segmentation_picker import SegmentationViewer
+from saber.gui.base.multi_class_segmentation_picker import MultiClassSegmentationViewer
+from saber.gui.base.segmentation_picker import SegmentationViewer
+from saber.utils.zarr_writer import add_zarr_attributes
 import sys, zarr, click, json, os
 from typing import List
 import numpy as np
@@ -218,7 +219,8 @@ class MainWindow(QMainWindow):
             class_name: {k: v for k, v in class_data.items() if k != 'masks'}
             for class_name, class_data in self.class_dict.items()
         }
-        zarr_root.attrs['class_names'] = json.dumps(filtered_class_dict)        
+        zarr_root.attrs['class_names'] = json.dumps(filtered_class_dict)
+        zarr_root.attrs.update(add_zarr_attributes())
 
         # Reference the current run ID (from the selected item in the list)
         current_row = self.image_list.currentRow()        
@@ -285,7 +287,7 @@ class MainWindow(QMainWindow):
 
         # Save accepted masks to the 'masks' group
         if accepted_masks:
-            segmentation_group['masks'] = np.stack(accepted_masks).astype(np.uint8)
+            segmentation_group['labels'] = np.stack(accepted_masks).astype(np.uint8)
         else:
             print(f"No accepted masks to save for run ID '{run_id}'.")
 
@@ -404,5 +406,5 @@ def gui(
     main_window.show()
     sys.exit(app.exec_())
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()

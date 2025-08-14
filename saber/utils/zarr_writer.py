@@ -122,3 +122,40 @@ def get_zarr_writer(zarr_path: str) -> ParallelZarrWriter:
         if _zarr_writer is None:
             _zarr_writer = ParallelZarrWriter(zarr_path)
         return _zarr_writer
+
+def add_zarr_attributes():
+
+    # Define the multiscales attributes
+    multiscales_attrs = {
+        "multiscales": [
+            {
+                "axes": [
+                    {
+                        "name": "y",
+                        "type": "space",
+                        "unit": "angstrom"
+                    },
+                    {
+                        "name": "x",
+                        "type": "space",
+                        "unit": "angstrom"
+                    }
+                ],
+                "datasets": [
+                    {
+                        "coordinateTransformations": [
+                            {
+                                "scale": [1.0, 1.0],
+                                "type": "scale"
+                            }
+                        ],
+                        "path": "0"
+                    }
+                ],
+                "name": "/",
+                "version": "0.4"
+            }
+        ]
+    }
+
+    return multiscales_attrs
