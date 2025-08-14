@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt
 from saber.gui.base.multi_class_segmentation_picker import MultiClassSegmentationViewer
 from saber.gui.base.segmentation_picker import SegmentationViewer
-from saber.utils.zarr_writer import add_zarr_attributes
+from saber.utils.zarr_writer import add_attributes
 import sys, zarr, click, json, os
 from typing import List
 import numpy as np
@@ -220,7 +220,7 @@ class MainWindow(QMainWindow):
             for class_name, class_data in self.class_dict.items()
         }
         zarr_root.attrs['class_names'] = json.dumps(filtered_class_dict)
-        zarr_root.attrs.update(add_zarr_attributes())
+        zarr_root.attrs.update(add_attributes())
 
         # Reference the current run ID (from the selected item in the list)
         current_row = self.image_list.currentRow()        
@@ -235,7 +235,7 @@ class MainWindow(QMainWindow):
 
         # Save the base image
         current_image = self.segmentation_viewer.left_base_img_item.image
-        segmentation_group['image'] = current_image
+        segmentation_group['0'] = current_image
 
         # Save masks to Zarr
         try:                    self.save_masks_to_zarr(segmentation_group, run_id)

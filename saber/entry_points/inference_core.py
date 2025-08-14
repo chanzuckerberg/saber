@@ -158,4 +158,7 @@ def segment_micrograph_core(
 
     # Write Run to Zarr
     input = os.path.splitext(os.path.basename(input))[0]
-    zwriter.write(run_name=input, image=image0, masks=masks.astype(np.uint8))
+    zwriter.write(
+        run_name=input, image=image0, 
+        masks=masks.astype(np.uint8), pixel_size=pixel_size
+    )

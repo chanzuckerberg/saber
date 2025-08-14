@@ -72,7 +72,9 @@ def extract_sam2_candidates(
         image_seg, masks = segment(segmenter, vol, slab_thickness, zSlice=zSlice)
 
         # Write Run to Zarr
-        zwriter.write(run_name=run.name, image=image_seg, masks=masks.astype(np.uint8))
+        zwriter.write(
+            run_name=run.name, image=image_seg, 
+            masks=masks.astype(np.uint8), pixel_size=voxel_size)
 
 @click.command(context_settings={"show_default": True})
 @slurm_submit.copick_commands
