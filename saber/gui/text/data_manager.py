@@ -37,7 +37,10 @@ class TextAnnotationDataManager:
     def read_data(self, run_id: str):
         """Read image and mask data for a run ID."""
         base_image = self.root[run_id]['image'][:]
-        masks = self.root[run_id]['masks'][:]
+        try:
+            masks = self.root[run_id]['labels'][:]
+        except:
+            masks = self.root[run_id]['masks'][:]
 
         (nx, ny) = base_image.shape
         if nx < ny:

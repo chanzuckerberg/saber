@@ -122,7 +122,10 @@ class MainWindow(QMainWindow):
 
         # Get Run
         base_image = self.root[run_id]['image'][:]
-        masks = self.root[run_id]['masks'][:]
+        try:
+            masks = self.root[run_id]['labels'][:]
+        except:
+            masks = self.root[run_id]['masks'][:]
 
         (nx, ny) = base_image.shape
         if nx < ny:
