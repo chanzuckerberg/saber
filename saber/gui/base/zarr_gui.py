@@ -220,7 +220,6 @@ class MainWindow(QMainWindow):
             for class_name, class_data in self.class_dict.items()
         }
         zarr_root.attrs['class_names'] = json.dumps(filtered_class_dict)
-        zarr_root.attrs.update(add_attributes())
 
         # Reference the current run ID (from the selected item in the list)
         current_row = self.image_list.currentRow()        
@@ -232,6 +231,7 @@ class MainWindow(QMainWindow):
 
         # Create or open the group for the segmentation
         segmentation_group = zarr_root.require_group(run_id)
+        add_attributes(segmentation_group)
 
         # Save the base image
         current_image = self.segmentation_viewer.left_base_img_item.image

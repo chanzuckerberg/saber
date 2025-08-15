@@ -90,14 +90,23 @@ class HashtagSegmentationViewer(SegmentationViewer):
                 self.right_mask_items[i].setImage(new_rgba)
     
     def highlight_mask(self, mask_id: int):
-        """Add a boundary highlight around a specific mask."""
+        """Add a boundary highlight around a specific mask and update selected_mask_id."""
         if mask_id >= len(self.masks) or mask_id < 0:
             return
-            
-        self.selected_mask_id = mask_id
         
-        # Remove existing boundary
-        self.clear_highlight()
+        # Remove existing boundary WITHOUT clearing selected_mask_id
+        if self.selection_boundary_item is not None:
+            try:
+                self.right_view.removeItem(self.selection_boundary_item)
+            except:
+                try:
+                    self.left_view.removeItem(self.selection_boundary_item)
+                except:
+                    pass  # Already removed or never added
+            self.selection_boundary_item = None
+        
+        # NOW set the selected mask ID (after clearing the old boundary but before creating new one)
+        self.selected_mask_id = mask_id
         
         # Only highlight if the mask is visible on the right panel (i.e., accepted)
         if (hasattr(self, 'right_mask_items') and 
@@ -119,9 +128,9 @@ class HashtagSegmentationViewer(SegmentationViewer):
             )
             # Add to RIGHT view where the accepted segmentations are shown
             self.right_view.addItem(self.selection_boundary_item)
-    
+
     def clear_highlight(self):
-        """Clear the selection highlight."""
+        """Clear the selection highlight and reset selected_mask_id."""
         if self.selection_boundary_item is not None:
             # Remove from whichever view it's in
             try:
@@ -132,6 +141,7 @@ class HashtagSegmentationViewer(SegmentationViewer):
                 except:
                     pass  # Already removed or never added
             self.selection_boundary_item = None
+        # Reset selected mask ID when clearing highlight
         self.selected_mask_id = None
     
     def get_mask_boundary(self, mask_id: int) -> Optional[np.ndarray]:
@@ -193,40 +203,7 @@ class HashtagSegmentationViewer(SegmentationViewer):
         except Exception as e:
             print(f"OpenCV boundary detection failed: {e}")
             return self._get_boundary_numpy_fast(mask)
-        
-    def _get_boundary_numpy_fast(self, mask: np.ndarray) -> Optional[np.ndarray]:
-        """Fast boundary detection using numpy with optimization."""
-        try:
-            # Simple edge detection using gradients
-            binary_mask = (mask > 0.5).astype(np.uint8)
-            
-            # Use scipy.ndimage if available for faster edge detection
-            try:
-                from scipy import ndimage
-                edges = ndimage.laplace(binary_mask) != 0
-            except ImportError:
-                # Fallback to simple difference
-                gy, gx = np.gradient(binary_mask.astype(float))
-                edges = (gx**2 + gy**2) > 0.1
-            
-            y_coords, x_coords = np.where(edges)
-            
-            if len(y_coords) == 0:
-                return None
-            
-            boundary_points = np.column_stack([x_coords, y_coords])
-            
-            # Aggressive subsampling
-            if len(boundary_points) > 100:
-                step = len(boundary_points) // 50
-                boundary_points = boundary_points[::step]
-            
-            return boundary_points
-            
-        except Exception as e:
-            print(f"Numpy boundary detection failed: {e}")
-            return None
-        
+
     def load_data_fresh(self, base_image, masks):
         """Fresh data loading - clean slate approach."""
         # 1. Clear ALL state immediately
@@ -341,6 +318,45 @@ class HashtagSegmentationViewer(SegmentationViewer):
         if not clicked_on_right and not clicked_on_left:
             self.clear_highlight()
             self.signal_segmentation_deselected()
+
+    def keyPressEvent(self, event):
+            """
+            Override to revert the currently selected mask instead of the last accepted mask.
+            Press 'r' => revert the currently selected/highlighted mask
+            """
+            key = event.key()
+            if key == QtCore.Qt.Key_R:
+                # Check if we have a currently selected mask
+                print(f"Selected mask ID: {self.selected_mask_id}")
+                if self.selected_mask_id is not None:
+                    mask_id = self.selected_mask_id
+                    
+                    # Only revert if the mask is currently accepted (visible on right panel)
+                    if (mask_id in self.accepted_masks and
+                        mask_id < len(self.right_mask_items) and 
+                        self.right_mask_items[mask_id].isVisible()):
+                        
+                        # Remove from accepted set
+                        self.accepted_masks.remove(mask_id)
+                        
+                        # Remove from accepted stack if present
+                        if mask_id in self.accepted_stack:
+                            self.accepted_stack.remove(mask_id)
+                        
+                        # Hide it on the right, show on the left
+                        self.right_mask_items[mask_id].setVisible(False)
+                        self.left_mask_items[mask_id].setVisible(True)
+                        
+                        # Clear the highlight since the mask is no longer accepted
+                        self.clear_highlight()
+                        
+                        # Signal deselection to update the UI
+                        self.signal_segmentation_deselected()
+                        
+                        print(f"Reverted selected mask {mask_id}: hidden on right, shown on left.")
+                        print(f"Current accepted masks: {self.accepted_masks}")
+                    else:
+                        print(f"Selected mask {mask_id} is not currently accepted, cannot revert.")
 
     def signal_segmentation_selected(self, mask_id: int):
         """Signal that a segmentation was selected (for main window to handle)."""
