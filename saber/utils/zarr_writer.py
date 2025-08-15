@@ -26,11 +26,11 @@ class ParallelZarrWriter:
         
         # Open zarr store with synchronization and VCP-compatible settings
         self.store = zarr.NestedDirectoryStore(zarr_path)
+        self.store.dimension_separator = '/'
         self.zroot = zarr.open_group(
             store=self.store, 
             mode='w',
             synchronizer=synchronizer,
-            dimension_separator='/' 
         )
         
         # Thread-safe counter for run indexing
@@ -83,31 +83,23 @@ class ParallelZarrWriter:
                 for key, value in metadata.items():
                     run_group.attrs[key] = value
             
-            # Create VCP-compatible structure: run_name/0/image and run_name/0/labels/0/labels
-            dataset_group = run_group.create_group("0")
+            # # Create VCP-compatible structure: run_name/0/image and run_name/0/labels/0/labels
+            # dataset_group = run_group.create_group("0")
             
             # Write image dataset
-            dataset_group.create_dataset(
+            run_group.create_dataset(
                 "image", 
                 data=image, 
                 dtype=image.dtype,
                 compressor=zarr.Blosc(cname='zstd', clevel=2, shuffle=2),
-                dimension_separator='/'
             )
             
-            # Create labels hierarchy
-            labels_group = dataset_group.create_group("labels")
-            add_attributes(labels_group, pixel_size)  # Labels group also needs VCP attributes
-            
-            main_labels_group = labels_group.create_group("0")
-            
             # Write masks dataset  
-            main_labels_group.create_dataset(
+            run_group.create_dataset(
                 "labels", 
                 data=masks, 
                 dtype=masks.dtype,
                 compressor=zarr.Blosc(cname='zstd', clevel=2, shuffle=2),
-                dimension_separator='/'
             )
             
             # print(f"✅ Written {run_name} to {self.zarr_path}")

@@ -66,7 +66,9 @@ def extract_sam2_candidates(
             
             # Save to a group with name: run.name + "_{index}"
             group_name = f"{run.name}_{i+1}"
-            zwriter.write(run_name=group_name, image=image_seg, masks=masks.astype(np.uint8))            
+            zwriter.write(
+                run_name=group_name, image=image_seg, 
+                masks=masks.astype(np.uint8), pixel_size=voxel_size)            
     else:
         zSlice = int(vol.shape[0] // 2)
         image_seg, masks = segment(segmenter, vol, slab_thickness, zSlice=zSlice)
