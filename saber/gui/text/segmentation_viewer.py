@@ -1,6 +1,10 @@
 import numpy as np
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
+from saber.gui.base.segmentation_picker import SegmentationViewer
+
+from pyqtgraph.Qt import QtCore, QtGui, QtWidgets
+
 try:
     import cv2
     HAS_OPENCV = True
@@ -8,361 +12,472 @@ except ImportError:
     HAS_OPENCV = False
     print("Warning: OpenCV not available, using slower boundary detection")
 
-from typing import Dict, Optional
-from saber.gui.base.segmentation_picker import SegmentationViewer
+from typing import Dict, Optional, Sequence
 
-class HashtagSegmentationViewer(SegmentationViewer):
-    """Enhanced SegmentationViewer with hashtag-based coloring and selection highlighting."""
-    
-    def __init__(self, image, masks):
-        super().__init__(image, masks)
-        
-        # Track selection 
-        self.selected_mask_id = None
-        self.selection_boundary_item = None
-        
-        # Store custom colors for masks (mask_id -> (r, g, b))
-        self.custom_colors = {}
-        
-        # Fast boundary cache to avoid recomputing
-        self.boundary_cache = {}
-        
-    def update_mask_colors(self, color_mapping: Dict[int, str]):
-        """Update mask overlay colors based on hashtag colors.
-        
-        Args:
-            color_mapping: dict mapping mask_id -> hex_color_string (e.g., '#FF6B6B')
+# ---------- ViewBoxes ----------
+
+class NoRightZoomViewBox(pg.ViewBox):
+    """
+    ViewBox that disables the default right-drag rubber-band zoom and context menu.
+    Used for the RIGHT panel.
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setMenuEnabled(False)
+
+    def mouseDragEvent(self, ev, axis=None):
+        # Swallow right-drag so rubber-band zoom never starts
+        if ev.button() == QtCore.Qt.RightButton:
+            ev.ignore()
+            return
+        super().mouseDragEvent(ev, axis=axis)
+
+    def mouseClickEvent(self, ev):
+        # Swallow right-click entirely so nothing happens on press/release
+        if ev.button() == QtCore.Qt.RightButton:
+            ev.ignore()
+            return
+        super().mouseClickEvent(ev)
+
+
+class LeftDrawViewBox(pg.ViewBox):
+    """
+    ViewBox for the LEFT panel:
+      - Disables the default right-drag zoom
+      - Reports right-press/drag/release back to the parent viewer to draw a circle
+    """
+    def __init__(self, viewer, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setMenuEnabled(False)
+        self._viewer = viewer
+        self._right_dragging = False
+
+    def mousePressEvent(self, ev):
+        if ev.button() == QtCore.Qt.RightButton:
+            self._right_dragging = True
+            # use scene pos so the viewer can map to image coords reliably
+            self._viewer._circle_drag_start(ev.scenePos())
+            ev.accept()
+            return
+        super().mousePressEvent(ev)
+
+    def mouseDragEvent(self, ev, axis=None):
+        if self._right_dragging and ev.button() == QtCore.Qt.RightButton:
+            self._viewer._circle_drag_update(ev.scenePos())
+            ev.accept()
+            return
+        super().mouseDragEvent(ev, axis=axis)
+
+    def mouseReleaseEvent(self, ev):
+        if self._right_dragging and ev.button() == QtCore.Qt.RightButton:
+            self._right_dragging = False
+            self._viewer._circle_drag_finish(ev.scenePos())
+            ev.accept()
+            return
+        super().mouseReleaseEvent(ev)
+
+
+# ---------- Main widget ----------
+
+class HashtagSegmentationViewer(pg.GraphicsLayoutWidget):
+    """
+    Enhanced SegmentationViewer with hashtag-based coloring, selection highlighting,
+    and right-drag circle creation (LEFT panel) that appends a new segmentation mask.
+    """
+
+    # Minimum circle radius (in pixels) to create a mask on release
+    MIN_CIRCLE_RADIUS_PX = 2.0
+
+    def __init__(self, image: np.ndarray, masks: Sequence[np.ndarray]):
         """
-        # Check if colors have actually changed
+        image: 2D numpy array (Nx, Ny) - the background image
+        masks: list/array of 2D masks (shape: (N_classes, Nx, Ny))
+        """
+        super().__init__()
+
+        # ---- Data & state ----
+        self.image = image
+        # Internally keep masks as a list of 2D arrays; appending is frequent.
+        self.masks = list(masks)
+
+        self.accepted_masks = set()
+        self.accepted_stack = []
+
+        # Colors
+        self.tab10_colors = SegmentationViewer.TAB10_COLORS
+        self.custom_colors: Dict[int, tuple] = {}
+
+        # Selection & boundary cache
+        self.selected_mask_id: Optional[int] = None
+        self.selection_boundary_item = None
+        self.boundary_cache: Dict[int, Optional[np.ndarray]] = {}
+        self._boundary_cache_keys = set()
+
+        # Temporary circle overlay while dragging on the LEFT panel
+        self._circle_center = None  # (x0, y0) in image coords (floats)
+        self._temp_circle_item: Optional[QtGui.QGraphicsEllipseItem] = None
+
+        # ---- Layout / Views ----
+        # Left view: uses custom ViewBox that captures right-drag circle
+        self.left_view = LeftDrawViewBox(self, lockAspect=True, enableMenu=False)
+        # Right view: uses ViewBox that swallows right-clicks
+        self.right_view = NoRightZoomViewBox(lockAspect=True, enableMenu=False)
+        self.addItem(self.left_view, row=0, col=0)
+        self.addItem(self.right_view, row=0, col=1)
+
+        # Base images
+        self.left_base_img_item = pg.ImageItem(self.image)
+        self.right_base_img_item = pg.ImageItem(self.image)
+        self.left_view.addItem(self.left_base_img_item)
+        self.right_view.addItem(self.right_base_img_item)
+
+        # Overlays for masks (parallel lists)
+        self.left_mask_items = []
+        self.right_mask_items = []
+
+        # Click handling
+        self.scene().sigMouseClicked.connect(self.mouse_clicked)
+
+        # Focus for key handling
+        self.setFocusPolicy(QtCore.Qt.ClickFocus)
+        self.setFocus()
+
+        # NOTE: As in your current setup, overlays are expected to be created
+        # by calling `initialize_overlays()` (e.g., via load_data_fresh()).
+        # We do not auto-call it here to preserve your exact flow.
+
+    # ---------- Public API ----------
+
+    def update_mask_colors(self, color_mapping: Dict[int, str]):
+        """Update mask overlay colors based on hashtag colors."""
         new_custom_colors = {}
-        
         for mask_id, hex_color in color_mapping.items():
-            if hex_color.startswith('#'):
-                hex_color = hex_color[1:]
-            
+            hc = hex_color[1:] if hex_color.startswith('#') else hex_color
             try:
-                r = int(hex_color[0:2], 16) / 255.0
-                g = int(hex_color[2:4], 16) / 255.0  
-                b = int(hex_color[4:6], 16) / 255.0
+                r = int(hc[0:2], 16) / 255.0
+                g = int(hc[2:4], 16) / 255.0
+                b = int(hc[4:6], 16) / 255.0
                 new_custom_colors[mask_id] = (r, g, b)
             except (ValueError, IndexError):
                 print(f"Invalid hex color: {hex_color}")
                 continue
-        
-        # Only update if colors actually changed
+
         if new_custom_colors != self.custom_colors:
             self.custom_colors = new_custom_colors
             self.refresh_overlays()
-    
+
+    def load_data_fresh(self, base_image, masks):
+        """Fresh data loading - clean slate approach."""
+        # Clear caches/state
+        self.boundary_cache.clear()
+        self._boundary_cache_keys.clear()
+        self.custom_colors.clear()
+        self.clear_highlight()
+        self.selected_mask_id = None
+
+        # Data
+        self.image = base_image
+        self.masks = list(masks)
+
+        # Reset accepted masks/stack
+        self.accepted_masks.clear()
+        self.accepted_stack.clear()
+
+        # Update base images
+        self.left_base_img_item.setImage(base_image)
+        self.right_base_img_item.setImage(base_image)
+
+        # Remove old overlays
+        for item in getattr(self, 'left_mask_items', []):
+            try:
+                self.left_view.removeItem(item)
+            except Exception:
+                pass
+        for item in getattr(self, 'right_mask_items', []):
+            try:
+                self.right_view.removeItem(item)
+            except Exception:
+                pass
+
+        self.left_mask_items = []
+        self.right_mask_items = []
+
+        # Create overlays for all masks
+        self.initialize_overlays()
+
+    def initialize_overlays(self):
+        """Create overlays for all masks (left shown, right hidden)."""
+        for i, mask in enumerate(self.masks):
+            left_item = pg.ImageItem(self.create_overlay_rgba(mask, i))
+            left_item.setOpacity(0.4)
+            left_item.setZValue(i + 1)
+            self.left_view.addItem(left_item)
+            self.left_mask_items.append(left_item)
+
+            right_item = pg.ImageItem(self.create_overlay_rgba(mask, i))
+            right_item.setOpacity(0.4)
+            right_item.setZValue(i + 1)
+            right_item.setVisible(False)
+            self.right_view.addItem(right_item)
+            self.right_mask_items.append(right_item)
+
+    def load_data(self, base_image, masks, class_dict=None):
+        """Preserve parent behavior while clearing caches before load."""
+        self.boundary_cache.clear()
+        self._boundary_cache_keys.clear()
+        self.custom_colors.clear()
+        self.clear_highlight()
+        # Delegate to parent (as in your code)
+        super().load_data(base_image, masks, class_dict)
+
+    # ---------- Rendering helpers ----------
+
     def create_overlay_rgba(self, mask, index=0):
         """
-        Override to use custom colors when available, otherwise fall back to tab10.
+        Use custom colors when available; otherwise fall back to tab10.
+        Assumes mask is shape (Nx, Ny) and indexes as [x, y].
         """
         Nx, Ny = mask.shape
         rgba = np.zeros((Nx, Ny, 4), dtype=np.float32)
 
-        # Use custom color if available, otherwise use tab10
-        if index in self.custom_colors:
-            color = self.custom_colors[index]
-        else:
-            color = self.tab10_colors[index % len(self.tab10_colors)]
-
-        # Apply the color to the mask
+        color = self.custom_colors.get(index, self.tab10_colors[index % len(self.tab10_colors)])
         inds = mask > 0.5
-        rgba[inds, 0] = color[0]  # Red channel
-        rgba[inds, 1] = color[1]  # Green channel
-        rgba[inds, 2] = color[2]  # Blue channel
-        rgba[inds, 3] = 1.0       # Alpha channel
-        
+        rgba[inds, 0] = color[0]
+        rgba[inds, 1] = color[1]
+        rgba[inds, 2] = color[2]
+        rgba[inds, 3] = 1.0
         return rgba
-    
+
     def refresh_overlays(self):
         """Refresh only visible mask overlays with current colors."""
         for i, mask in enumerate(self.masks):
             if i < len(self.left_mask_items) and self.left_mask_items[i].isVisible():
-                new_rgba = self.create_overlay_rgba(mask, i)
-                self.left_mask_items[i].setImage(new_rgba)
-                
-            if (i < len(self.right_mask_items) and 
-                hasattr(self.right_mask_items[i], 'isVisible') and 
-                self.right_mask_items[i].isVisible()):
-                new_rgba = self.create_overlay_rgba(mask, i)
-                self.right_mask_items[i].setImage(new_rgba)
-    
+                self.left_mask_items[i].setImage(self.create_overlay_rgba(mask, i))
+            if i < len(self.right_mask_items) and self.right_mask_items[i].isVisible():
+                self.right_mask_items[i].setImage(self.create_overlay_rgba(mask, i))
+
+    # ---------- Selection / Highlight ----------
+
     def highlight_mask(self, mask_id: int):
         """Add a boundary highlight around a specific mask and update selected_mask_id."""
-        if mask_id >= len(self.masks) or mask_id < 0:
+        if mask_id < 0 or mask_id >= len(self.masks):
             return
-        
-        # Remove existing boundary WITHOUT clearing selected_mask_id
-        if self.selection_boundary_item is not None:
-            try:
-                self.right_view.removeItem(self.selection_boundary_item)
-            except:
-                try:
-                    self.left_view.removeItem(self.selection_boundary_item)
-                except:
-                    pass  # Already removed or never added
-            self.selection_boundary_item = None
-        
-        # NOW set the selected mask ID (after clearing the old boundary but before creating new one)
+        self.clear_highlight()
         self.selected_mask_id = mask_id
-        
+
         # Only highlight if the mask is visible on the right panel (i.e., accepted)
-        if (hasattr(self, 'right_mask_items') and 
-            mask_id < len(self.right_mask_items) and 
-            self.right_mask_items[mask_id].isVisible()):
-            
-            # Get boundary points
+        if mask_id < len(self.right_mask_items) and self.right_mask_items[mask_id].isVisible():
             boundary_points = self.get_mask_boundary(mask_id)
-            
-            # Check if boundary_points is None or empty array
             if boundary_points is None or len(boundary_points) == 0:
                 return
-            
-            # Create boundary item for the RIGHT panel
+
             self.selection_boundary_item = pg.PlotDataItem(
-                boundary_points[:, 1], boundary_points[:, 0],  # x, y coordinates
+                boundary_points[:, 1], boundary_points[:, 0],
                 pen=pg.mkPen(color='white', width=3, style=QtCore.Qt.DashLine),
                 connect='finite'
             )
-            # Add to RIGHT view where the accepted segmentations are shown
             self.right_view.addItem(self.selection_boundary_item)
 
     def clear_highlight(self):
         """Clear the selection highlight and reset selected_mask_id."""
         if self.selection_boundary_item is not None:
-            # Remove from whichever view it's in
             try:
                 self.right_view.removeItem(self.selection_boundary_item)
-            except:
+            except Exception:
                 try:
                     self.left_view.removeItem(self.selection_boundary_item)
-                except:
-                    pass  # Already removed or never added
+                except Exception:
+                    pass
             self.selection_boundary_item = None
-        # Reset selected mask ID when clearing highlight
         self.selected_mask_id = None
-    
+
+    # ---------- Boundary extraction ----------
+
     def get_mask_boundary(self, mask_id: int) -> Optional[np.ndarray]:
         """Get boundary points for a mask using fast method with caching."""
-        # Check cache first with hash-based key for better cache efficiency
-        cache_key = f"{mask_id}_{hash(str(self.masks[mask_id].tobytes()))}"
-        if hasattr(self, '_boundary_cache_keys') and cache_key in self._boundary_cache_keys:
-            return self.boundary_cache.get(mask_id)
-        
         mask = self.masks[mask_id]
-        
+        cache_key = f"{mask_id}_{hash(str(mask.tobytes()))}"
+        if cache_key in self._boundary_cache_keys:
+            return self.boundary_cache.get(mask_id)
+
         if HAS_OPENCV:
             boundary_points = self._get_boundary_opencv_fast(mask)
         else:
             boundary_points = self._get_boundary_numpy_fast(mask)
-        
-        # Cache with size limit to prevent memory issues
-        if not hasattr(self, '_boundary_cache_keys'):
-            self._boundary_cache_keys = set()
-            
-        # Limit cache size to prevent memory bloat
+
+        # Limit cache size
         if len(self.boundary_cache) > 50:
-            # Clear half the cache
+            # clear ~half
             keys_to_remove = list(self.boundary_cache.keys())[:25]
-            for key in keys_to_remove:
-                del self.boundary_cache[key]
+            for k in keys_to_remove:
+                del self.boundary_cache[k]
             self._boundary_cache_keys = set(self.boundary_cache.keys())
-        
         self.boundary_cache[mask_id] = boundary_points
         self._boundary_cache_keys.add(cache_key)
         return boundary_points
-    
+
     def _get_boundary_opencv_fast(self, mask: np.ndarray) -> Optional[np.ndarray]:
         """Fast boundary detection using OpenCV with aggressive optimization."""
         try:
-            # Convert to uint8 and ensure binary
             mask_uint8 = (mask > 0.5).astype(np.uint8) * 255
-            
-            # Use faster contour approximation
             contours, _ = cv2.findContours(mask_uint8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_TC89_L1)
-            
             if not contours:
                 return None
-            
-            largest_contour = max(contours, key=cv2.contourArea)
-            
-            if largest_contour.shape[1] == 1:
-                boundary_points = largest_contour.squeeze(axis=1)
+            largest = max(contours, key=cv2.contourArea)
+            if largest.shape[1] == 1:
+                pts = largest.squeeze(axis=1)
             else:
-                boundary_points = largest_contour.reshape(-1, 2)
-            
-            # Aggressive subsampling for performance
-            if len(boundary_points) > 100:
-                step = len(boundary_points) // 50  # Limit to ~50 points max
-                boundary_points = boundary_points[::step]
-            
-            return boundary_points
-            
+                pts = largest.reshape(-1, 2)
+            # Subsample
+            if len(pts) > 100:
+                step = max(1, len(pts) // 50)
+                pts = pts[::step]
+            return pts
         except Exception as e:
             print(f"OpenCV boundary detection failed: {e}")
             return self._get_boundary_numpy_fast(mask)
 
-    def load_data_fresh(self, base_image, masks):
-        """Fresh data loading - clean slate approach."""
-        # 1. Clear ALL state immediately
-        self.boundary_cache.clear()
-        if hasattr(self, '_boundary_cache_keys'):
-            self._boundary_cache_keys.clear()
-        self.custom_colors.clear()  
-        self.clear_highlight()
-        self.selected_mask_id = None
-        
-        # 2. Set new data
-        self.image = base_image
-        self.masks = masks
-        
-        # 3. Reset accepted masks to empty state
-        if hasattr(self, 'accepted_masks'):
-            self.accepted_masks.clear()
-        else:
-            self.accepted_masks = set()
-            
-        if hasattr(self, 'accepted_stack'):
-            self.accepted_stack.clear()
-        else:
-            self.accepted_stack = []
-        
-        # 4. Update base images
-        self.left_base_img_item.setImage(base_image)
-        self.right_base_img_item.setImage(base_image)
-        
-        # 5. Remove ALL old overlays efficiently
-        for item in getattr(self, 'left_mask_items', []):
-            try:
-                self.left_view.removeItem(item)
-            except:
-                pass
-                
-        for item in getattr(self, 'right_mask_items', []):
-            try:
-                self.right_view.removeItem(item)
-            except:
-                pass
-        
-        # 6. Create fresh overlay lists
-        self.left_mask_items = []
-        self.right_mask_items = []
-        
-        # 7. Initialize new overlays
-        self.initialize_overlays()
+    def _get_boundary_numpy_fast(self, mask: np.ndarray) -> Optional[np.ndarray]:
+        """Fallback boundary detection without SciPy. Returns Nx2 array of [x, y] points."""
+        m = mask > 0.5
+        if not m.any():
+            return None
+        b = np.zeros_like(m, dtype=bool)
+        # 4-neighborhood difference
+        b[1:-1, 1:-1] = m[1:-1, 1:-1] & (
+            (~m[0:-2, 1:-1]) | (~m[2:, 1:-1]) | (~m[1:-1, 0:-2]) | (~m[1:-1, 2:])
+        )
+        xs, ys = np.nonzero(b)
+        if xs.size == 0:
+            return None
+        return np.column_stack([xs, ys])
 
-    def load_data(self, base_image, masks, class_dict=None):
-        """Override to clear caches when loading new data."""
-        # Clear caches efficiently
-        self.boundary_cache.clear()
-        if hasattr(self, '_boundary_cache_keys'):
-            self._boundary_cache_keys.clear()
-        self.custom_colors.clear()
-        self.clear_highlight()
-        
-        # Call parent method
-        super().load_data(base_image, masks, class_dict)
+    # ---------- Keyboard ----------
+
+    def keyPressEvent(self, event):
+        """
+        Revert the currently selected/highlighted mask.
+        Press 'r' => revert the currently selected/highlighted mask
+        """
+        key = event.key()
+        if key == QtCore.Qt.Key_R:
+            print(f"Selected mask ID: {self.selected_mask_id}")
+            if self.selected_mask_id is not None:
+                mask_id = self.selected_mask_id
+                if (mask_id in self.accepted_masks and
+                    mask_id < len(self.right_mask_items) and
+                    self.right_mask_items[mask_id].isVisible()):
+                    # Remove from accepted
+                    self.accepted_masks.remove(mask_id)
+                    if mask_id in self.accepted_stack:
+                        self.accepted_stack.remove(mask_id)
+                    # Show on left, hide on right
+                    self.right_mask_items[mask_id].setVisible(False)
+                    self.left_mask_items[mask_id].setVisible(True)
+                    self.clear_highlight()
+                    self.signal_segmentation_deselected()
+                    print(f"Reverted selected mask {mask_id}: hidden on right, shown on left.")
+                    print(f"Current accepted masks: {self.accepted_masks}")
+                else:
+                    print(f"Selected mask {mask_id} is not currently accepted, cannot revert.")
+
+    # ---------- Click handling (unchanged left-click accept behavior) ----------
 
     def mouse_clicked(self, event):
-        """Override to handle clicks on both left and right panels."""
-        # Get click position in scene coordinates
+        """Handle clicks on both panels (selection & accept)."""
         scene_pos = event.scenePos()
-        
-        # Check if click is on left or right panel
         left_image_pos = self.left_base_img_item.mapFromScene(scene_pos)
         right_image_pos = self.right_base_img_item.mapFromScene(scene_pos)
-        
-        # Check bounds for left panel
+
         Nx, Ny = self.image.shape[:2]
         left_x, left_y = int(left_image_pos.x()), int(left_image_pos.y())
         right_x, right_y = int(right_image_pos.x()), int(right_image_pos.y())
-        
+
         clicked_on_right = False
         clicked_on_left = False
-        
-        # Check if click is within right panel bounds
+
+        # Right panel: select accepted mask under cursor
         if 0 <= right_x < Nx and 0 <= right_y < Ny:
-            # Check if we clicked on an accepted mask in the right panel
             for i in range(len(self.masks)):
-                if (hasattr(self, 'right_mask_items') and 
-                    i < len(self.right_mask_items) and 
+                if (i < len(self.right_mask_items) and
                     self.right_mask_items[i].isVisible() and
                     self.masks[i][right_x, right_y] > 0):
-                    
-                    # Clicked on an accepted segmentation in right panel
                     self.highlight_mask(i)
                     self.signal_segmentation_selected(i)
                     clicked_on_right = True
                     break
-        
-        # Check if click is within left panel bounds
+
+        # Left panel: accept on left-click
         if not clicked_on_right and 0 <= left_x < Nx and 0 <= left_y < Ny:
             clicked_on_left = True
-            # Use the original parent behavior for left panel clicks
-            super().mouse_clicked(event)
-            
-            # After parent processes the click, check if mask was accepted and highlight
+            self.mouse_clicked_left_panel(event)
+
+            # If mask just got accepted, highlight on right
             for i in range(len(self.masks)):
                 if (self.masks[i][left_x, left_y] > 0 and
-                    hasattr(self, 'right_mask_items') and 
-                    i < len(self.right_mask_items) and 
+                    i < len(self.right_mask_items) and
                     self.right_mask_items[i].isVisible()):
-                    # Mask was just accepted, highlight it and signal selection
                     self.highlight_mask(i)
                     self.signal_segmentation_selected(i)
                     break
-        
-        # Clear highlight if clicked elsewhere
+
         if not clicked_on_right and not clicked_on_left:
             self.clear_highlight()
             self.signal_segmentation_deselected()
 
-    def keyPressEvent(self, event):
-            """
-            Override to revert the currently selected mask instead of the last accepted mask.
-            Press 'r' => revert the currently selected/highlighted mask
-            """
-            key = event.key()
-            if key == QtCore.Qt.Key_R:
-                # Check if we have a currently selected mask
-                print(f"Selected mask ID: {self.selected_mask_id}")
-                if self.selected_mask_id is not None:
-                    mask_id = self.selected_mask_id
-                    
-                    # Only revert if the mask is currently accepted (visible on right panel)
-                    if (mask_id in self.accepted_masks and
-                        mask_id < len(self.right_mask_items) and 
-                        self.right_mask_items[mask_id].isVisible()):
-                        
-                        # Remove from accepted set
-                        self.accepted_masks.remove(mask_id)
-                        
-                        # Remove from accepted stack if present
-                        if mask_id in self.accepted_stack:
-                            self.accepted_stack.remove(mask_id)
-                        
-                        # Hide it on the right, show on the left
-                        self.right_mask_items[mask_id].setVisible(False)
-                        self.left_mask_items[mask_id].setVisible(True)
-                        
-                        # Clear the highlight since the mask is no longer accepted
-                        self.clear_highlight()
-                        
-                        # Signal deselection to update the UI
-                        self.signal_segmentation_deselected()
-                        
-                        print(f"Reverted selected mask {mask_id}: hidden on right, shown on left.")
-                        print(f"Current accepted masks: {self.accepted_masks}")
-                    else:
-                        print(f"Selected mask {mask_id} is not currently accepted, cannot revert.")
+    def mouse_clicked_left_panel(self, event):
+        """Left panel: left-click 'accepts' the topmost *visible* mask under the cursor."""
+        scene_pos = event.scenePos()
+        image_pos = self.left_base_img_item.mapFromScene(scene_pos)
+        x, y = int(image_pos.x()), int(image_pos.y())
+
+        Nx, Ny = self.image.shape[:2]
+        if not (0 <= x < Nx and 0 <= y < Ny):
+            print(f"Clicked out of bounds: {x}, {y}")
+            return
+
+        # Only consider masks that are visible on the LEFT and cover the pixel.
+        # Then prioritize by zValue (topmost first).
+        candidates = [
+            i for i in range(len(self.masks))
+            if (i < len(self.left_mask_items)
+                and self.left_mask_items[i].isVisible()
+                and self.masks[i][x, y] > 0)
+        ]
+        if not candidates:
+            print("No mask at clicked location.")
+            return
+
+        candidates.sort(key=lambda i: self.left_mask_items[i].zValue(), reverse=True)
+
+        # Cycling logic:
+        # Reset cycling if position changed OR the candidate set changed (e.g., new mask added).
+        hits_sig = tuple(candidates)
+        if getattr(self, '_last_click_pos', None) != (x, y) or getattr(self, '_last_hits_signature', None) != hits_sig:
+            self._last_click_pos = (x, y)
+            self._last_hits_signature = hits_sig
+            self._current_mask_index = 0
+        else:
+            self._current_mask_index = (self._current_mask_index + 1) % len(candidates)
+
+        i_hit = candidates[self._current_mask_index]
+
+        # Left button => accept (hide left, show right)
+        if event.button() == QtCore.Qt.LeftButton:
+            if i_hit < len(self.left_mask_items) and self.left_mask_items[i_hit].isVisible():
+                self.left_mask_items[i_hit].setVisible(False)
+                self.right_mask_items[i_hit].setVisible(True)
+                self.accepted_masks.add(i_hit)
+                self.accepted_stack.append(i_hit)
+                print(self.accepted_masks)
+                print(f"Accepted mask {i_hit}: now hidden on left, shown on right.")
+        print(f"Current accepted masks: {self.accepted_masks}")
+
+    # ---------- Signals to outside ----------
 
     def signal_segmentation_selected(self, mask_id: int):
         """Signal that a segmentation was selected (for main window to handle)."""
         self.last_selected_mask_id = mask_id
-        
-        # If there's a callback function set, call it
         if hasattr(self, 'selection_callback') and self.selection_callback:
             self.selection_callback(mask_id)
 
@@ -376,3 +491,154 @@ class HashtagSegmentationViewer(SegmentationViewer):
         """Set callback functions for when segmentations are selected/deselected."""
         self.selection_callback = selection_callback
         self.deselection_callback = deselection_callback
+
+    # ---------- Right-drag circle (LEFT panel) ----------
+
+    def _map_scene_to_image(self, scene_pos: QtCore.QPointF):
+        """Map scene position to image coordinates (float), and check bounds."""
+        img_pos = self.left_base_img_item.mapFromScene(scene_pos)
+        x_f, y_f = float(img_pos.x()), float(img_pos.y())
+        Nx, Ny = self.image.shape[:2]
+        in_bounds = (0.0 <= x_f < float(Nx)) and (0.0 <= y_f < float(Ny))
+        return x_f, y_f, in_bounds
+
+    def _ensure_temp_circle_item(self):
+        """Create the temporary ellipse item if needed (in LEFT view data coords)."""
+        if self._temp_circle_item is None:
+            self._temp_circle_item = QtWidgets.QGraphicsEllipseItem()
+            self._temp_circle_item.setParentItem(self.left_view.childGroup)
+            self._temp_circle_item.setZValue(1e6)  # draw on top
+
+            # Visuals
+            self._temp_circle_item.setPen(pg.mkPen('w', width=2, style=QtCore.Qt.DashLine))
+            self._temp_circle_item.setBrush(QtGui.QBrush(QtCore.Qt.NoBrush))
+
+            # **Critical**: don't intercept any mouse events
+            self._temp_circle_item.setAcceptedMouseButtons(QtCore.Qt.NoButton)
+            self._temp_circle_item.setAcceptHoverEvents(False)
+            self._temp_circle_item.setFlag(QtWidgets.QGraphicsItem.ItemIsSelectable, False)
+            self._temp_circle_item.setFlag(QtWidgets.QGraphicsItem.ItemIsMovable, False)
+
+            # Ensure pyqtgraph manages it but it never affects bounds
+            try:
+                self.left_view.addItem(self._temp_circle_item, ignoreBounds=True)
+            except TypeError:
+                self.left_view.addItem(self._temp_circle_item)
+
+    def _set_temp_circle_geometry(self, x0: float, y0: float, r: float):
+        """Update the temporary circle rect in data (image) coordinates."""
+        rect = QtCore.QRectF(x0 - r, y0 - r, 2 * r, 2 * r)
+        self._temp_circle_item.setRect(rect)
+
+    def _remove_temp_circle(self):
+        """Remove the temporary ellipse item, if present."""
+        if self._temp_circle_item is not None:
+            try:
+                self.left_view.removeItem(self._temp_circle_item)
+            except Exception:
+                pass
+            self._temp_circle_item = None
+
+    def _circle_drag_start(self, scene_pos: QtCore.QPointF):
+        """Right-press on LEFT panel: start circle preview if in-bounds."""
+        x0, y0, ok = self._map_scene_to_image(scene_pos)
+        if not ok:
+            self._circle_center = None
+            return
+        self._circle_center = (x0, y0)
+        self._ensure_temp_circle_item()
+        # Draw a tiny circle initially (invisible small)
+        self._set_temp_circle_geometry(x0, y0, 0.0)
+
+    def _circle_drag_update(self, scene_pos: QtCore.QPointF):
+        """Right-drag on LEFT panel: update circle preview."""
+        if self._circle_center is None:
+            return
+        x0, y0 = self._circle_center
+        x1, y1, _ = self._map_scene_to_image(scene_pos)
+        dx, dy = (x1 - x0), (y1 - y0)
+        r = float(np.hypot(dx, dy))
+        self._ensure_temp_circle_item()
+        self._set_temp_circle_geometry(x0, y0, r)
+
+    def _circle_drag_finish(self, scene_pos: QtCore.QPointF):
+        """Right-release on LEFT panel: finalize circle -> create & append mask."""
+        if self._circle_center is None:
+            self._remove_temp_circle()
+            return
+
+        x0, y0 = self._circle_center
+        x1, y1, _ = self._map_scene_to_image(scene_pos)
+        self._circle_center = None
+        r = float(np.hypot(x1 - x0, y1 - y0))
+
+        # Remove preview
+        self._remove_temp_circle()
+
+        if r < self.MIN_CIRCLE_RADIUS_PX:
+            # Too small => ignore
+            return
+
+        # Create mask (shape (Nx, Ny); your code indexes masks as [x, y])
+        Nx, Ny = self.image.shape[:2]
+        xx = np.arange(Nx)[:, None]    # axis 0 == "x" in your code
+        yy = np.arange(Ny)[None, :]    # axis 1 == "y"
+        circle = ((xx - x0) ** 2 + (yy - y0) ** 2) <= (r ** 2)
+        new_mask = circle.astype(np.float32)
+
+        # Sanity: the center pixel should be inside the mask (if in-bounds)
+        cx, cy = int(x0), int(y0)
+        if 0 <= cx < Nx and 0 <= cy < Ny and new_mask[cx, cy] <= 0:
+            # This should not happen with the construction above; print once if it does.
+            print("Warning: new circle mask center is not inside the mask; "
+                "check axis conventions.")
+
+        new_index = self._append_new_mask(new_mask)
+        print(f"Added circle mask #{new_index} at center=({x0:.1f}, {y0:.1f}), r={r:.1f}px. "
+            f"Total masks: {len(self.masks)}")
+
+
+    def _append_new_mask(self, mask: np.ndarray) -> int:
+        """
+        Append a new 2D mask to internal storage and create corresponding overlays.
+        New mask is visible on LEFT and hidden on RIGHT, consistent with your behavior.
+        """
+        mask = np.asarray(mask, dtype=np.float32)
+        Nx, Ny = self.image.shape[:2]
+        if mask.shape != (Nx, Ny):
+            raise ValueError(f"New mask shape {mask.shape} must match image shape {(Nx, Ny)}")
+
+        # Append to model
+        self.masks.append(mask)
+        i = len(self.masks) - 1
+
+        # LEFT overlay (visible) — put it on TOP
+        left_item = pg.ImageItem(self.create_overlay_rgba(mask, i))
+        left_item.setOpacity(0.4)
+        left_item.setVisible(True)
+        left_item.setZValue(self._next_top_z(left=True))   # <<< topmost
+        self.left_view.addItem(left_item)
+        self.left_mask_items.append(left_item)
+
+        # RIGHT overlay (hidden) — zValue doesn't matter but keep consistent
+        right_item = pg.ImageItem(self.create_overlay_rgba(mask, i))
+        right_item.setOpacity(0.4)
+        right_item.setVisible(False)
+        right_item.setZValue(self._next_top_z(left=False))
+        self.right_view.addItem(right_item)
+        self.right_mask_items.append(right_item)
+
+        # Ensure caches know about the new entry (no boundary yet)
+        self.boundary_cache.pop(i, None)
+
+        return i
+    
+    def _next_top_z(self, left: bool = True) -> float:
+        """Return a z-value just above the current top item for the given panel."""
+        items = self.left_mask_items if left else self.right_mask_items
+        base = self.left_base_img_item if left else self.right_base_img_item
+        if items:
+            z_top = max((it.zValue() for it in items if it is not None), default=base.zValue())
+        else:
+            z_top = base.zValue()
+        return z_top + 1.0

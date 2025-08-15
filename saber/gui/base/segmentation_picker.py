@@ -3,7 +3,21 @@ import pyqtgraph as pg
 import numpy as np
 import sys
 
+
 class SegmentationViewer(pg.GraphicsLayoutWidget):
+    TAB10_COLORS = [
+        (0.12156862745098039, 0.4666666666666667, 0.7058823529411765),  # blue
+        (1.0, 0.4980392156862745, 0.054901960784313725),                # orange
+        (0.17254901960784313, 0.6274509803921569, 0.17254901960784313),  # green
+        (0.8392156862745098, 0.15294117647058825, 0.1568627450980392),  # red
+        (0.5803921568627451, 0.403921568627451, 0.7411764705882353),    # purple
+        (0.5490196078431373, 0.33725490196078434, 0.29411764705882354), # brown
+        (0.8901960784313725, 0.4666666666666667, 0.7607843137254902),   # pink
+        (0.0, 0.5, 0.5),   # teal
+        (0.7372549019607844, 0.7411764705882353, 0.13333333333333333),  # olive
+        (0.09019607843137255, 0.7450980392156863, 0.8117647058823529),  # cyan
+    ]
+    
     def __init__(self, image, masks):
         """
         image: 2D numpy array (Nx, Ny) - the background image
@@ -19,18 +33,7 @@ class SegmentationViewer(pg.GraphicsLayoutWidget):
         self.accepted_stack = []
 
         # Define tab10 colormap as a list of RGB tuples
-        self.tab10_colors = [
-            (0.12156862745098039, 0.4666666666666667, 0.7058823529411765),  # blue
-            (1.0, 0.4980392156862745, 0.054901960784313725),                # orange
-            (0.17254901960784313, 0.6274509803921569, 0.17254901960784313),  # green
-            (0.8392156862745098, 0.15294117647058825, 0.1568627450980392),  # red
-            (0.5803921568627451, 0.403921568627451, 0.7411764705882353),    # purple
-            (0.5490196078431373, 0.33725490196078434, 0.29411764705882354), # brown
-            (0.8901960784313725, 0.4666666666666667, 0.7607843137254902),   # pink
-            (0.0, 0.5, 0.5),   # teal
-            (0.7372549019607844, 0.7411764705882353, 0.13333333333333333),  # olive
-            (0.09019607843137255, 0.7450980392156863, 0.8117647058823529),  # cyan
-        ]
+        self.tab10_colors = self.TAB10_COLORS
 
         # Create a 2x1 layout:
         #  - Left view: initially shows all segmentations
@@ -41,6 +44,8 @@ class SegmentationViewer(pg.GraphicsLayoutWidget):
         # Keep the same aspect ratio in both
         self.left_view.setAspectLocked(True)
         self.right_view.setAspectLocked(True)
+        self.left_view.setMenuEnabled(False)
+        self.right_view.setMenuEnabled(False)
 
         # Base images (one for the left, one for the right)
         self.left_base_img_item = pg.ImageItem(self.image)
@@ -207,8 +212,8 @@ class SegmentationViewer(pg.GraphicsLayoutWidget):
                 print(f"Undid mask {i}: hidden on right, shown on left.")
             else:
                 print("No mask to undo!")
-        else:
-            super().keyPressEvent(event)
+        
+        super().keyPressEvent(event)
 
 def main():
     app = QtWidgets.QApplication(sys.argv)

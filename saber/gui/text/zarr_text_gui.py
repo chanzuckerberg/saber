@@ -178,8 +178,8 @@ class TextAnnotationWindow(QMainWindow):
             self.controller.load_next_runID(current_row + 1)
         elif event.key() == Qt.Key_S:
             self.save_segmentation()
-        else:
-            super().keyPressEvent(event)
+        # else:
+        #     super().keyPressEvent(event)
 
     # UI setup helpers
     def setup_menu_bar(self):
