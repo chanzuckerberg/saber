@@ -127,7 +127,7 @@ class HashtagListWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         
         self.list_widget = QListWidget()
-        self.list_widget.setMaximumWidth(100)
+        self.list_widget.setMaximumWidth(250)
         layout.addWidget(self.list_widget)
     
     def get_list_widget(self) -> QListWidget:

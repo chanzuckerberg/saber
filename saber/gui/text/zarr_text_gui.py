@@ -59,7 +59,7 @@ class TextAnnotationWindow(QMainWindow):
         self.setup_right_panel()
         
         # Set sizes and window size (more space for images)
-        self.main_splitter.setSizes([125, 1000, 100])
+        self.main_splitter.setSizes([125, 1000, 150])
         self.resize(1225, 750)
 
     def setup_left_panel(self):
