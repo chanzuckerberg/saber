@@ -62,28 +62,35 @@ class TextAnnotationController:
     
     # Event handlers
     def on_image_selected(self, item):
-        """Clean run switching - immediate cache clear and fresh start."""
+        """Clean run switching with per-run session cache."""
         run_id = item.text()
-        
+
         # Skip if same run ID
         if hasattr(self, '_current_run_id') and self._current_run_id == run_id:
             return
-        
+
+        prev_run_id = getattr(self, '_current_run_id', None)
         print(f"Switching to run: {run_id}")
-        
-        # 1. IMMEDIATE CACHE CLEAR - assume all data was saved
+
+        # 0) Stash current viewer state for the previous run (masks + accepted set)
+        if prev_run_id:
+            self.data_manager.stash_session_state(prev_run_id, self.segmentation_viewer)
+
+        # 1) Clear text/UI state
         self.clear_all_ui_state()
-        
-        # 2. Load new data
+
+        # 2) Load masks for the new run (session cache if present, else saved augmented)
         self._current_run_id = run_id
-        base_image, masks = self.data_manager.read_data(run_id)
-        
-        # 3. Fresh viewer state
-        self.segmentation_viewer.load_data_fresh(base_image, masks)
-        
-        # 4. Load text data for new run (keep hashtags, clear UI)
+        base_image, masks_list, accepted = self.data_manager.read_with_session_fallback(run_id)
+
+        # 3) Rebuild viewer from scratch and apply accepted visibility
+        self.segmentation_viewer.load_data_fresh(base_image, masks_list)
+        # initialize_overlays() is called inside load_data_fresh()
+        self.segmentation_viewer.set_accepted_indices(accepted)
+
+        # 4) Load text for new run (no mask "restore" needed here)
         self.load_fresh_text_data(run_id)
-        
+
         print(f"Successfully switched to {run_id}")
     
     def clear_all_ui_state(self):
@@ -118,9 +125,6 @@ class TextAnnotationController:
             # Load global description for this run
             global_text = self.data_manager.global_descriptions.get(run_id, "")
             self.global_desc_widget.set_text(global_text)
-            
-            # Load previously annotated segmentations and restore them
-            self.restore_previously_annotated_masks(run_id)
             
             # Update hashtags for this run only
             self.update_hashtags_for_run(run_id)
@@ -184,6 +188,15 @@ class TextAnnotationController:
         current_run_id = self.get_current_run_id()
         if current_run_id:
             self.update_hashtags_for_run(current_run_id)
+
+    def on_mask_added(self, mask_index: int):
+        """Handle new mask addition."""
+        run_id = self.get_current_run_id()
+        if not run_id:
+            return
+        seg_desc = self.data_manager.segmentation_descriptions.setdefault(run_id, {})
+        # keys are stored as strings elsewhere
+        seg_desc.setdefault(str(mask_index), "")
     
     def select_segmentation(self, segmentation_id: int):
         """Simple segmentation selection - no complex state management."""

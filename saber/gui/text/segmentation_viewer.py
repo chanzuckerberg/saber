@@ -88,6 +88,8 @@ class HashtagSegmentationViewer(pg.GraphicsLayoutWidget):
     # Minimum circle radius (in pixels) to create a mask on release
     MIN_CIRCLE_RADIUS_PX = 2.0
 
+    maskAdded = QtCore.pyqtSignal(int)  # Signal to indicate a new mask has been added
+
     def __init__(self, image: np.ndarray, masks: Sequence[np.ndarray]):
         """
         image: 2D numpy array (Nx, Ny) - the background image
@@ -211,13 +213,14 @@ class HashtagSegmentationViewer(pg.GraphicsLayoutWidget):
             left_item = pg.ImageItem(self.create_overlay_rgba(mask, i))
             left_item.setOpacity(0.4)
             left_item.setZValue(i + 1)
+            left_item.setVisible(True)              # <— add this if missing
             self.left_view.addItem(left_item)
             self.left_mask_items.append(left_item)
 
             right_item = pg.ImageItem(self.create_overlay_rgba(mask, i))
             right_item.setOpacity(0.4)
             right_item.setZValue(i + 1)
-            right_item.setVisible(False)
+            right_item.setVisible(False)            # keep this as-is (hidden by default)
             self.right_view.addItem(right_item)
             self.right_mask_items.append(right_item)
 
@@ -290,6 +293,17 @@ class HashtagSegmentationViewer(pg.GraphicsLayoutWidget):
                     pass
             self.selection_boundary_item = None
         self.selected_mask_id = None
+
+    def set_accepted_indices(self, indices):
+        """Make accepted masks show on RIGHT only, others on LEFT only."""
+        self.accepted_masks = set(map(int, indices))
+        self.accepted_stack = list(self.accepted_masks)
+        for i in range(len(self.masks)):
+            on_right = i in self.accepted_masks
+            if i < len(self.right_mask_items):
+                self.right_mask_items[i].setVisible(on_right)
+            if i < len(self.left_mask_items):
+                self.left_mask_items[i].setVisible(not on_right)
 
     # ---------- Boundary extraction ----------
 
@@ -491,6 +505,7 @@ class HashtagSegmentationViewer(pg.GraphicsLayoutWidget):
         """Set callback functions for when segmentations are selected/deselected."""
         self.selection_callback = selection_callback
         self.deselection_callback = deselection_callback
+        
 
     # ---------- Right-drag circle (LEFT panel) ----------
 
@@ -631,6 +646,8 @@ class HashtagSegmentationViewer(pg.GraphicsLayoutWidget):
         # Ensure caches know about the new entry (no boundary yet)
         self.boundary_cache.pop(i, None)
 
+        self.maskAdded.emit(i)  # Signal to indicate a new mask has been added
+        
         return i
     
     def _next_top_z(self, left: bool = True) -> float:

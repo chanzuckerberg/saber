@@ -112,20 +112,20 @@ class TextAnnotationWindow(QMainWindow):
 
     def setup_segmentation_viewer(self):
         """Initialize and setup the segmentation viewer."""
-        # Read initial data
-        initial_image, initial_masks = self.data_manager.read_data(self.data_manager.run_ids[0])
-        
-        # Create enhanced segmentation viewer
+        # Use session-or-saved augmented loader for the first run as well
+        first_run = self.data_manager.run_ids[0]
+        initial_image, initial_masks, accepted = self.data_manager.read_with_session_fallback(first_run)
+
         self.segmentation_viewer = HashtagSegmentationViewer(initial_image, initial_masks)
         self.segmentation_viewer.initialize_overlays()
+        self.segmentation_viewer.set_accepted_indices(accepted)
 
         # Make the viewer 40% taller than default
         default_width = 1100
         default_height = 600
         new_height = int(default_height * 1.4)
-        
         self.segmentation_viewer.resize(default_width, new_height)
-        
+
         # Insert into middle panel layout
         self.middle_layout.insertWidget(1, self.segmentation_viewer)
         self.middle_layout.setStretchFactor(self.segmentation_viewer, 1)
@@ -146,6 +146,9 @@ class TextAnnotationWindow(QMainWindow):
         
         # Control panel
         self.control_panel.saveClicked.connect(self.save_segmentation)
+
+        # When a new mask is drawn, let the controller create/init an entry for it
+        self.segmentation_viewer.maskAdded.connect(self.controller.on_mask_added)
 
     def load_text_for_current_image(self):
         """Simple initial load - just load text and update hashtags."""
