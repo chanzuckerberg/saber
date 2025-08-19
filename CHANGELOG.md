@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/chanzuckerberg/saber/compare/saber-em-v0.6.1...saber-em-v0.7.0) (2025-08-19)
+
+
+### ✨ Features
+
+* text annotation-gui ([c4f9ded](https://github.com/chanzuckerberg/saber/commit/c4f9ded3414e2896da588303d5d30c21e73df4df))
+
 ## [0.6.1](https://github.com/chanzuckerberg/saber/compare/saber-em-v0.6.0...saber-em-v0.6.1) (2025-08-07)
 
 
