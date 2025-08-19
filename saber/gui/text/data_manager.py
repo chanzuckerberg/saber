@@ -311,69 +311,63 @@ class TextAnnotationDataManager:
             return False
     
     def save_masks_to_zarr(self, segmentation_group, run_id: str, segmentation_viewer):
-        """Save masks with integrated descriptions as structured data."""
+        """Save only accepted/annotated masks to 'labels' array, discarding unannotated ones."""
         total_masks = len(segmentation_viewer.masks)
 
-        # Always rebuild groups so no stale accepted/rejected remain
+        # Clean up any existing mask data
         if 'masks' in segmentation_group:
             del segmentation_group['masks']
-        masks_group = segmentation_group.create_group('masks')
-
         if 'rejected_masks' in segmentation_group:
             del segmentation_group['rejected_masks']
-        rejected_group = segmentation_group.create_group('rejected_masks')
+        if 'labels' in segmentation_group:
+            del segmentation_group['labels']
 
         if total_masks == 0:
             print(f"No masks to save for run ID {run_id}")
             return
 
-        # Current acceptance set
+        # Get accepted masks (annotated/labeled ones)
         accepted_indices = set(getattr(segmentation_viewer, 'accepted_masks', set()))
-        all_indices = set(range(total_masks))
-        rejected_indices = all_indices - accepted_indices
-
-        # ---- Write accepted masks + attrs ----
-        for i in sorted(accepted_indices):
-            if 0 <= i < total_masks:
-                seg_group = masks_group.require_group(f'segmentation_{i}')
-                seg_group['mask'] = segmentation_viewer.masks[i].astype(np.uint8)
-
-                description = self.segmentation_descriptions.get(run_id, {}).get(str(i), '')
-                hashtags = self._extract_hashtags(description)
-                bbox = self._get_mask_bbox(segmentation_viewer.masks[i])
-
-                seg_group.attrs['description'] = description
-                seg_group.attrs['hashtags'] = json.dumps(hashtags)
-                seg_group.attrs['bbox'] = bbox
-                seg_group.attrs['area'] = int(np.sum(segmentation_viewer.masks[i] > 0))
-                seg_group.attrs['segmentation_id'] = int(i)
-
-        print(f"Saved {len(accepted_indices)} mask+description pairs for runID: {run_id}")
-
-        # ---- Write rejected masks (no attrs needed) ----
-        for idx in sorted(rejected_indices):
-            if 0 <= idx < total_masks:
-                rejected_group[f'rejected_{idx}'] = segmentation_viewer.masks[idx].astype(np.uint8)
         
-        # ---- Save consolidated labels array for compatibility ----
-        # Create a consolidated labels array with all accepted masks
-        if accepted_indices:
-            # Get the shape from the first mask
-            first_mask = segmentation_viewer.masks[0]
-            H, W = first_mask.shape
+        if not accepted_indices:
+            print(f"No accepted/annotated masks to save for run ID {run_id}")
+            return
+
+        # Only save accepted masks - throw out all unannotated ones
+        first_mask = segmentation_viewer.masks[0]
+        H, W = first_mask.shape
+        
+        # Create labels array with only accepted masks
+        labels_array = np.zeros((len(accepted_indices), H, W), dtype=np.uint8)
+        
+        # Also create a detailed masks group for metadata
+        masks_group = segmentation_group.create_group('masks')
+        
+        for array_idx, mask_idx in enumerate(sorted(accepted_indices)):
+            # Add to consolidated labels array
+            labels_array[array_idx] = segmentation_viewer.masks[mask_idx].astype(np.uint8)
             
-            # Create labels array with shape (num_accepted_masks, H, W)
-            labels_array = np.zeros((len(accepted_indices), H, W), dtype=np.uint8)
-            
-            for array_idx, mask_idx in enumerate(sorted(accepted_indices)):
-                labels_array[array_idx] = segmentation_viewer.masks[mask_idx].astype(np.uint8)
-            
-            # Save as 'labels' for compatibility with read_data method
-            segmentation_group['labels'] = labels_array
-            print(f"Saved consolidated 'labels' array with shape {labels_array.shape}")
-        else:
-            print("No accepted masks to save in 'labels' array")
-    
+            # Also save detailed version with metadata
+            seg_group = masks_group.require_group(f'segmentation_{array_idx}')  # Use new sequential index
+            seg_group['mask'] = segmentation_viewer.masks[mask_idx].astype(np.uint8)
+
+            description = self.segmentation_descriptions.get(run_id, {}).get(str(mask_idx), '')
+            hashtags = self._extract_hashtags(description)
+            bbox = self._get_mask_bbox(segmentation_viewer.masks[mask_idx])
+
+            seg_group.attrs['description'] = description
+            seg_group.attrs['hashtags'] = json.dumps(hashtags)
+            seg_group.attrs['bbox'] = bbox
+            seg_group.attrs['area'] = int(np.sum(segmentation_viewer.masks[mask_idx] > 0))
+            seg_group.attrs['original_segmentation_id'] = int(mask_idx)  # Keep track of original index
+            seg_group.attrs['segmentation_id'] = int(array_idx)  # New sequential index
+
+        # Save the main labels array
+        segmentation_group['labels'] = labels_array
+        
+        print(f"✅ Saved {len(accepted_indices)} annotated masks for run ID {run_id}")
+        print(f"   Discarded {total_masks - len(accepted_indices)} unannotated masks")
+        print(f"   Labels array shape: {labels_array.shape}")
     def load_masks_with_descriptions(self, run_id: str):
         """Load masks with their descriptions as a unified dictionary."""
         if not os.path.exists(self.save_path):
