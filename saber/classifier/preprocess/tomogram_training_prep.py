@@ -20,6 +20,7 @@ def segment(segmenter, vol, slab_thickness, zSlice):
     segmenter.segment_slab(
         vol, slab_thickness, display_image=False, zSlice=zSlice)
     (image0, masks_list) = (segmenter.image0, segmenter.masks)
+    masks_list = sorted(masks_list, key=lambda mask: mask['area'], reverse=True)
     
     # Convert Masks to Numpy Array
     masks = mask_filters.masks_to_array(masks_list)
@@ -66,13 +67,17 @@ def extract_sam2_candidates(
             
             # Save to a group with name: run.name + "_{index}"
             group_name = f"{run.name}_{i+1}"
-            zwriter.write(run_name=group_name, image=image_seg, masks=masks.astype(np.uint8))            
+            zwriter.write(
+                run_name=group_name, image=image_seg, 
+                masks=masks.astype(np.uint8), pixel_size=voxel_size)            
     else:
         zSlice = int(vol.shape[0] // 2)
         image_seg, masks = segment(segmenter, vol, slab_thickness, zSlice=zSlice)
 
         # Write Run to Zarr
-        zwriter.write(run_name=run.name, image=image_seg, masks=masks.astype(np.uint8))
+        zwriter.write(
+            run_name=run.name, image=image_seg, 
+            masks=masks.astype(np.uint8), pixel_size=voxel_size)
 
 @click.command(context_settings={"show_default": True})
 @slurm_submit.copick_commands
