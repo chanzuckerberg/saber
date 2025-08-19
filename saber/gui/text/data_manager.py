@@ -242,10 +242,10 @@ class TextAnnotationDataManager:
         try:
             zarr_root = zarr.open(self.save_path, mode='a')
             
-            # Ensure run group exists
+            # Ensure run group exists - create if it doesn't
             if run_id not in zarr_root:
-                print(f"Warning: Run {run_id} not found in save zarr. Cannot save annotations.")
-                return False
+                print(f"Creating new run group: {run_id}")
+                zarr_root.create_group(run_id)
             
             # Build run-specific annotation data
             run_annotations = {
@@ -354,6 +354,25 @@ class TextAnnotationDataManager:
         for idx in sorted(rejected_indices):
             if 0 <= idx < total_masks:
                 rejected_group[f'rejected_{idx}'] = segmentation_viewer.masks[idx].astype(np.uint8)
+        
+        # ---- Save consolidated labels array for compatibility ----
+        # Create a consolidated labels array with all accepted masks
+        if accepted_indices:
+            # Get the shape from the first mask
+            first_mask = segmentation_viewer.masks[0]
+            H, W = first_mask.shape
+            
+            # Create labels array with shape (num_accepted_masks, H, W)
+            labels_array = np.zeros((len(accepted_indices), H, W), dtype=np.uint8)
+            
+            for array_idx, mask_idx in enumerate(sorted(accepted_indices)):
+                labels_array[array_idx] = segmentation_viewer.masks[mask_idx].astype(np.uint8)
+            
+            # Save as 'labels' for compatibility with read_data method
+            segmentation_group['labels'] = labels_array
+            print(f"Saved consolidated 'labels' array with shape {labels_array.shape}")
+        else:
+            print("No accepted masks to save in 'labels' array")
     
     def load_masks_with_descriptions(self, run_id: str):
         """Load masks with their descriptions as a unified dictionary."""
