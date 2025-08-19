@@ -1,6 +1,6 @@
 """
-Controller for SAM2-ET text annotation UI.
-Handles UI state, event handling, and coordination between components.
+Controller for SAM2-ET text annotation UI with run-level annotations.
+Each run loads and saves its own annotations independently.
 """
 
 from PyQt5.QtCore import Qt, QTimer
@@ -62,7 +62,7 @@ class TextAnnotationController:
     
     # Event handlers
     def on_image_selected(self, item):
-        """Clean run switching with per-run session cache."""
+        """Switch runs with run-level annotation loading and session caching."""
         run_id = item.text()
 
         # Skip if same run ID
@@ -72,30 +72,151 @@ class TextAnnotationController:
         prev_run_id = getattr(self, '_current_run_id', None)
         print(f"Switching to run: {run_id}")
 
-        # 0) Stash current viewer state for the previous run (masks + accepted set)
+        # 1. Save current run's data before switching (if we have a previous run)
         if prev_run_id:
+            self.save_current_run_data()
+            # Stash current viewer state for session cache
             self.data_manager.stash_session_state(prev_run_id, self.segmentation_viewer)
 
-        # 1) Clear text/UI state
+        # 2. Clear UI state
         self.clear_all_ui_state()
 
-        # 2) Load masks for the new run (session cache if present, else saved augmented)
+        # 3. Load new run data with session fallback
         self._current_run_id = run_id
         base_image, masks_list, accepted = self.data_manager.read_with_session_fallback(run_id)
 
-        # 3) Rebuild viewer from scratch and apply accepted visibility
+        # 4. Fresh viewer state
         self.segmentation_viewer.load_data_fresh(base_image, masks_list)
-        # initialize_overlays() is called inside load_data_fresh()
+        # Set accepted masks from session or saved data
         self.segmentation_viewer.set_accepted_indices(accepted)
 
-        # 4) Load text for new run (no mask "restore" needed here)
-        self.load_fresh_text_data(run_id)
-
+        # 5. Load run-specific annotations
+        self.load_run_annotations(run_id)
+        
         print(f"Successfully switched to {run_id}")
     
+    def save_current_run_data(self):
+        """Save current run's data to memory and zarr."""
+        if not self._current_run_id:
+            return
+        
+        print(f"💾 Saving data for current run: {self._current_run_id}")
+        
+        # Save to memory
+        self.save_text_to_memory()
+        
+        # Save to zarr file
+        self.data_manager.save_run_annotations(self._current_run_id, self.hashtag_manager)
+    
+    def load_run_annotations(self, run_id: str):
+        """Load annotations for a specific run."""
+        print(f"📂 Loading annotations for run: {run_id}")
+        
+        # Load run-specific annotations from zarr attributes
+        success = self.data_manager.load_run_annotations(run_id, self.hashtag_manager)
+        
+        if success:
+            # Load text into UI
+            self.load_text_into_ui(run_id)
+            
+            # Auto-accept masks that have descriptions (if not already accepted from session)
+            self.restore_annotated_masks(run_id)
+            
+            # Update colors and hashtags
+            self.update_hashtags_and_colors_for_run(run_id)
+        else:
+            print(f"⚠️ No existing annotations found for {run_id}")
+            # Clear hashtags for this run since there's no data
+            self.hashtag_manager.clear_run_hashtags(run_id)
+            self.update_hashtags_and_colors_for_run(run_id)
+    
+    def load_text_into_ui(self, run_id: str):
+        """Load text data into UI widgets."""
+        # Disconnect to prevent cascading updates during load
+        self.global_desc_widget.textChanged.disconnect()
+        self.seg_desc_widget.textChanged.disconnect()
+        
+        try:
+            # Load global description
+            global_text = self.data_manager.global_descriptions.get(run_id, "")
+            self.global_desc_widget.set_text(global_text)
+            
+            print(f"📝 Loaded UI text for {run_id}")
+            if global_text:
+                print(f"   Global: '{global_text}'")
+            
+        finally:
+            # Reconnect signals
+            self.global_desc_widget.textChanged.connect(self.on_text_changed)
+            self.seg_desc_widget.textChanged.connect(self.on_text_changed)
+    
+    def restore_annotated_masks(self, run_id: str):
+        """Auto-accept masks that have descriptions (if not already accepted from session)."""
+        if run_id not in self.data_manager.segmentation_descriptions:
+            print(f"No segmentation descriptions found for {run_id}")
+            return
+        
+        descriptions = self.data_manager.segmentation_descriptions[run_id]
+        current_accepted = getattr(self.segmentation_viewer, 'accepted_masks', set())
+        
+        print(f"🎭 Checking {len(descriptions)} masks with descriptions for {run_id}")
+        print(f"   Already accepted from session: {len(current_accepted)} masks")
+        
+        # Only auto-accept masks that aren't already accepted
+        newly_accepted = 0
+        for seg_id_str, description in descriptions.items():
+            try:
+                seg_id = int(seg_id_str)
+                if seg_id not in current_accepted:
+                    self._accept_mask_in_viewer(seg_id)
+                    newly_accepted += 1
+            except (ValueError, IndexError) as e:
+                print(f"   ❌ Error accepting segmentation {seg_id_str}: {e}")
+    
+    def _accept_mask_in_viewer(self, seg_id: int):
+        """Accept a specific mask in the viewer (move from left to right panel)."""
+        if seg_id >= len(self.segmentation_viewer.masks):
+            print(f"Warning: seg_id {seg_id} >= number of masks {len(self.segmentation_viewer.masks)}")
+            return
+        
+        # Add to accepted masks
+        self.segmentation_viewer.accepted_masks.add(seg_id)
+        
+        # Update accepted stack for undo functionality
+        if hasattr(self.segmentation_viewer, 'accepted_stack'):
+            if seg_id not in self.segmentation_viewer.accepted_stack:
+                self.segmentation_viewer.accepted_stack.append(seg_id)
+        
+        # Make sure we have the overlay items
+        if (hasattr(self.segmentation_viewer, 'left_mask_items') and 
+            hasattr(self.segmentation_viewer, 'right_mask_items') and
+            seg_id < len(self.segmentation_viewer.left_mask_items) and
+            seg_id < len(self.segmentation_viewer.right_mask_items)):
+            
+            # Hide on left panel, show on right panel
+            self.segmentation_viewer.left_mask_items[seg_id].setVisible(False)
+            self.segmentation_viewer.right_mask_items[seg_id].setVisible(True)
+        else:
+            print(f"Warning: overlay items not properly initialized for mask {seg_id}")
+    
+    def update_hashtags_and_colors_for_run(self, run_id: str):
+        """Update hashtags and colors for the current run."""
+        print(f"🎨 Updating hashtags and colors for {run_id}")
+        
+        # Update hashtag UI
+        self.hashtag_manager.update_hashtag_list_widget(self.hashtag_widget.get_list_widget())
+        
+        # Update colors
+        self.update_colors_for_run(run_id)
+        
+        # Debug output
+        hashtag_count = sum(1 for hashtag, runs_data in self.hashtag_manager.hashtag_data.items() 
+                           if run_id in runs_data)
+        print(f"   📊 {hashtag_count} hashtags active for {run_id}")
+    
     def clear_all_ui_state(self):
-        """Immediately clear all UI state - assume data was saved."""
-        # Clear text widgets (don't save, assume it was already saved)
+        """Clear all UI state."""
+        # Clear text widgets
         self.global_desc_widget.textChanged.disconnect()
         self.seg_desc_widget.textChanged.disconnect()
         
@@ -114,62 +235,6 @@ class TextAnnotationController:
             # Reconnect after clearing
             self.global_desc_widget.textChanged.connect(self.on_text_changed)
             self.seg_desc_widget.textChanged.connect(self.on_text_changed)
-    
-    def load_fresh_text_data(self, run_id: str):
-        """Load text data for new run - keep hashtag colors, update content."""
-        # Disconnect to prevent cascading updates during load
-        self.global_desc_widget.textChanged.disconnect()
-        self.seg_desc_widget.textChanged.disconnect()
-        
-        try:
-            # Load global description for this run
-            global_text = self.data_manager.global_descriptions.get(run_id, "")
-            self.global_desc_widget.set_text(global_text)
-            
-            # Update hashtags for this run only
-            self.update_hashtags_for_run(run_id)
-            
-            # Update colors based on existing descriptions for this run
-            self.update_colors_for_run(run_id)
-            
-        finally:
-            # Reconnect signals
-            self.global_desc_widget.textChanged.connect(self.on_text_changed)
-            self.seg_desc_widget.textChanged.connect(self.on_text_changed)
-    
-    def restore_previously_annotated_masks(self, run_id: str):
-        """Restore previously annotated masks to the right panel with hashtag colors."""
-        # Load saved mask data
-        saved_masks_data = self.data_manager.load_masks_with_descriptions(run_id)
-        
-        if not saved_masks_data:
-            print(f"No previously annotated masks found for {run_id}")
-            return
-        
-        print(f"Restoring {len(saved_masks_data)} previously annotated masks for {run_id}")
-        
-        # Clear current accepted masks
-        self.segmentation_viewer.accepted_masks.clear()
-        
-        # Restore each previously annotated mask
-        for seg_key, mask_data in saved_masks_data.items():
-            seg_id = mask_data['segmentation_id']
-            
-            # Add to accepted masks
-            self.segmentation_viewer.accepted_masks.add(seg_id)
-            
-            # Make sure the right panel overlay is visible
-            if (hasattr(self.segmentation_viewer, 'right_mask_items') and 
-                seg_id < len(self.segmentation_viewer.right_mask_items)):
-                self.segmentation_viewer.right_mask_items[seg_id].setVisible(True)
-            
-            print(f"Restored segmentation {seg_id}: '{mask_data['description']}'")
-        
-        # Update the accepted stack (for undo functionality)
-        if hasattr(self.segmentation_viewer, 'accepted_stack'):
-            self.segmentation_viewer.accepted_stack = list(self.segmentation_viewer.accepted_masks)
-        
-        print(f"Successfully restored {len(saved_masks_data)} annotated masks for {run_id}")
     
     def on_segmentation_selected_from_viewer(self, segmentation_id: int):
         """Handle segmentation selection from the viewer."""
@@ -199,8 +264,8 @@ class TextAnnotationController:
         seg_desc.setdefault(str(mask_index), "")
     
     def select_segmentation(self, segmentation_id: int):
-        """Simple segmentation selection - no complex state management."""
-        # Save current text quickly
+        """Select a segmentation and load its description."""
+        # Save current text
         self.save_text_to_memory()
         
         # Clear previous selection
@@ -213,7 +278,7 @@ class TextAnnotationController:
         # Highlight
         self.add_selection_highlight(segmentation_id)
         
-        # Load description
+        # Load description for this segmentation
         current_run_id = self.get_current_run_id()
         if (current_run_id in self.data_manager.segmentation_descriptions and 
             str(segmentation_id) in self.data_manager.segmentation_descriptions[current_run_id]):
@@ -226,7 +291,7 @@ class TextAnnotationController:
         self.update_hashtags_for_run(current_run_id)
     
     def on_text_changed(self):
-        """Simple text change handler - just save and update colors."""
+        """Handle text changes."""
         self.save_text_to_memory()
         
         # Update colors with short delay
@@ -241,8 +306,8 @@ class TextAnnotationController:
         self.segmentation_viewer.clear_highlight()
     
     def update_hashtags_for_run(self, run_id: str):
-        """Update hashtags for specific run only."""
-        # Clear hashtags for this run only
+        """Update hashtags for specific run."""
+        # Clear hashtags for this run
         self.hashtag_manager.clear_run_hashtags(run_id)
         
         # Add hashtags from global description
@@ -273,7 +338,7 @@ class TextAnnotationController:
         self.segmentation_viewer.update_mask_colors(color_mapping)
     
     def update_segmentation_colors(self):
-        """Simple color update for current run."""
+        """Update colors for current run."""
         current_run_id = self.get_current_run_id()
         if current_run_id:
             self.update_colors_for_run(current_run_id)
@@ -292,18 +357,23 @@ class TextAnnotationController:
     
     # Action methods
     def save_segmentation(self, save_path: str = None):
-        """Save segmentation masks and text data."""
+        """Save segmentation masks and text data for current run."""
         if not save_path:
             print("\nCurrently in viewer mode.\nSave path is not set.")
             return False
         
-        # Save text data first
-        self.save_text_to_memory()
-        if not self.data_manager.save_text_data(self.hashtag_manager):
+        current_run_id = self.get_current_run_id()
+        if not current_run_id:
             return False
         
-        # Save segmentation data
-        current_run_id = self.get_current_run_id()
+        # Save current run's text data
+        self.save_text_to_memory()
+        
+        # Save run-specific annotations
+        if not self.data_manager.save_run_annotations(current_run_id, self.hashtag_manager):
+            return False
+        
+        # Save segmentation mask data
         if not self.data_manager.save_masks_data(self.segmentation_viewer, current_run_id):
             return False
         

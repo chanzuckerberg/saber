@@ -210,17 +210,20 @@ class HashtagSegmentationViewer(pg.GraphicsLayoutWidget):
     def initialize_overlays(self):
         """Create overlays for all masks (left shown, right hidden)."""
         for i, mask in enumerate(self.masks):
+            # Reverse z-order: later masks (smaller area) get higher z-values (appear on top)
+            z_value = len(self.masks) - i
+            
             left_item = pg.ImageItem(self.create_overlay_rgba(mask, i))
             left_item.setOpacity(0.4)
-            left_item.setZValue(i + 1)
-            left_item.setVisible(True)              # <— add this if missing
+            left_item.setZValue(z_value)  # Higher index = smaller area = higher z-value = on top
+            left_item.setVisible(True)
             self.left_view.addItem(left_item)
             self.left_mask_items.append(left_item)
 
             right_item = pg.ImageItem(self.create_overlay_rgba(mask, i))
             right_item.setOpacity(0.4)
-            right_item.setZValue(i + 1)
-            right_item.setVisible(False)            # keep this as-is (hidden by default)
+            right_item.setZValue(z_value)  # Same z-value for consistency
+            right_item.setVisible(False)
             self.right_view.addItem(right_item)
             self.right_mask_items.append(right_item)
 
@@ -252,12 +255,17 @@ class HashtagSegmentationViewer(pg.GraphicsLayoutWidget):
         return rgba
 
     def refresh_overlays(self):
-        """Refresh only visible mask overlays with current colors."""
+        """Refresh ALL mask overlays with current colors, regardless of visibility."""
         for i, mask in enumerate(self.masks):
-            if i < len(self.left_mask_items) and self.left_mask_items[i].isVisible():
+            # Update left panel overlay (whether visible or not)
+            if i < len(self.left_mask_items):
                 self.left_mask_items[i].setImage(self.create_overlay_rgba(mask, i))
-            if i < len(self.right_mask_items) and self.right_mask_items[i].isVisible():
+            
+            # Update right panel overlay (whether visible or not)  
+            if i < len(self.right_mask_items):
                 self.right_mask_items[i].setImage(self.create_overlay_rgba(mask, i))
+        
+        print(f"Updated colors for {len(self.masks)} masks on both panels")
 
     # ---------- Selection / Highlight ----------
 

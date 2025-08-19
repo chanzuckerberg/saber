@@ -11,9 +11,23 @@ class HashtagManager:
         self.hashtag_data = {}  # hashtag -> {run_id -> [segmentation_ids]}
         self.hashtag_colors = {}  # hashtag -> color
         self.predefined_colors = [
-            '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', 
-            '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9',
-            '#F8C471', '#82E0AA', '#F1948A', '#85C1E9', '#D7BDE2'
+            '#DC2626',  # Crimson Red
+            '#059669',  # Emerald Green  
+            '#2563EB',  # Royal Blue
+            '#7C3AED',  # Violet
+            '#EA580C',  # Orange Red
+            '#0891B2',  # Sky Blue
+            '#65A30D',  # Lime Green
+            '#C026D3',  # Fuchsia
+            '#92400E',  # Amber
+            '#BE185D',  # Pink
+            '#166534',  # Dark Green
+            '#7C2D12',  # Red Brown
+            '#581C87',  # Purple
+            '#0F766E',  # Teal
+            '#A21CAF',  # Magenta
+            '#B45309',  # Yellow
+            '#BE123C'   # Rose
         ]
     
     def extract_hashtags(self, text: str) -> Set[str]:

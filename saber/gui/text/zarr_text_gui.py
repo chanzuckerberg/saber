@@ -33,15 +33,15 @@ class TextAnnotationWindow(QMainWindow):
         self.hashtag_manager = HashtagManager()
         self.controller = TextAnnotationController(self.data_manager, self.hashtag_manager)
         
-        # Load existing data
-        self.data_manager.load_existing_text_data(self.hashtag_manager)
+        # Debug zarr contents
+        # self.data_manager.debug_zarr_contents()
         
         # Setup UI
         self.setup_ui()
         self.setup_segmentation_viewer()
         self.setup_connections()
         
-        # Load initial data
+        # Load initial data for the first run
         self.load_text_for_current_image()
 
     def setup_ui(self):
@@ -151,12 +151,13 @@ class TextAnnotationWindow(QMainWindow):
         self.segmentation_viewer.maskAdded.connect(self.controller.on_mask_added)
 
     def load_text_for_current_image(self):
-        """Simple initial load - just load text and update hashtags."""
+        """Load text and annotations for the currently selected run."""
         current_run_id = self.controller.get_current_run_id()
         if not current_run_id:
             return
         
-        self.controller.load_fresh_text_data(current_run_id)
+        print(f"🚀 Initial load for run: {current_run_id}")
+        self.controller.load_run_annotations(current_run_id)
 
     def save_segmentation(self):
         """Save segmentation masks and text data."""
