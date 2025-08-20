@@ -52,7 +52,8 @@ class TextAnnotationController:
         # Segmentation viewer callbacks
         self.segmentation_viewer.set_selection_callbacks(
             selection_callback=self.on_segmentation_selected_from_viewer,
-            deselection_callback=self.on_segmentation_deselected_from_viewer
+            deselection_callback=self.on_segmentation_deselected_from_viewer,
+            description_deletion_callback=self.on_description_deletion_requested  # Add this line
         )
     
     def get_current_run_id(self) -> str:
@@ -129,6 +130,35 @@ class TextAnnotationController:
             # Clear hashtags for this run since there's no data
             self.hashtag_manager.clear_run_hashtags(run_id)
             self.update_hashtags_and_colors_for_run(run_id)
+
+    def on_description_deletion_requested(self, mask_id: int):
+        """Handle request to delete description for a specific mask."""
+        current_run_id = self.get_current_run_id()
+        if not current_run_id:
+            print("No current run ID - cannot delete description")
+            return
+        
+        # Remove from segmentation descriptions
+        if (current_run_id in self.data_manager.segmentation_descriptions and 
+            str(mask_id) in self.data_manager.segmentation_descriptions[current_run_id]):
+            
+            del self.data_manager.segmentation_descriptions[current_run_id][str(mask_id)]
+            
+            # Clean up empty entries
+            if not self.data_manager.segmentation_descriptions[current_run_id]:
+                del self.data_manager.segmentation_descriptions[current_run_id]
+            
+            # Clear the UI text if this is the currently selected mask
+            if self.current_selected_id == mask_id:
+                self.seg_desc_widget.set_text("")
+            
+            # Update hashtags and colors for this run
+            self.update_hashtags_and_colors_for_run(current_run_id)
+            
+            print(f"✅ Deleted description for mask {mask_id} in run {current_run_id}")
+        else:
+            print(f"⚠️ No description found for mask {mask_id} in run {current_run_id}")
+
     
     def load_text_into_ui(self, run_id: str):
         """Load text data into UI widgets."""

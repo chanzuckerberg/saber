@@ -378,30 +378,22 @@ class HashtagSegmentationViewer(pg.GraphicsLayoutWidget):
 
     def keyPressEvent(self, event):
         """
-        Revert the currently selected/highlighted mask.
-        Press 'r' => revert the currently selected/highlighted mask
+        Delete the description of the currently selected/highlighted mask.
+        Press 'r' => delete the description of the currently selected/highlighted mask
         """
         key = event.key()
         if key == QtCore.Qt.Key_R:
             print(f"Selected mask ID: {self.selected_mask_id}")
             if self.selected_mask_id is not None:
                 mask_id = self.selected_mask_id
-                if (mask_id in self.accepted_masks and
-                    mask_id < len(self.right_mask_items) and
-                    self.right_mask_items[mask_id].isVisible()):
-                    # Remove from accepted
-                    self.accepted_masks.remove(mask_id)
-                    if mask_id in self.accepted_stack:
-                        self.accepted_stack.remove(mask_id)
-                    # Show on left, hide on right
-                    self.right_mask_items[mask_id].setVisible(False)
-                    self.left_mask_items[mask_id].setVisible(True)
-                    self.clear_highlight()
-                    self.signal_segmentation_deselected()
-                    print(f"Reverted selected mask {mask_id}: hidden on right, shown on left.")
-                    print(f"Current accepted masks: {self.accepted_masks}")
+                # Signal to controller to delete the description for this mask
+                if hasattr(self, 'description_deletion_callback') and self.description_deletion_callback:
+                    self.description_deletion_callback(mask_id)
+                    print(f"Deleted description for mask {mask_id}")
                 else:
-                    print(f"Selected mask {mask_id} is not currently accepted, cannot revert.")
+                    print(f"No description deletion callback set for mask {mask_id}")
+            else:
+                print("No mask selected - cannot delete description")
 
     # ---------- Click handling (unchanged left-click accept behavior) ----------
 
@@ -509,11 +501,11 @@ class HashtagSegmentationViewer(pg.GraphicsLayoutWidget):
         if hasattr(self, 'deselection_callback') and self.deselection_callback:
             self.deselection_callback()
 
-    def set_selection_callbacks(self, selection_callback=None, deselection_callback=None):
-        """Set callback functions for when segmentations are selected/deselected."""
+    def set_selection_callbacks(self, selection_callback=None, deselection_callback=None, description_deletion_callback=None):
+        """Set callback functions for when segmentations are selected/deselected/descriptions deleted."""
         self.selection_callback = selection_callback
         self.deselection_callback = deselection_callback
-        
+        self.description_deletion_callback = description_deletion_callback
 
     # ---------- Right-drag circle (LEFT panel) ----------
 
