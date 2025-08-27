@@ -20,7 +20,7 @@ def segment(segmenter, vol, slab_thickness, zSlice):
     segmenter.segment_slab(
         vol, slab_thickness, display_image=False, zSlice=zSlice)
     (image0, masks_list) = (segmenter.image0, segmenter.masks)
-    masks_list = sorted(masks_list, key=lambda mask: mask['area'], reverse=True)
+    masks_list = sorted(masks_list, key=lambda mask: mask['area'], reverse=False)
     
     # Convert Masks to Numpy Array
     masks = mask_filters.masks_to_array(masks_list)
