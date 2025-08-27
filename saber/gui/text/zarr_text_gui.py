@@ -114,7 +114,11 @@ class TextAnnotationWindow(QMainWindow):
         """Initialize and setup the segmentation viewer."""
         # Use session-or-saved augmented loader for the first run as well
         first_run = self.data_manager.run_ids[0]
-        initial_image, initial_masks, accepted = self.data_manager.read_with_session_fallback(first_run)
+        try:
+            initial_image, initial_masks, accepted = self.data_manager.read_with_session_fallback(first_run)
+        except Exception as e:
+            print(f"Error reading data for run {first_run}: {e}")
+            initial_image, initial_masks, accepted = self.data_manager.read_data(self.data_manager.run_ids[1])
 
         self.segmentation_viewer = HashtagSegmentationViewer(initial_image, initial_masks)
         self.segmentation_viewer.initialize_overlays()
