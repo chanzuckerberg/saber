@@ -51,6 +51,15 @@ gui = [
 materials = [
     "hyperspy"
 ]
+web = [
+    "flask>=2.0.0",
+    "flask-cors>=3.0.0",
+    "dask[complete]>=2023.1.0",
+    "distributed>=2023.1.0",
+    "tornado>=6.0.0",
+    "msgpack>=1.0.0",
+    "cloudpickle>=2.0.0",
+]
 
 [tool.hatch.metadata]
 allow-direct-references = true

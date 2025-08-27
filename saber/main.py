@@ -12,7 +12,14 @@ try:
     gui_available = True
 except Exception as e:
     print(e)
-    gui_available = False
+    web_available = False
+
+try: 
+    from saber.gui.web.main import main as web
+    web_available = True
+except Exception as e:
+    print(e)
+    web_available = False
 
 @click.group()
 def routines():
@@ -26,6 +33,8 @@ routines.add_command(classifier)
 if gui_available: 
     routines.add_command(gui)
     routines.add_command(text_gui)
+if web_available:
+    routines.add_command(web)
 routines.add_command(segment)
 routines.add_command(save)
 
