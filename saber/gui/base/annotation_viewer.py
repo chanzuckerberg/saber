@@ -152,6 +152,11 @@ class AnnotationSegmentationViewer(SegmentationViewer):
     
     def mouse_clicked(self, event):
         """Handle mouse clicks to accept masks or toggle selection"""
+        # Don't allow any selections if no class is selected
+        if not self.selected_class or self.selected_class not in self.class_dict:
+            print("No class selected - please add and select a class first")
+            return
+            
         scene_pos = event.scenePos()
         
         # Check if click is in left or right view

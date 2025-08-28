@@ -3,13 +3,11 @@ from PyQt5.QtWidgets import (
     QVBoxLayout, QPushButton, QHBoxLayout, QLabel, QComboBox, QMessageBox,
     QLineEdit, QListWidgetItem, QInputDialog, QColorDialog, QFileDialog
 )
+from saber.gui.base.annotation_viewer import AnnotationSegmentationViewer
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QColor, QIcon, QPixmap
 import sys, zarr, click, json, os
 import numpy as np
-from datetime import datetime
-from saber.gui.base.annotation_viewer import AnnotationSegmentationViewer
-
 
 class ClassManagerWidget(QWidget):
     """Widget for managing segmentation classes dynamically"""
@@ -22,6 +20,7 @@ class ClassManagerWidget(QWidget):
         super().__init__(parent)
         self.class_dict = {}
         self.selected_class = None
+        self.used_color_indices = set()  # Track which color indices are in use
         self.init_ui()
         
     def init_ui(self):
@@ -55,13 +54,18 @@ class ClassManagerWidget(QWidget):
         self.add_default_class()
     
     def add_default_class(self):
-        """Add a default 'object' class"""
-        default_name = "object"
-        color = self.get_next_color(0)
-        self.add_class_to_dict(default_name, color)
+        """Don't add any default classes - users must create their own"""
+        pass  # No default class
+    
+    def get_next_available_color_index(self):
+        """Get the lowest available color index that's not in use"""
+        index = 0
+        while index in self.used_color_indices:
+            index += 1
+        return index
     
     def get_next_color(self, index):
-        """Get the next color from the TAB10 colormap"""
+        """Get the color for a specific index from the TAB10 colormap"""
         TAB10_COLORS = [
             (31, 119, 180),   # blue
             (255, 127, 14),   # orange
@@ -90,17 +94,24 @@ class ClassManagerWidget(QWidget):
             QMessageBox.warning(self, "Warning", f"Class '{class_name}' already exists.")
             return
         
-        # Get the next color automatically
-        color = self.get_next_color(len(self.class_dict))
+        # Get the next available color index
+        color_index = self.get_next_available_color_index()
+        color = self.get_next_color(color_index)
         
-        self.add_class_to_dict(class_name, color)
+        self.add_class_to_dict(class_name, color, color_index)
         self.class_input.clear()
     
-    def add_class_to_dict(self, class_name, color):
+    def add_class_to_dict(self, class_name, color, color_index=None):
         """Add class to internal dictionary and update UI"""
+        if color_index is None:
+            color_index = self.get_next_available_color_index()
+        
+        self.used_color_indices.add(color_index)
+        
         self.class_dict[class_name] = {
-            'value': len(self.class_dict) + 1,
+            'value': color_index + 1,  # Store the actual color index + 1
             'color': color,
+            'color_index': color_index,  # Store the color index for reference
             'masks': []
         }
         
@@ -131,11 +142,15 @@ class ClassManagerWidget(QWidget):
         )
         
         if reply == QMessageBox.Yes:
-            del self.class_dict[class_name]
-            self.class_list.takeItem(self.class_list.row(current_item))
+            # Free up the color index
+            color_index = self.class_dict[class_name]['color_index']
+            self.used_color_indices.discard(color_index)
             
-            for i, name in enumerate(self.class_dict.keys()):
-                self.class_dict[name]['value'] = i + 1
+            # Remove from dictionary
+            del self.class_dict[class_name]
+            
+            # Remove from list
+            self.class_list.takeItem(self.class_list.row(current_item))
             
             self.classRemoved.emit(class_name)
             
@@ -177,7 +192,7 @@ class MainWindow(QMainWindow):
         # ALL run_ids start with empty annotations
         self.annotations = {run_id: {} for run_id in self.run_ids}
         
-        self.setWindowTitle("SAM2-ET Dynamic Annotation GUI")
+        self.setWindowTitle("Saber Annotation GUI")
         
         # Create the main splitter
         self.main_splitter = QSplitter(Qt.Horizontal, self)
@@ -222,8 +237,8 @@ class MainWindow(QMainWindow):
         # Export/Import buttons
         bottom_layout = QHBoxLayout()
         
-        self.export_json_btn = QPushButton("Save Annotations")
-        self.import_json_btn = QPushButton("Load Annotations")
+        self.export_json_btn = QPushButton("Export Annotations to JSON")
+        self.import_json_btn = QPushButton("Import Annotations from JSON")
         
         bottom_layout.addWidget(self.import_json_btn)
         bottom_layout.addWidget(self.export_json_btn)
@@ -254,25 +269,40 @@ class MainWindow(QMainWindow):
     def on_class_added(self, class_name, class_info):
         """Handle class addition"""
         self.segmentation_viewer.class_dict = self.class_manager.get_class_dict()
-        print(f"Added class: {class_name}")
     
     def on_class_removed(self, class_name):
-        """Handle class removal - remove all annotations for this class"""
+        """Handle class removal - move all masks of this class back to left panel"""
+        # Remove all annotations for this class across all runs
         for run_id in self.annotations:
             masks_to_remove = [
-                mask_idx for mask_idx, cls in self.annotations[run_id].items() 
+                mask_idx for mask_idx, cls in list(self.annotations[run_id].items())
                 if cls == class_name
             ]
             for mask_idx in masks_to_remove:
                 del self.annotations[run_id][mask_idx]
         
+        # Update viewer's class dict with new color assignments
         self.segmentation_viewer.class_dict = self.class_manager.get_class_dict()
-        print(f"Removed class: {class_name} and all its annotations")
-    
+        
+        # Force a complete reload of the current view to reset masks properly
+        current_item = self.image_list.currentItem()
+        if current_item:
+            run_id = current_item.text()
+            try:
+                base_image, masks = self.read_data(run_id)
+                # Reload with fresh class dict and cleared annotations for deleted class
+                self.segmentation_viewer.load_data(
+                    base_image, 
+                    masks, 
+                    self.class_manager.get_class_dict(),
+                    run_id
+                )
+            except Exception as e:
+                print(f"Error reloading after class removal: {e}")
+
     def on_class_selected(self, class_name):
         """Handle class selection"""
         self.segmentation_viewer.selected_class = class_name
-        print(f"Selected class: {class_name}")
     
     def read_data(self, run_id):
         """Read the base image and segmentation masks for a given run ID"""
@@ -307,8 +337,6 @@ class MainWindow(QMainWindow):
             run_id  # Pass the run_id
         )
         
-        print(f"Loaded run {run_id}, annotations: {self.annotations[run_id]}")
-    
     def export_annotations(self):
         """Export annotations to JSON file"""
         filepath, _ = QFileDialog.getSaveFileName(
@@ -322,7 +350,6 @@ class MainWindow(QMainWindow):
                 json.dump(self.annotations, f, indent=2)
             
             QMessageBox.information(self, "Success", f"Annotations saved to {filepath}")
-            print(f"Exported annotations to: {filepath}")
     
     def import_annotations(self):
         """Import annotations from JSON file"""
@@ -357,20 +384,35 @@ class MainWindow(QMainWindow):
                 self.on_image_selected(current_item)
             
             QMessageBox.information(self, "Success", f"Annotations loaded from {filepath}")
-            print(f"Imported annotations from: {filepath}")
     
     def keyPressEvent(self, event):
         """Handle key press events"""
         current_row = self.image_list.currentRow()
         
-        if event.key() == Qt.Key_Left:
+        if event.key() == Qt.Key_Left or event.key() == Qt.Key_A:
             new_row = current_row - 1
             self.load_next_runID(new_row)
-        elif event.key() == Qt.Key_Right:
+        elif event.key() == Qt.Key_Right or event.key() == Qt.Key_D:
             new_row = current_row + 1
             self.load_next_runID(new_row)
-        elif event.key() == Qt.Key_S:
-            self.export_annotations()
+        elif event.key() == Qt.Key_Up or event.key() == Qt.Key_W:
+            # Move up in the class list
+            current_class_row = self.class_manager.class_list.currentRow()
+            if current_class_row > 0:
+                self.class_manager.class_list.setCurrentRow(current_class_row - 1)
+                new_item = self.class_manager.class_list.currentItem()
+                if new_item:
+                    self.class_manager.on_class_selected(new_item)
+        elif event.key() == Qt.Key_Down or event.key() == Qt.Key_S:
+            # Move down in the class list
+            current_class_row = self.class_manager.class_list.currentRow()
+            if current_class_row < self.class_manager.class_list.count() - 1:
+                self.class_manager.class_list.setCurrentRow(current_class_row + 1)
+                new_item = self.class_manager.class_list.currentItem()
+                if new_item:
+                    self.class_manager.on_class_selected(new_item)
+        # elif event.key() == Qt.Key_S:
+        #     self.export_annotations()
         else:
             super().keyPressEvent(event)
     
@@ -390,19 +432,20 @@ class MainWindow(QMainWindow):
     def show_welcome_message(self):
         """Displays a welcome message"""
         message = (
-            "Welcome to the Dynamic SAM2-ET Annotation GUI!\n\n"
+            "Welcome to the Saber Annotation GUI!\n\n"
             "Quick Tutorial:\n"
             "1. **Managing Classes**:\n"
             "   - Add new classes using the panel on the right\n"
             "   - Each class gets a unique color automatically\n\n"
             "2. **Navigating Images**:\n"
-            "   - Use Left/Right Arrow Keys to navigate\n\n"
+            "   - Use Left/Right or (A/D) Arrow Keys to navigate\n\n"
             "3. **Annotating**:\n"
             "   - Select a class from the right panel\n"
             "   - Click on masks to assign them to the class\n"
             "   - Press 'R' to undo last assignment\n\n"
+            "   - Press 'W' or 'S' keys to navigate the class list\n\n"
             "4. **Saving**:\n"
-            "   - Press 'S' or click 'Export' to save as JSON\n"
+            "   - Click 'Export' to save as JSON\n"
             "   - Import previous annotations to continue work\n"
         )
         
@@ -417,7 +460,7 @@ class MainWindow(QMainWindow):
               help="Path to the input Zarr file.")
 def gui(input: str):
     """
-    Dynamic GUI for annotating SAM2 segmentations with custom classes.
+    Saber GUI for annotating SAM2 segmentations with custom classes.
     """
     app = QApplication(sys.argv)
     main_window = MainWindow(input)
