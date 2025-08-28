@@ -140,15 +140,15 @@ def add_attributes(zarr_group: zarr.Group, voxel_size: float = 1.0, is_3d: bool 
     """
     if is_3d:
         axes = [
-            {"name": "z", "type": "space", "unit": "angstrom"},
-            {"name": "y", "type": "space", "unit": "angstrom"},
-            {"name": "x", "type": "space", "unit": "angstrom"}
+            {"name": "z", "type": "space", "unit": "nanometer"},
+            {"name": "y", "type": "space", "unit": "nanometer"},
+            {"name": "x", "type": "space", "unit": "nanometer"}
         ]
         scale = [1.0, voxel_size, voxel_size]
     else:
         axes = [
-            {"name": "y", "type": "space", "unit": "angstrom"},
-            {"name": "x", "type": "space", "unit": "angstrom"}
+            {"name": "y", "type": "space", "unit": "nanometer"},
+            {"name": "x", "type": "space", "unit": "nanometer"}
         ]
         scale = [voxel_size, voxel_size]
     
