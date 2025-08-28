@@ -153,6 +153,10 @@ def segment_micrograph_core(
     segmenter.segment( image, display_image=False, use_sliding_window=use_sliding_window )
     (image0, masks_list) = (segmenter.image0, segmenter.masks)
 
+    # Convert any numpy array/scalar to Python scalar
+    if isinstance(pixel_size, np.ndarray):
+        pixel_size = pixel_size.item()    
+
     # Convert Masks to Numpy Array
     masks = mask_filters.masks_to_array(masks_list)
 
