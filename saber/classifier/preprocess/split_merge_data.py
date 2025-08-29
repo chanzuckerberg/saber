@@ -58,12 +58,14 @@ def split(
     print('Copying data to train zarr file...')
     for key in train_keys:
         train_zarr.create_group(key)  # Explicitly create the group first
+        copy_attributes(zfile[key], train_zarr[key])
         for item in items:
             train_zarr[key][item] = zfile[key][item][:]  # [:] ensures a full copy
     
     print('Copying data to validation zarr file...')
     for key in val_keys:
         val_zarr.create_group(key)  # Explicitly create the group first
+        copy_attributes(zfile[key], train_zarr[key])
         for item in items:
             val_zarr[key][item] = zfile[key][item][:]  # [:] ensures a full copy
     
@@ -115,14 +117,28 @@ def merge(inputs: List[str], output: str):
         # Copy data to new zarr files
         items = ['image', 'masks', 'rejected_masks']
         for key in keys:
+            # write_key = session_label + '_' + key
+            # mergedZarr.create_group(write_key)  # Explicitly create the group first
+            # for item in items:
+            #     mergedZarr[write_key][item] = zfile[key][item][:]  # [:] ensures a full copy
+            
             write_key = session_label + '_' + key
-            mergedZarr.create_group(write_key)  # Explicitly create the group first
+            
+            # Create the group and copy its attributes
+            new_group = mergedZarr.create_group(write_key)  # Explicitly create the group first
+            
+            copy_attributes(zfile[key], new_group)
             for item in items:
-                mergedZarr[write_key][item] = zfile[key][item][:]  # [:] ensures a full copy
+                try:
+                    # [:] ensures a full copy
+                    mergedZarr[write_key][item] = zfile[key][item][:] 
+                except Exception as e:
+                    pass
+    print("Merge complete!")
 
-    # Copy all attributes from the last input zarr file
-    for attr_name, attr_value in zfile.attrs.items():
-        mergedZarr.attrs[attr_name] = attr_value
+    # # Copy all attributes from the last input zarr file
+    # for attr_name, attr_value in zfile.attrs.items():
+    #     mergedZarr.attrs[attr_name] = attr_value
 
     print("Merge complete!")
 
@@ -166,6 +182,16 @@ def check_inputs(inputs: List[str]):
                 f"Zarr file does not exist: '{zarr_path}'"
             )
 
+def copy_attributes(source, destination):
+    """
+    Copy all attributes from source zarr object to destination zarr object.
+    
+    Args:
+        source: Source zarr group/array with attributes to copy
+        destination: Destination zarr group/array to copy attributes to
+    """
+    if hasattr(source, 'attrs') and source.attrs:
+        destination.attrs.update(source.attrs)
 
 if __name__ == '__main__':
     cli()
