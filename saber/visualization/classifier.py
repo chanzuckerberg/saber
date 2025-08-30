@@ -3,7 +3,7 @@ from matplotlib.colors import ListedColormap
 import matplotlib.pyplot as plt
 import numpy as np
 
-def display_mask_list(image: np.ndarray, masks: list):
+def display_mask_list(image: np.ndarray, masks: list, save_button: bool = False):
     """
     Display a list of masks in a single image.
     """
@@ -26,9 +26,9 @@ def display_mask_list(image: np.ndarray, masks: list):
         masks = _masks_to_array(masks)
 
         # Display the Masks
-        display_mask_array(image, masks)
+        display_mask_array(image, masks, save_button)
 
-def display_mask_array(image: np.ndarray, masks: np.ndarray):
+def display_mask_array(image: np.ndarray, masks: np.ndarray, save_button: bool = False):
     colors = get_colors()
     
     # Create figure with extra space for widgets
@@ -43,21 +43,23 @@ def display_mask_array(image: np.ndarray, masks: np.ndarray):
     ax_img.imshow(masks, cmap=cmap, alpha=0.6)
     ax_img.axis('off')
     
-    # Text input box
-    ax_textbox = plt.axes([0.3, 0.05, 0.5, 0.04])
-    textbox = TextBox(ax_textbox, 'Filename: ', 
-                     initial=f'saber_segmentation.png')
-    
-    # Save button
-    ax_button = plt.axes([0.75, 0.05, 0.1, 0.04])
-    button = Button(ax_button, 'Save')
-    
-    # Status text
-    ax_status = plt.axes([0.8, 0.05, 0.15, 0.04])
-    ax_status.axis('off')
-    
-    # Connect the button to the external save function
-    button.on_clicked(lambda event: save_image(fig, ax_img, masks, textbox, ax_status))
+    # (Optional) Add Save Button and Textbox
+    if save_button:
+        # Text input box
+        ax_textbox = plt.axes([0.3, 0.05, 0.5, 0.04])
+        textbox = TextBox(ax_textbox, 'Filename: ', 
+                        initial=f'saber_segmentation.png')
+        
+        # Save button
+        ax_button = plt.axes([0.75, 0.05, 0.1, 0.04])
+        button = Button(ax_button, 'Save')
+        
+        # Status text
+        ax_status = plt.axes([0.8, 0.05, 0.15, 0.04])
+        ax_status.axis('off')
+        
+        # Connect the button to the external save function
+        button.on_clicked(lambda event: save_image(fig, ax_img, masks, textbox, ax_status))
     
     plt.show()
 

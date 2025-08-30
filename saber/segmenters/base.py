@@ -92,6 +92,9 @@ class saber2Dsegmenter:
         # Initialize Image and Masks
         self.image = None
 
+        # Internal Variable to Let Users Save Segmentations 
+        self.save_button = False
+
     @torch.inference_mode()
     def segment_image(self,
         display_image: bool = True,
@@ -160,7 +163,7 @@ class saber2Dsegmenter:
 
         # Optional: Save Save Segmentation to PNG or Plot Segmentation with Matplotlib
         if display_image:
-            viz.display_mask_list(self.image, self.masks)
+            viz.display_mask_list(self.image, self.masks, self.save_button)
 
         # Return the Masks
         return self.masks  

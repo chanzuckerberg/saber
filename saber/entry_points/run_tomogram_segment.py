@@ -53,6 +53,7 @@ def slab(
         classifier=predictor,         # if you have a classifier; otherwise, leave as None
         target_class=target_class     # desired target class if using a classifier
     )
+    segmenter.save_button = True
 
     # For 2D segmentation, call segment_image
     masks = segmenter.segment_slab(vol, slab_thickness, display_image=True)
