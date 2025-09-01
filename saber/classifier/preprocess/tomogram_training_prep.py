@@ -50,6 +50,9 @@ def extract_sam2_candidates(
         print('No Tomogram Found for Run: ', run.name)
         return
     
+    # Hard coded conversion from Angstroms to nanometers
+    voxel_size = voxel_size * 10
+    
     # Process Multiple Slabs or Single Slab at the Center of the Volume
     if multiple_slabs > 1:
         
@@ -79,7 +82,7 @@ def extract_sam2_candidates(
             run_name=run.name, image=image_seg, 
             masks=masks.astype(np.uint8), pixel_size=voxel_size)
 
-@click.command(context_settings={"show_default": True})
+@click.command(context_settings={"show_default": True}, name='prep3d')
 @slurm_submit.copick_commands
 @slurm_submit.sam2_inputs
 @click.option('--output', type=str, required=False, help="Path to the output Zarr file.", 

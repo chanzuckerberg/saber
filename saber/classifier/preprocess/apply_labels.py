@@ -154,7 +154,7 @@ class SABERLabelConverter:
             # Save rejected masks
             if len(rejected_masks) > 0:
                 labels_group.create_dataset(
-                    'rejected_masks',
+                    'rejected_labels',
                     data=rejected_masks,
                     dtype=np.uint8,
                     compressor=zarr.Blosc(cname='zstd', clevel=2, shuffle=2)
@@ -162,7 +162,7 @@ class SABERLabelConverter:
             else:
                 # Empty array if no rejected masks
                 group.create_dataset(
-                    'rejected_masks',
+                    'rejected_labels',
                     data=np.array([]),
                     dtype=np.uint8
                 )

@@ -25,7 +25,7 @@ def micrograph_options(func):
         func = option(func)
     return func
 
-@click.command(context_settings={"show_default": True})
+@click.command(context_settings={"show_default": True}, name='prep2d')
 @micrograph_options
 @slurm_submit.sam2_inputs
 def prepare_micrograph_training(
