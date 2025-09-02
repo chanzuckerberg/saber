@@ -54,7 +54,7 @@ def split(
         val_zarr.attrs[attr_name] = attr_value
     
     # Copy data to new zarr files
-    items = ['image', 'masks', 'rejected_masks']
+    items = ['0', 'labels/0', 'labels/rejected']
     print('Copying data to train zarr file...')
     for key in train_keys:
         train_zarr.create_group(key)  # Explicitly create the group first
@@ -65,7 +65,7 @@ def split(
     print('Copying data to validation zarr file...')
     for key in val_keys:
         val_zarr.create_group(key)  # Explicitly create the group first
-        copy_attributes(zfile[key], train_zarr[key])
+        copy_attributes(zfile[key], val_zarr[key])
         for item in items:
             val_zarr[key][item] = zfile[key][item][:]  # [:] ensures a full copy
     
@@ -115,7 +115,7 @@ def merge(inputs: List[str], output: str):
         keys = list(zfile.keys())
 
         # Copy data to new zarr files
-        items = ['image', 'masks', 'rejected_masks']
+        items = ['0', 'labels/0', 'labels/rejected']
         for key in keys:
             # write_key = session_label + '_' + key
             # mergedZarr.create_group(write_key)  # Explicitly create the group first
