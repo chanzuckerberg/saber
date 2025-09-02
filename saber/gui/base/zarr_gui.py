@@ -341,7 +341,7 @@ class MainWindow(QMainWindow):
         """Export annotations to JSON file"""
         filepath, _ = QFileDialog.getSaveFileName(
             self, "Save Annotations", 
-            f"training.json",
+            f"labels.json",
             "JSON Files (*.json)"
         )
         

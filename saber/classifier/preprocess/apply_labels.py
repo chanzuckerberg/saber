@@ -59,6 +59,30 @@ class SABERLabelConverter:
         
         return mapping
     
+    def extract_mask_values(self, masks_3d: np.ndarray) -> Dict[float, np.ndarray]:
+        """
+        Extract individual masks and their associated values.
+        
+        For 3D mask arrays, tries to determine the unique value for each mask.
+        Returns a dict mapping mask_value -> mask_array
+        """
+        mask_dict = {}
+        
+        for i, mask in enumerate(masks_3d):
+            # Get unique non-zero values in this mask
+            unique_vals = np.unique(mask[mask > 0])
+            
+            if len(unique_vals) > 0:
+                # Use the first (or most common) non-zero value as the mask's ID
+                mask_value = float(unique_vals[0])
+            else:
+                # If mask is binary or empty, use index+1 as value
+                mask_value = float(i + 1)
+            
+            mask_dict[mask_value] = mask
+        
+        return mask_dict
+    
     def convert(self, 
                sam2_zarr_path: Path,
                json_path: Path,
@@ -111,23 +135,28 @@ class SABERLabelConverter:
             masks0 = sam2_data[run_id]['labels']['0'][:]
             nMasks = masks0.shape[0]
             masks = np.zeros((len(labels), nx, ny), dtype=np.uint8)
-            used_mask_indices = set()
-            for seg_index, label in annotations.items():
+            used_mask_values = set()
+
+            # Extract mask values and create mapping
+            mask_value_to_array = self.extract_mask_values(masks0)
+
+            for seg_value, label in annotations.items():
                 # Skip labels that were excluded from the mapping
                 if label not in label_mapping:
                     continue
                 # Add mask to the corresponding class
+                mask_array = mask_value_to_array[float(seg_value)]
                 masks[label_mapping[label],] = np.logical_or(
                         masks[label_mapping[label],], 
-                        masks0[int(seg_index),]
+                        mask_array
                     ).astype(np.uint8)
-                used_mask_indices.add(int(seg_index))
+                used_mask_values.add(float(seg_value))
 
             # Get rejected masks (masks not assigned to any class)
             rejected_masks = []
-            for mask_idx in range(nMasks):
-                if mask_idx not in used_mask_indices:
-                    rejected_masks.append(sam2_masks[mask_idx])
+            for mask_value, mask_array in mask_value_to_array.items():
+                if mask_value not in used_mask_values:
+                    rejected_masks.append(mask_array)
             
             # Create group for this run_id - Save image
             group = root.create_group(run_id)

@@ -8,19 +8,41 @@ from typing import Dict, List, Optional
 
 class AnnotationSegmentationViewer(SegmentationViewer):
     """
-    A segmentation viewer that tracks annotations internally.
-    Simplified version that directly manages the annotation dictionary.
+    A segmentation viewer that tracks annotations by mask values instead of indices.
     """
     
     def __init__(self, image, masks, class_dict, selected_class, annotations_dict, current_run_id):
         """
         :param image: 2D numpy array (Nx, Ny) - the background image
-        :param masks: List of 2D masks
+        :param masks: 3D array where masks[i] is the i-th mask, OR
+                      2D array where each unique value represents a different mask
         :param class_dict: Dictionary storing class metadata
         :param selected_class: Currently selected class
         :param annotations_dict: Reference to the main annotations dictionary
         :param current_run_id: Current run ID being viewed
         """
+        # First, determine if masks is a 2D label map or 3D stack of binary masks
+        if len(masks.shape) == 2:
+            # It's a 2D label map - extract individual masks
+            self.mask_values = np.unique(masks[masks > 0])  # Get all non-zero values
+            self.extracted_masks = []
+            for val in self.mask_values:
+                self.extracted_masks.append((masks == val).astype(np.float32))
+            masks = self.extracted_masks
+        elif len(masks.shape) == 3:
+            # It's already a stack of masks - extract their values
+            # Assuming each mask might have a unique value or we assign values based on index
+            self.mask_values = []
+            for i, mask in enumerate(masks):
+                # Try to find the unique non-zero value in this mask
+                unique_vals = np.unique(mask[mask > 0])
+                if len(unique_vals) > 0:
+                    # Use the first non-zero value as the mask's ID
+                    self.mask_values.append(unique_vals[0])
+                else:
+                    # If mask is binary, assign value based on index
+                    self.mask_values.append(i + 1)
+        
         super().__init__(image, masks)
         
         self.class_dict = class_dict
@@ -28,12 +50,16 @@ class AnnotationSegmentationViewer(SegmentationViewer):
         self.annotations_dict = annotations_dict  # Direct reference to main annotations
         self.current_run_id = current_run_id
         
+        # Create a mapping from mask index to mask value
+        self.index_to_value = {i: val for i, val in enumerate(self.mask_values)}
+        self.value_to_index = {val: i for i, val in enumerate(self.mask_values)}
+        
         # Store boundary items for each mask
         self.left_boundary_items = []
         self.right_boundary_items = []
         
-        # Track which mask is currently highlighted
-        self.highlighted_mask_idx = None
+        # Track which mask is currently highlighted (by value, not index)
+        self.highlighted_mask_value = None
         
         # Initialize the viewer
         self.initialize_overlays()
@@ -43,7 +69,6 @@ class AnnotationSegmentationViewer(SegmentationViewer):
     
     def _get_boundary_opencv_fast(self, mask: np.ndarray) -> Optional[np.ndarray]:
         """Fast boundary detection using OpenCV with aggressive optimization."""
-
         mask_uint8 = (mask > 0.5).astype(np.uint8) * 255
         contours, _ = cv2.findContours(mask_uint8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_TC89_L1)
         if not contours:
@@ -81,25 +106,23 @@ class AnnotationSegmentationViewer(SegmentationViewer):
             
             # Left boundary (initially hidden)
             left_boundary = pg.PlotDataItem(pen=pg.mkPen(color='w', width=2, style=QtCore.Qt.SolidLine))
-            left_boundary.setZValue(1000 + i)  # High Z value to be on top
+            left_boundary.setZValue(1000 + i)
             left_boundary.setVisible(False)
             self.left_view.addItem(left_boundary)
             self.left_boundary_items.append(left_boundary)
             
             # Right boundary (initially hidden)
             right_boundary = pg.PlotDataItem(pen=pg.mkPen(color='w', width=2, style=QtCore.Qt.SolidLine))
-            right_boundary.setZValue(1000 + i)  # High Z value to be on top
+            right_boundary.setZValue(1000 + i)
             right_boundary.setVisible(False)
             self.right_view.addItem(right_boundary)
             self.right_boundary_items.append(right_boundary)
             
             # Set boundary data if available
             if boundary_pts is not None and len(boundary_pts) > 0:
-                # Close the contour by adding first point at the end
                 boundary_pts = np.vstack([boundary_pts, boundary_pts[0:1]])
-                # Plot with swapped coordinates: PlotDataItem expects (x, y) but our points are in array indices
-                left_boundary.setData(boundary_pts[:, 1], boundary_pts[:, 0])  # swap for correct display
-                right_boundary.setData(boundary_pts[:, 1], boundary_pts[:, 0])  # swap for correct display
+                left_boundary.setData(boundary_pts[:, 1], boundary_pts[:, 0])
+                right_boundary.setData(boundary_pts[:, 1], boundary_pts[:, 0])
     
     def load_existing_annotations(self):
         """Load and display any existing annotations for the current run"""
@@ -110,36 +133,39 @@ class AnnotationSegmentationViewer(SegmentationViewer):
             for class_name in self.class_dict:
                 self.class_dict[class_name]['masks'].clear()
             
-            # Restore annotations
-            for mask_idx_str, class_name in run_annotations.items():
-                mask_idx = int(mask_idx_str)
-                if class_name in self.class_dict and mask_idx < len(self.masks):
-                    # Add to class dict
-                    self.class_dict[class_name]['masks'].append(mask_idx)
-                    # Update visibility
+            # Restore annotations - now using mask values
+            for mask_value_str, class_name in run_annotations.items():
+                mask_value = float(mask_value_str)  # Convert back from string
+                
+                if class_name in self.class_dict and mask_value in self.value_to_index:
+                    mask_idx = self.value_to_index[mask_value]
+                    
+                    # Add mask value (not index) to class dict
+                    self.class_dict[class_name]['masks'].append(mask_value)
+                    
+                    # Update visibility using index
                     self.left_mask_items[mask_idx].setVisible(False)
                     self.right_mask_items[mask_idx].setVisible(True)
-                    # Don't show boundary by default - user must click to select
+                    
                     # Update color
                     updated_overlay = self.create_overlay_rgba(self.masks[mask_idx], class_name=class_name)
                     self.right_mask_items[mask_idx].setImage(updated_overlay)
     
-    def highlight_mask(self, mask_idx):
+    def highlight_mask(self, mask_value):
         """Highlight a specific mask with boundary on the appropriate panel"""
         # Clear any existing highlight
         self.clear_highlight()
         
-        if mask_idx < 0 or mask_idx >= len(self.masks):
+        if mask_value not in self.value_to_index:
             return
             
-        self.highlighted_mask_idx = mask_idx
+        mask_idx = self.value_to_index[mask_value]
+        self.highlighted_mask_value = mask_value
         
         # Determine which panel to show the boundary on
         if mask_idx < len(self.right_mask_items) and self.right_mask_items[mask_idx].isVisible():
-            # Mask is on right panel - show boundary there
             self.right_boundary_items[mask_idx].setVisible(True)
         elif mask_idx < len(self.left_mask_items) and self.left_mask_items[mask_idx].isVisible():
-            # Mask is on left panel - show boundary there
             self.left_boundary_items[mask_idx].setVisible(True)
     
     def clear_highlight(self):
@@ -148,18 +174,15 @@ class AnnotationSegmentationViewer(SegmentationViewer):
             boundary.setVisible(False)
         for boundary in self.right_boundary_items:
             boundary.setVisible(False)
-        self.highlighted_mask_idx = None
+        self.highlighted_mask_value = None
     
     def mouse_clicked(self, event):
         """Handle mouse clicks to accept masks or toggle selection"""
-        # Don't allow any selections if no class is selected
         if not self.selected_class or self.selected_class not in self.class_dict:
             print("No class selected - please add and select a class first")
             return
             
         scene_pos = event.scenePos()
-        
-        # Check if click is in left or right view
         left_image_pos = self.left_base_img_item.mapFromScene(scene_pos)
         right_image_pos = self.right_base_img_item.mapFromScene(scene_pos)
         
@@ -190,31 +213,30 @@ class AnnotationSegmentationViewer(SegmentationViewer):
                 self._current_mask_index = (self._current_mask_index + 1) % len(mask_hits)
             
             i_hit = mask_hits[self._current_mask_index]
+            mask_value = self.index_to_value[i_hit]
             
             if event.button() == QtCore.Qt.LeftButton:
                 # Move mask to right panel
                 self.left_mask_items[i_hit].setVisible(False)
                 self.right_mask_items[i_hit].setVisible(True)
-                
-                # Hide boundary on left if it was showing
                 self.left_boundary_items[i_hit].setVisible(False)
                 
-                # Add to class dict
-                self.class_dict[self.selected_class]['masks'].append(i_hit)
+                # Add mask VALUE (not index) to class dict
+                self.class_dict[self.selected_class]['masks'].append(mask_value)
                 
                 # Update color with class color
                 updated_overlay = self.create_overlay_rgba(self.masks[i_hit], class_name=self.selected_class)
                 self.right_mask_items[i_hit].setImage(updated_overlay)
                 
-                # Update annotations dictionary
+                # Update annotations dictionary with mask VALUE
                 if self.current_run_id not in self.annotations_dict:
                     self.annotations_dict[self.current_run_id] = {}
-                self.annotations_dict[self.current_run_id][str(i_hit)] = self.selected_class
+                self.annotations_dict[self.current_run_id][str(mask_value)] = self.selected_class
                 
                 # Highlight the newly accepted mask
-                self.highlight_mask(i_hit)
+                self.highlight_mask(mask_value)
                 
-                print(f"Added: Run {self.current_run_id}, Mask {i_hit} -> {self.selected_class}")
+                # print(f"Added: Run {self.current_run_id}, Mask Value {mask_value} -> {self.selected_class}")
         
         # Check if click is in right view
         elif self.right_view.sceneBoundingRect().contains(scene_pos):
@@ -227,41 +249,42 @@ class AnnotationSegmentationViewer(SegmentationViewer):
             # Find which masks contain this pixel and are visible
             for i in range(len(self.masks)):
                 if self.masks[i][x, y] > 0 and self.right_mask_items[i].isVisible():
+                    mask_value = self.index_to_value[i]
+                    
                     if event.button() == QtCore.Qt.LeftButton:
                         # Toggle selection/highlight
-                        if self.highlighted_mask_idx == i:
-                            # Already highlighted - clear the highlight
+                        if self.highlighted_mask_value == mask_value:
                             self.clear_highlight()
-                            print(f"Deselected mask {i}")
+                            # print(f"Deselected mask value {mask_value}")
                         else:
-                            # Not highlighted - highlight it
-                            self.highlight_mask(i)
-                            print(f"Selected mask {i}")
-                        break  # Only handle one mask per click
+                            self.highlight_mask(mask_value)
+                            # print(f"Selected mask value {mask_value}")
+                        break
     
     def keyPressEvent(self, event):
         """Handle 'R' key to remove the currently highlighted mask"""
         if event.key() == QtCore.Qt.Key_R:
-            if self.highlighted_mask_idx is None:
+            if self.highlighted_mask_value is None:
                 print("No mask selected to remove")
                 return
             
-            mask_idx = self.highlighted_mask_idx
+            mask_value = self.highlighted_mask_value
+            mask_idx = self.value_to_index[mask_value]
             
-            # Check if this mask is actually on the right panel (accepted)
-            if mask_idx not in self.accepted_masks and mask_idx < len(self.right_mask_items) and self.right_mask_items[mask_idx].isVisible():
+            # Check if this mask is actually on the right panel
+            if mask_idx < len(self.right_mask_items) and self.right_mask_items[mask_idx].isVisible():
                 # Find which class this mask belongs to
                 class_name = None
                 if self.current_run_id in self.annotations_dict:
-                    mask_key = str(mask_idx)
+                    mask_key = str(mask_value)
                     if mask_key in self.annotations_dict[self.current_run_id]:
                         class_name = self.annotations_dict[self.current_run_id][mask_key]
                         del self.annotations_dict[self.current_run_id][mask_key]
                 
-                # Remove from class dict if found
+                # Remove mask VALUE from class dict
                 if class_name and class_name in self.class_dict:
-                    if mask_idx in self.class_dict[class_name]['masks']:
-                        self.class_dict[class_name]['masks'].remove(mask_idx)
+                    if mask_value in self.class_dict[class_name]['masks']:
+                        self.class_dict[class_name]['masks'].remove(mask_value)
                 
                 # Clear the highlight first
                 self.clear_highlight()
@@ -270,9 +293,9 @@ class AnnotationSegmentationViewer(SegmentationViewer):
                 self.left_mask_items[mask_idx].setVisible(True)
                 self.right_mask_items[mask_idx].setVisible(False)
                 
-                print(f"Removed selected mask {mask_idx} (class: {class_name})")
-            else:
-                print(f"Selected mask {mask_idx} is not on the right panel")
+                # print(f"Removed mask value {mask_value} (class: {class_name})")
+            # else:
+            #     print(f"Selected mask value {mask_value} is not on the right panel")
         else:
             super().keyPressEvent(event)
     
@@ -304,6 +327,26 @@ class AnnotationSegmentationViewer(SegmentationViewer):
         self.base_image = base_image
         self.masks = masks
         self.class_dict = class_dict
+        
+        # Determine mask values for the new data
+        if len(masks.shape) == 2:
+            self.mask_values = np.unique(masks[masks > 0])
+            self.extracted_masks = []
+            for val in self.mask_values:
+                self.extracted_masks.append((masks == val).astype(np.float32))
+            self.masks = self.extracted_masks
+        elif len(masks.shape) == 3:
+            self.mask_values = []
+            for i, mask in enumerate(self.masks):
+                unique_vals = np.unique(mask[mask > 0])
+                if len(unique_vals) > 0:
+                    self.mask_values.append(unique_vals[0])
+                else:
+                    self.mask_values.append(i + 1)
+        
+        # Update mappings
+        self.index_to_value = {i: val for i, val in enumerate(self.mask_values)}
+        self.value_to_index = {val: i for i, val in enumerate(self.mask_values)}
         
         # Clear indices for all classes
         for class_name in self.class_dict.keys():
