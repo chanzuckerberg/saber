@@ -28,7 +28,7 @@ def predict(model_weights, model_config, input, output):
     """
     Run inference on all images/masks in the Zarr file and store results in a new Zarr file.
     """
-    run_predict(model_weights, model_config, input, output, save_result = True)
+    run_predict(model_weights, model_config, input, output, save_results = True)
 
 # Run the prediction
 def run_predict(model_weights, model_config, input, output, save_results = False):
