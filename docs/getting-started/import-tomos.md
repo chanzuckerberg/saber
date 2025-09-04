@@ -77,16 +77,15 @@ The `copick config filesystem` command assumes local paths, but you can edit the
 
 </details>
 
-<details markdown="1">
-<summary><strong> 💡 Understanding the `--objects` flag</strong></summary>
-
-The `--objects` flag accepts 2-4 elements separated by commas:
-
-1. **Particle name** (required): e.g., `ribosome`
-2. **Is pickable** (required): `True` for particles, `False` for continuous segmentations
-3. **Particle radius** (optional): in Ångströms, e.g., `130`
-4. **PDB ID** (optional): reference structure, e.g., `6QZP`
 </details>
+
+!!! info
+    The `--objects` flag accepts 2-4 elements separated by commas:
+
+    1. **Particle name** (required): e.g., `ribosome`
+    2. **Is pickable** (required): `True` for particles, `False` for continuous segmentations
+    3. **Particle radius** (optional): in Ångströms, e.g., `130`
+    4. **PDB ID** (optional): reference structure, e.g., `6QZP`
 
 This structure supports both particle picking for sub-tomogram averaging and broader 3D segmentation tasks. Our deep learning platform [Octopi 🐙](https://github.com/chanzuckerberg/octopi) is designed to train models from copick projects for:
 

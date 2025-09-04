@@ -69,10 +69,10 @@ This preview helps you understand what structures SAM2 naturally identifies in y
 
 ## 🧬 Pre-processing Electron Micrographs
 
-For single-particle datasets, ADF/BF signals from S/TEM, or FIB-SEM micrographs -- use the `saber classifier prepare-micrograph-training` command:
+For single-particle datasets, ADF/BF signals from S/TEM, or FIB-SEM micrographs -- use the `saber classifier prep2d` command:
 
 ```bash
-saber classifier prepare-micrograph-training \
+saber classifier prep2d \
     --input 'path/to/*.mrc' \
     --output training.zarr
 ```
@@ -92,7 +92,7 @@ Traditional workflows require you to manually draw every mask from scratch. SABE
 
 Generate comprehensive slab-based segmentations that maintain 3D context:
 ```bash
-saber classifier prepare-tomogram-training \
+saber classifier prep3d \
     --config config.json \
     --zarr-path output_zarr_fname.zarr \
     --num-slabs 3
@@ -113,30 +113,47 @@ Small objects or sparse structures might not be present in a single slab project
 
 ---
 
-## 🎨 Next Step: Annotation with the SABER GUI
+## 🎨 Annotation with the SABER GUI
 
+Launch the GUI to begin annotating your pre-processed data: 
+```bash
+saber gui --input output_zarr_fname.zarr 
+```
 Once preprocessing is complete, SABER's unique annotation workflow begins. Instead of drawing masks from scratch, you simply:
 
-1. **Point and Click** on the precomputed segmentations.
-2. **Assign Class Labels** using the dropdown menu.
+!!! info "How the GUI works:"
+    1. **Point and Click**  on the precomputed SAM2 segmentations.
+    2.  **Assign Class Labels** using the menu on the right.
+    3. **Save the Annotations** Save the resulting JSON file with the bottom right button.
 
 ![SABER GUI](../assets/saber_gui.png)
 
-```bash
-saber gui \
-    --input output_zarr_fname.zarr \
-    --output curated_labels.zarr \
-    --class-names carbon,lysosome,artifacts
-```
-
-**Class Configuration**: The `--class-names` flag defines the biological classes present in your data. For binary classification (object vs. background), you can omit this flag for a simple two-class system.
-
-**💡 How Many Micrographs / Tomograms Should I Annotate?** In general we recommend annotating 20-40 runs per dataset. In cases where there are several objects per image/slab the lower range should be sufficient. If only a few instances are available, the higher range is recommended.  
+!!! tip "Annotation Guidelines - How Many Images to Annotate?"
+    - We recommend 20-40 runs per dataset
+    - Lower range (20): When multiple objects appear per image/slab
+    - Higher range (40): When only few instances are available
+    - Consistency is key: Maintain uniform criteria across all annotations
+    - Handle ambiguous segments: When uncertain, prefer skipping over mislabeling
 
 **Tip:** For transferring data between machines, it's recommended to compress your Zarr files:
 ```bash
 zip -r curated_labels.zarr.zip curated_labels.zarr
 ```
+
+## 🏷️ Applying Annotations for Classifier Training
+
+Once you've completed annotations in the GUI, use the `labeler` command to apply your JSON annotations to the SAM2 masks, creating a training-ready dataset. The labeler converts your point-and-click annotations into properly indexed training data, handling class ordering automatically or according to your specifications.
+
+!!! example "Basic Usage"
+    ```bash
+    saber classifier labeler \
+        --input training.zarr \
+        --labels labels.json \
+        --classes lysosome,carbon,edge \
+        --output labeled.zarr
+    ```
+
+We can either control the ordering of the labels or apply a subset of the labels with the `--classes` flag. If the flag is omitted, all classes are used in alphabetical orde
 
 ---
 
