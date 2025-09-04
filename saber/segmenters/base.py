@@ -1,4 +1,4 @@
-import saber.analysis.estimate_thickness as estimate_thickness
+import saber.filters.estimate_thickness as estimate_thickness
 from saber.visualization import classifier as viz
 from saber.sam2 import tomogram_predictor
 import saber.filters.masks as filters
