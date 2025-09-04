@@ -161,7 +161,10 @@ def segment_micrograph_core(
     masks = mask_filters.masks_to_array(masks_list)
 
     # For now let's hard code the conversion from Angstroms to nanometers
-    pixel_size = pixel_size * 10
+    if pixel_size is not None:
+        pixel_size = pixel_size * 10
+    else: 
+        pixel_size = 1
 
     # Write Run to Zarr
     input = os.path.splitext(os.path.basename(input))[0]
