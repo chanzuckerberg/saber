@@ -190,7 +190,7 @@ class SABERLabelConverter:
                 )
             else:
                 # Empty array if no rejected masks
-                group.create_dataset(
+                labels_group.create_dataset(
                     'rejected',
                     data=np.array([]),
                     dtype=np.uint8
