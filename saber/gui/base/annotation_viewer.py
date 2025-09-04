@@ -376,23 +376,3 @@ class AnnotationSegmentationViewer(SegmentationViewer):
         
         # Load existing annotations
         self.load_existing_annotations()
-
-
-
-    # def _get_boundary_opencv_fast(self, mask: np.ndarray) -> Optional[np.ndarray]:
-    #     """Fast boundary detection using OpenCV with aggressive optimization."""
-
-    #     mask_uint8 = (mask > 0.5).astype(np.uint8) * 255
-    #     contours, _ = cv2.findContours(mask_uint8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_TC89_L1)
-    #     if not contours:
-    #         return None
-    #     largest = max(contours, key=cv2.contourArea)
-    #     if largest.shape[1] == 1:
-    #         pts = largest.squeeze(axis=1)
-    #     else:
-    #         pts = largest.reshape(-1, 2)
-    #     # Subsample
-    #     if len(pts) > 100:
-    #         step = max(1, len(pts) // 50)
-    #         pts = pts[::step]
-    #     return pts
