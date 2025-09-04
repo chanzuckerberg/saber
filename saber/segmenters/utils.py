@@ -14,7 +14,6 @@ def remove_duplicate_masks(masks: List[Dict[str, Any]],
         masks: List of mask dictionaries from SAM2
         iou_threshold: Minimum IoU to consider masks as duplicates (default 0.99)
         area_threshold: Minimum area similarity ratio to consider as duplicates (default 0.99)
-        crop_box_l1_threshold: Maximum L1 distance between crop_boxes to consider as duplicates (default 10.0)
     
     Returns:
         List of unique masks with duplicates removed
