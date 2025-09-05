@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/chanzuckerberg/saber/compare/saber-em-v0.7.0...saber-em-v0.8.0) (2025-09-05)
+
+
+### ✨ Features
+
+* vcp dataio ([6d227b4](https://github.com/chanzuckerberg/saber/commit/6d227b4e59c3212f010be644f94c84876fe6cb2a))
+
 ## [0.7.0](https://github.com/chanzuckerberg/saber/compare/saber-em-v0.6.1...saber-em-v0.7.0) (2025-08-19)
 
 
