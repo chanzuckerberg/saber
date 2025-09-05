@@ -83,24 +83,23 @@ class ParallelZarrWriter:
                 for key, value in metadata.items():
                     run_group.attrs[key] = value
             
-            # # Create VCP-compatible structure: run_name/0/image and run_name/0/labels/0/labels
-            # dataset_group = run_group.create_group("0")
-            
             # Write image dataset
             run_group.create_dataset(
-                "image", 
+                "0", 
                 data=image, 
                 dtype=image.dtype,
                 compressor=zarr.Blosc(cname='zstd', clevel=2, shuffle=2),
             )
             
-            # Write masks dataset  
-            run_group.create_dataset(
-                "labels", 
-                data=masks, 
+            # Write masks dataset
+            labels_group = run_group.create_group("labels")
+            labels_group.create_dataset(
+                "0",
+                data=masks,
                 dtype=masks.dtype,
                 compressor=zarr.Blosc(cname='zstd', clevel=2, shuffle=2),
             )
+            add_attributes(labels_group, pixel_size, True)
             
             # print(f"✅ Written {run_name} to {self.zarr_path}")
             return run_index
@@ -141,15 +140,15 @@ def add_attributes(zarr_group: zarr.Group, voxel_size: float = 1.0, is_3d: bool 
     """
     if is_3d:
         axes = [
-            {"name": "z", "type": "space", "unit": "angstrom"},
-            {"name": "y", "type": "space", "unit": "angstrom"},
-            {"name": "x", "type": "space", "unit": "angstrom"}
+            {"name": "z", "type": "space", "unit": "nanometer"},
+            {"name": "y", "type": "space", "unit": "nanometer"},
+            {"name": "x", "type": "space", "unit": "nanometer"}
         ]
-        scale = [voxel_size, voxel_size, voxel_size]
+        scale = [1.0, voxel_size, voxel_size]
     else:
         axes = [
-            {"name": "y", "type": "space", "unit": "angstrom"},
-            {"name": "x", "type": "space", "unit": "angstrom"}
+            {"name": "y", "type": "space", "unit": "nanometer"},
+            {"name": "x", "type": "space", "unit": "nanometer"}
         ]
         scale = [voxel_size, voxel_size]
     

@@ -95,7 +95,7 @@ def segment_tomogram_core(
 
     # Write Segmentation if We aren't Displaying Results
     if not display_segmentation and segment_mask is not None: 
-        # Apply Adaptive Gaussian Smoothing to the Segmentation Mask   
+        # Apply Adaptive Gaussian Smoothing to the Segmentation Mask
         segment_mask = mask_filters.fast_3d_gaussian_smoothing(
             segment_mask, scale=0.05, deviceID=gpu_id)
         
@@ -153,8 +153,18 @@ def segment_micrograph_core(
     segmenter.segment( image, display_image=False, use_sliding_window=use_sliding_window )
     (image0, masks_list) = (segmenter.image0, segmenter.masks)
 
+    # Convert any numpy array/scalar to Python scalar
+    if isinstance(pixel_size, np.ndarray):
+        pixel_size = pixel_size.item()    
+
     # Convert Masks to Numpy Array
     masks = mask_filters.masks_to_array(masks_list)
+
+    # For now let's hard code the conversion from Angstroms to nanometers
+    if pixel_size is not None:
+        pixel_size = pixel_size * 10
+    else: 
+        pixel_size = 1
 
     # Write Run to Zarr
     input = os.path.splitext(os.path.basename(input))[0]

@@ -124,6 +124,10 @@ def interactive_segment_micrograph(
             classifier=predictor,         # if you have a classifier; otherwise, leave as None
             target_class=target_class )   # desired target class if using a classifier
 
+    # Let Users Save Segmentations when interactively segmenting
+    if display_image:
+        segmenter.save_button = True
+
     # Read the Micrograph
     image, pixel_size = io.read_micrograph(input)
     image = image.astype(np.float32)

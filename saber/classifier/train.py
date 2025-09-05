@@ -57,28 +57,13 @@ def run(
     print('Loading validation data...')
     val_loader, _ = get_dataloaders(validate_path, 'val', batch_size)
     
-    # Option 1: Initialize CrossEntropyLoss
-    # print('Estimating class weights...')
-    # label_counts = {i: 0 for i in range(num_classes)}
-    # for sample in tqdm(train_dataset):
-    #     label_counts[sample['label'].item()] += 1
-    # # Compute class weights using inverse frequency normalization
-    # total_samples = sum(label_counts.values())
-    # class_weights = [
-    #     total_samples / (len(label_counts) * label_counts[i]) if label_counts[i] > 0 else 0
-    #     for i in range(len(label_counts))
-    # ]
-    # class_weight = torch.tensor(class_weights, dtype=torch.float32).to(device)
-    # print(f'Class weights: {class_weights}')
-    # loss_fn = nn.CrossEntropyLoss(weight=class_weight)
-    
     # Option 2: Initialize MONAI's FocalLoss
     loss_fn = FocalLoss(gamma=1, alpha=0.5, reduction="mean")
 
     # # Initialize trainer and Train
     print('Training...')
     trainer = ClassifierTrainer(model, optimizer, scheduler, loss_fn, device)
-    trainer.results_path = f'results_{backbone}_{model_size}'
+    trainer.results_path = 'results'
     trainer.train(train_loader, val_loader, num_epochs)
 
     # # Save results to Zarr
@@ -90,7 +75,8 @@ def run(
             'backbone': backbone,
             'model_size': model_size,
             'num_classes': num_classes,
-            'weights': os.path.abspath(os.path.join(trainer.results_path, 'best_model.pth'))
+            'weights': os.path.abspath(os.path.join(trainer.results_path, 'best_model.pth')),
+            'classes': get_class_names(train_path)            
         },
         'optimizer': {
             'optimizer': optimizer.__class__.__name__,
@@ -99,12 +85,11 @@ def run(
         },
         'data': {
             'train': train_path,
-            'validate': validate_path,
-            'classes': get_class_names(train_path)
+            'validate': validate_path
         }
     }
 
-    with open(f'results_{backbone}_{model_size}/model_config.yaml', 'w') as f:
+    with open(f'{trainer.results_path}/model_config.yaml', 'w') as f:
         yaml.dump(model_config, f, default_flow_style=False, sort_keys=False, indent=2)
 
 def get_dataloaders(zarr_path: str, mode: str, batch_size: int):
@@ -228,4 +213,4 @@ def get_class_names(zarr_path: str):
     class_names = zfile.attrs['class_names']
     
     # convert to dict
-    return json.loads(class_names) 
+    return {i: name for i, name in enumerate(class_names)}

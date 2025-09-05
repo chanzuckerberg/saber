@@ -2,7 +2,7 @@ from saber.analysis.organelle_statistics import extract_organelle_statistics
 from saber.utils import slurm_submit
 from copick_utils.io import readers
 from typing import List, Optional
-import copick, click, zarr
+import copick, click, zarr, csv
 import multiprocess as mp
 from tqdm import tqdm
 
@@ -76,67 +76,38 @@ def process_organelles(
         n_procs = min(mp.cpu_count(), n_run_ids)
     print(f"Using {n_procs} processes to parallelize across {n_run_ids} run IDs.")
 
-    # Initialize Zarr File if statistics are requested
+    # Initialize CSV file if statistics are requested
+    csv_filename = None
     if save_statistics:
-        zfile = zarr.open(f'{organelle_name}_statistics.zarr')
-        zfile.attrs['name'] = organelle_name
-        zfile.attrs['user_id'] = user_id
-        zfile.attrs['session_id'] = session_id
-        zfile.attrs['voxel_size'] = voxel_size
-    else:
-        zfile = None
+        csv_filename = f'{organelle_name}_statistics.csv'
+        # Create CSV with headers
+        with open(csv_filename, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow( ['run_id', 'label', 'volume_nm3', 'diameter_nm'] )
 
-    # Initialize tqdm progress bar
-    with tqdm(total=n_run_ids, unit="run") as pbar:
-        for _iz in range(0, n_run_ids, n_procs):
-            start_idx = _iz
-            end_idx = min(_iz + n_procs, n_run_ids)  # Ensure end_idx does not exceed n_run_ids
-            print(f"\nProcessing runIDs from {start_idx} -> {end_idx} (out of {n_run_ids})")
+    # Prepare arguments for each worker
+    worker_args = [
+        (root.get_run(run_id), organelle_name, session_id, 
+         user_id, voxel_size, save_copick, save_statistics)
+        for run_id in run_ids
+    ]
 
-            processes = []                
-            for _in in range(n_procs):
-                _iz_this = _iz + _in
-                if _iz_this >= n_run_ids:
-                    break
-                run_id = run_ids[_iz_this]
-                run = root.get_run(run_id)
+    # Collect all CSV rows using asynchronous pool
+    all_csv_rows = []
+    with mp.Pool(processes=n_procs) as pool:
+        with tqdm(total=n_run_ids, desc="Processing", unit="run") as pbar:
+            for csv_rows in pool.imap_unordered(process_single_run, worker_args):
+                if csv_rows:
+                    all_csv_rows.extend(csv_rows)
+                pbar.update()
 
-                # Get Segmentation Array
-                seg = readers.segmentation(
-                    run, 
-                    voxel_size,
-                    organelle_name,
-                    session_id,
-                    user_id
-                )
-
-                # Check if Segmentation Array is Present
-                if seg is None:
-                    print(f"{run.name} didn't have any {organelle_name} segmentations present!")
-                    continue
-
-                p = mp.Process(
-                    target=extract_organelle_statistics,
-                    args=(run, seg, 
-                          organelle_name, 
-                          session_id, user_id,
-                          voxel_size, 
-                          save_copick,
-                          zfile)
-                )
-                processes.append(p)
-
-            for p in processes:
-                p.start()
-
-            for p in processes:
-                p.join()
-
-            for p in processes:
-                p.close()
-
-            # Update tqdm progress bar
-            pbar.update(len(processes))
+    # Write all CSV rows at once after processing
+    if save_statistics and all_csv_rows:
+        with open(csv_filename, 'a', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            for row in all_csv_rows:
+                writer.writerow(row)
+        print(f"\nStatistics saved to {csv_filename}")
 
     completion_msg = []
     if save_copick:
@@ -145,6 +116,38 @@ def process_organelles(
         completion_msg.append("Statistics calculation")
     
     print(f"{' and '.join(completion_msg)} complete!")
+
+def process_single_run(args):
+    """Process a single run to extract organelle statistics and/or coordinates."""
+    
+    (run, organelle_name, session_id, user_id, 
+     voxel_size, save_copick, save_statistics) = args
+    
+    # Get Segmentation Array
+    seg = readers.segmentation(
+        run, 
+        voxel_size,
+        organelle_name,
+        session_id,
+        user_id
+    )
+
+    # Check if Segmentation Array is Present
+    if seg is None:
+        print(f"{run.name} didn't have any {organelle_name} segmentations present!")
+        return []
+
+    # Extract statistics and return CSV rows
+    csv_rows = extract_organelle_statistics(
+        run, seg, 
+        organelle_name, 
+        session_id, user_id,
+        voxel_size, 
+        save_copick,
+        save_statistics
+    )
+
+    return csv_rows if save_statistics and csv_rows else []
 
 @cli.command(context_settings={"show_default": True})
 @common_options

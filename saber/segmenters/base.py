@@ -1,8 +1,9 @@
-import saber.analysis.estimate_thickness as estimate_thickness
+import saber.filters.estimate_thickness as estimate_thickness
 from saber.visualization import classifier as viz
 from saber.sam2 import tomogram_predictor
 import saber.filters.masks as filters
 from saber import pretrained_weights
+from saber.segmenters import utils
 from typing import List, Tuple
 from saber.utils import io
 from tqdm import tqdm
@@ -92,6 +93,10 @@ class saber2Dsegmenter:
         # Initialize Image and Masks
         self.image = None
 
+        # Internal Variable to Let Users Save Segmentations 
+        self.save_button = False
+        self.remove_repeating_masks = False        
+
     @torch.inference_mode()
     def segment_image(self,
         display_image: bool = True,
@@ -155,12 +160,14 @@ class saber2Dsegmenter:
         else: # Since Order Doesn't Matter, Sort by Area for Saber GUI. 
             self.masks = sorted(self.masks, key=lambda mask: mask['area'], reverse=False)
 
-        # Filter Out Small Masks
+        # Filter Out Small Masks and Duplicates
         self.masks = [mask for mask in self.masks if mask['area'] >= self.min_mask_area]
+        if self.remove_repeating_masks:
+            self.masks = utils.remove_duplicate_masks(self.masks)
 
         # Optional: Save Save Segmentation to PNG or Plot Segmentation with Matplotlib
         if display_image:
-            viz.display_mask_list(self.image, self.masks)
+            viz.display_mask_list(self.image, self.masks, self.save_button)
 
         # Return the Masks
         return self.masks  

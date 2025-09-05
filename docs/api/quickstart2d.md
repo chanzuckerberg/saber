@@ -15,8 +15,8 @@ This quickstart guide shows you how to use SABER's API to segment 2D micrographs
 Before starting, ensure you have SABER installed and import the necessary modules: SABER supports various file formats commonly used in microscopy:
 ```python
 from saber.segmenters.micro import cryoMicroSegmenter
-from saber.classifier.models import common
 from saber.visualization import classifier as viz
+from saber.classifier.models import common
 from saber.utils import io
 import numpy as np
 import torch

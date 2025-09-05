@@ -3,6 +3,7 @@ from saber.classifier.preprocess.micrograph_training_prep import prepare_microgr
 from saber.classifier.preprocess.tomogram_training_prep import prepare_tomogram_training
 from saber.classifier.preprocess.split_merge_data import split_data, merge_data
 from saber.classifier.preprocess.training_data_info import class_info
+from saber.classifier.preprocess.apply_labels import labeler
 from saber.classifier.inference import predict, predict_slurm
 from saber.classifier.train import train, train_slurm
 from saber.classifier.evaluator import evaluate
@@ -22,6 +23,7 @@ classifier_routines.add_command(prepare_tomogram_training)
 classifier_routines.add_command(prepare_micrograph_training)
 classifier_routines.add_command(evaluate)
 classifier_routines.add_command(class_info)
+classifier_routines.add_command(labeler)
 
 @click.group(name="classifier")
 def slurm_classifier_routines():

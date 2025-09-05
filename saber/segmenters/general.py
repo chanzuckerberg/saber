@@ -36,7 +36,8 @@ class generalSegmenter(saber3Dsegmenter):
         """
 
         # Create Inference State
-        self.inference_state = self.video_predictor.create_inference_state_from_tomogram(vol)
+        if self.inference_state is None:
+            self.inference_state = self.video_predictor.create_inference_state_from_tomogram(vol)
 
         # Set Masks - Right now this is external
         self.masks = masks

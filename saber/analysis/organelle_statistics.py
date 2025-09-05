@@ -1,13 +1,22 @@
 from skimage.measure import regionprops
+from copick_utils.io import writers
 import numpy as np
 
-def extract_organelle_statistics(run, mask, organelle_name, session_id, user_id, voxel_size, save_copick = True, zfile=None, xyz_order=True):
+def extract_organelle_statistics(
+    run, mask, organelle_name, session_id, user_id, 
+    voxel_size, save_copick = True, save_statistics=True, xyz_order=True):
+    """
+    Extract statistics and return CSV rows.
+    
+    Returns:
+        List of CSV rows if save_statistics is True, empty list otherwise
+    """
 
     unique_labels = np.unique(mask)
     unique_labels = unique_labels[unique_labels > 0]  # Ignore background (label 0)
 
     coordinates = {}
-    results = {}
+    csv_rows = []
     for label in unique_labels:
         
         component_mask = (mask == label).astype("int")
@@ -19,45 +28,39 @@ def extract_organelle_statistics(run, mask, organelle_name, session_id, user_id,
             centroid = centroid[::-1]
         coordinates[str(label)] = centroid
         
-        if zfile is not None:
+        if save_statistics:
             
             # Compute Volume in nm^3
             volume = np.sum(component_mask) * (voxel_size/10)**3 # Convert from Angstom to nm^3
 
             # Sort axes to identify the first (Z-biased) and two in-plane dimensions
-            axes_lengths = sorted([rprops.axis_major_length, rprops.axis_minor_length, rprops.axis_minor_length])
+            axes_lengths = sorted([rprops.axis_major_length, rprops.axis_minor_length, 
+                                   rprops.axis_minor_length])
 
             # Convert to physical units (nm)
             axis_x = axes_lengths[1] * (voxel_size/10)  # Likely an in-plane axis
             axis_y = axes_lengths[2] * (voxel_size/10)  # Likely an in-plane axis
             diameter = (axis_x + axis_y) / 2
 
-            # Save Statistics in a structured dictionary
-            results[str(label)] = {'volume': volume, 'diameter': diameter, 'coordinates': centroid}
+            # Prepare row for CSV
+            csv_row = [
+                run.name,
+                int(label),
+                volume,
+                diameter,
+            ]
+            csv_rows.append(csv_row)
 
-    # Save to Copick
+    # Save Statistics to CSV File
     if len(coordinates) > 0:
-
-        # Save to Copick
+        # Save Coordinates to Copick
         if save_copick:
-            save_coordinates_to_copick(run, coordinates, organelle_name, session_id, user_id, voxel_size)
-
-        # Save Statistics into Zarr File
-        if zfile is not None:
-            group = zfile.create_group(run.name)
-            # Save metadata as an array
-            labels = np.array(list(results.keys()), dtype=int)
-            volumes = np.array([r["volume"] for r in results.values()], dtype=float)
-            diameters = np.array([r["diameter"] for r in results.values()], dtype=float)
-            coordinates = np.array([r["coordinates"] for r in results.values()], dtype=float)
-
-            group.create_dataset("labels", data=labels, overwrite=True)
-            group.create_dataset("volumes", data=volumes, overwrite=True)
-            group.create_dataset("diameters", data=diameters, overwrite=True)
-            group.create_dataset("coordinates", data=coordinates, overwrite=True)
+            save_coordinates_to_copick(run, coordinates, organelle_name, 
+                                      session_id, user_id, voxel_size)
     else:
         print(f"{run.name} didn't have any organelles present!")
 
+    return csv_rows
 
 def save_coordinates_to_copick(run, coordinates, organelle_name, session_id, user_id, voxel_size):
 

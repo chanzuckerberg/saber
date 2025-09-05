@@ -28,8 +28,11 @@ def predict(model_weights, model_config, input, output):
     """
     Run inference on all images/masks in the Zarr file and store results in a new Zarr file.
     """
+    run_predict(model_weights, model_config, input, output, save_results = True)
 
-    # Load model    
+# Run the prediction
+def run_predict(model_weights, model_config, input, output, save_results = False):
+        # Load model    
     if os.path.exists(model_weights) and os.path.exists(model_config):
         predictor = Predictor(model_config, model_weights)
         num_classes = predictor.config['model']['num_classes']
@@ -44,7 +47,7 @@ def predict(model_weights, model_config, input, output):
         raise FileNotFoundError(f"Zarr file {input} does not exist.")
 
     # Get Image Dimensions
-    (nx,ny) = zfile[run_ids[0]]['image'].shape
+    (nx,ny) = zfile[run_ids[0]]['0'].shape
 
     # Create an output Zarr store
     output_zfile = zarr.open(output, mode='w')
@@ -55,18 +58,18 @@ def predict(model_weights, model_config, input, output):
     # Main Loop
     for run_id in tqdm(run_ids):
 
-        im = np.array(zfile[run_id]['image'])
-        masks = np.array(zfile[run_id]['masks'])
+        im = np.array(zfile[run_id]['0'])
+        masks = np.array(zfile[run_id]['labels']['0'])
 
         # Run batched inference directly
-        # predictions = predictor.predict(im, masks)  # Shape: (Nmasks, num_classes)
         predictions = predictor.batch_predict(im, masks)  # Shape: (Nmasks, num_classes)
 
         # Initialize the final masks
         final_masks[:] = 0
 
         # Apply the classifier to the masks
-        for class_idx in range(1, num_classes):
+        masks = masks3d_to_list(masks)
+        for class_idx in range(1, num_classes):    
             mask_predictions = mask_filters.convert_predictions_to_masks(predictions, masks, class_idx)
             
             # If there are any masks, sum them up
@@ -74,13 +77,14 @@ def predict(model_weights, model_config, input, output):
                 
                 all_masks = [mask['segmentation'] for mask in mask_predictions]
                 final_masks[class_idx-1] = (np.sum(all_masks, axis=0) > 0).astype(np.uint8)
-        
-        # Option: Display the final masks
-        # classviz.display_masks(im, final_masks)
 
-        # Save the combined class masks and corresponding image 
-        output_zfile.create_dataset(f"{run_id}/masks", data=final_masks)
-        output_zfile.create_dataset(f"{run_id}/image", data=im)
+        # Save the results
+        if save_results:
+            # Save the combined class masks and corresponding image 
+            output_zfile.create_dataset(f"{run_id}/labels/0", data=final_masks)
+            output_zfile.create_dataset(f"{run_id}/0", data=im)
+        else: # Option: Display the final masks
+            classviz.display_masks(im, final_masks)
 
         # Clear variables to free memory
         del im, masks, predictions
@@ -91,6 +95,13 @@ def predict(model_weights, model_config, input, output):
     galleries.convert_zarr_to_gallery(output)
 
     print(f"Inference completed. Results saved to {output}")
+
+def masks3d_to_list(masks):
+
+    masks_list = [
+       {'segmentation': masks[i,].astype(bool)} for i in range(masks.shape[0])
+    ]
+    return masks_list
 
 @click.command(context_settings={"show_default": True})
 @predict_commands

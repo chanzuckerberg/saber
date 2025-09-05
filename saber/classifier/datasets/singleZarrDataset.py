@@ -32,19 +32,20 @@ class ZarrSegmentationDataset(Dataset):
         self.samples = []
         for run_id in tqdm(self.run_ids):
             group = self.zfile[run_id]
-            image = group['image'][:]
-
-            if 'masks' in group:
-                # Process candidate masks
-                candidate_masks = group['masks'][:] # [Nclass, Nx, Ny]
+            image = group['0'][:]
+            labels = group['labels']
+            
+            # Process candidate masks
+            if '0' in labels:
+                candidate_masks = labels['0'][:] # [Nclass, Nx, Ny]
                 self._process_masks(candidate_masks, image)
             else:
                 continue
             
             # Check if "rejected_masks" exists before accessing
-            if 'rejected_masks' in group:
+            if 'rejected' in labels:
                 # Process rejected masks
-                rejected_masks = group['rejected_masks'][::negative_class_reduction]
+                rejected_masks = labels['rejected'][::negative_class_reduction]
                 self._process_masks(rejected_masks, image, is_negative_mask=True)  
 
     def _process_masks(self, masks, image, is_negative_mask = False):
@@ -66,7 +67,7 @@ class ZarrSegmentationDataset(Dataset):
                         self.samples.append({
                             'image': image,
                             'mask': component_mask,
-                            'label': 0 if is_negative_mask else class_idx + 1  # Assign labels properly
+                            'label': 0 if is_negative_mask else class_idx  # Assign labels properly
                         })
 
     def __len__(self):

@@ -175,8 +175,8 @@ def convert_zarr_to_gallery(
 
         for i in range(page_images):
             run_id = run_ids[start_idx + i]
-            img = zfile[run_id]['image'][:]
-            masks = zfile[run_id]['labels'][:]
+            img = zfile[run_id][0][:]
+            masks = zfile[run_id]['labels'][0][:]
 
             r, c = divmod(i, columns)
             subplot_idx = r * columns + c + 1
