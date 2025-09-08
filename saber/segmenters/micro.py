@@ -8,7 +8,7 @@ import torch
 
 class cryoMicroSegmenter(saber2Dsegmenter):
     def __init__(self,
-        sam2_cfg: str, 
+        sam2_cfg: str = 'base', 
         deviceID: int = 0,
         classifier = None,
         target_class: int = 1,

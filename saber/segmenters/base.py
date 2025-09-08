@@ -1,6 +1,7 @@
 import saber.filters.estimate_thickness as estimate_thickness
 from saber.visualization import classifier as viz
 from saber.sam2 import tomogram_predictor
+from saber.utils import preprocessing
 import saber.filters.masks as filters
 from saber import pretrained_weights
 from saber.segmenters import utils
@@ -28,7 +29,7 @@ logger.disabled = True
 
 class saber2Dsegmenter:
     def __init__(self,
-        sam2_cfg: str, 
+        sam2_cfg: str = 'base', 
         deviceID: int = 0,
         classifier = None,
         target_class: int = 1,
@@ -99,6 +100,7 @@ class saber2Dsegmenter:
 
     @torch.inference_mode()
     def segment_image(self,
+        image: np.ndarray,
         display_image: bool = True,
         use_sliding_window: bool = False
     ):
@@ -111,20 +113,24 @@ class saber2Dsegmenter:
             use_sliding_window: Whether to use sliding window (True) or single inference (False)
         """
 
+        # Preprocess image if it is 2D
+        if image.ndim == 2:
+            image = self._preprocess(image)
+
         # Run Segmentation
         if use_sliding_window:
 
             # Create Full Mask
-            full_mask = np.zeros(self.image.shape[:2], dtype=np.uint16)
+            full_mask = np.zeros(image.shape[:2], dtype=np.uint16)
 
             # Get sliding windows
-            windows = self.get_sliding_windows(self.image.shape)
+            windows = self.get_sliding_windows(image.shape)
             
             # Process each window
             all_masks = []
             for i, (y1, x1, y2, x2) in tqdm(enumerate(windows), total=len(windows)):
                 # Extract window
-                window_image = self.image[y1:y2, x1:x2]
+                window_image = image[y1:y2, x1:x2]
                 
                 # Run inference on window
                 window_masks = self.mask_generator.generate(window_image)
@@ -150,12 +156,11 @@ class saber2Dsegmenter:
             
         else:
             # Original single inference
-            with torch.no_grad():
-                self.masks = self.mask_generator.generate(self.image)
+            self.masks = self.mask_generator.generate(image)
 
         # Apply Classifier Model or Physical Constraints to Filter False Positives
         if self.classifier is not None:
-            self.masks = filters.apply_classifier(self.image, self.masks, self.classifier,
+            self.masks = filters.apply_classifier(image, self.masks, self.classifier,
                                                   self.target_class, self.batchsize)
         else: # Since Order Doesn't Matter, Sort by Area for Saber GUI. 
             self.masks = sorted(self.masks, key=lambda mask: mask['area'], reverse=False)
@@ -167,9 +172,10 @@ class saber2Dsegmenter:
 
         # Optional: Save Save Segmentation to PNG or Plot Segmentation with Matplotlib
         if display_image:
-            viz.display_mask_list(self.image, self.masks, self.save_button)
+            viz.display_mask_list(image, self.masks, self.save_button)
 
         # Return the Masks
+        self.image = image
         return self.masks  
         
     def get_sliding_windows(self, image_shape: Tuple[int, int]) -> List[Tuple[int, int, int, int]]:
@@ -201,9 +207,15 @@ class saber2Dsegmenter:
                 
         return windows
     
+    def _preprocess(self, image: np.ndarray):
+        image = preprocessing.contrast(image, std_cutoff=2)
+        image = preprocessing.normalize(image, rgb=False)
+        image = np.repeat(image[..., None], 3, axis=2)
+        return image
+    
 class saber3Dsegmenter(saber2Dsegmenter):
     def __init__(self,
-        sam2_cfg: str, 
+        sam2_cfg: str = 'base', 
         deviceID: int = 0,
         classifier = None,
         target_class: int = 1,
@@ -224,6 +236,8 @@ class saber3Dsegmenter(saber2Dsegmenter):
 
         # Flag to Plot the Z-Slice Confidence Estimations
         self.confidence_debug = False
+
+        self.progress_bar = True
         
     @torch.inference_mode()
     def propagate_segementation(
@@ -249,7 +263,7 @@ class saber3Dsegmenter(saber2Dsegmenter):
             self.current_frame = out_frame_idx
             video_segments1[out_frame_idx] = {
                 out_obj_id: (out_mask_logits[i] > self.min_logits).cpu().numpy() for i, out_obj_id in enumerate(out_obj_ids)
-            }      
+            }
 
         # run propagation throughout the video and collect the results in a dict
         video_segments2 = {}  # video_segments contains the per-frame segmentation results

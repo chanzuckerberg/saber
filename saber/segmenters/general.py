@@ -7,7 +7,7 @@ import torch
 
 class generalSegmenter(saber3Dsegmenter):
     def __init__(self,
-        sam2_cfg: str, 
+        sam2_cfg: str = 'base', 
         deviceID: int = 0,
         classifier = None,
         target_class: int = 1,
@@ -22,9 +22,8 @@ class generalSegmenter(saber3Dsegmenter):
         # Flag to Bound the Segmentation to the Tomogram
         self.bound_segmentation = True        
 
-
     @torch.inference_mode()
-    def segment(
+    def segment_3d(
         self,
         vol,
         masks,

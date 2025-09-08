@@ -10,7 +10,7 @@ import torch
 
 class cryoTomoSegmenter(saber3Dsegmenter):
     def __init__(self,
-        sam2_cfg: str, 
+        sam2_cfg: str = 'base', 
         deviceID: int = 0,
         classifier = None,
         target_class: int = 1,
@@ -59,7 +59,7 @@ class cryoTomoSegmenter(saber3Dsegmenter):
         self.generate_slab(vol, zSlice, slab_thickness)
 
         # Segment Slab 
-        self.segment_image( display_image = display_image)
+        self.segment_image(self.image, display_image = display_image)
 
         return vol, self.masks
 
@@ -203,3 +203,30 @@ class cryoTomoSegmenter(saber3Dsegmenter):
 
         # Hold Onto Original Image for Training
         self.image = image
+
+
+class multiDepthTomoSegmenter(cryoTomoSegmenter):
+    def __init__(self,
+        sam2_cfg: str = 'base', 
+        deviceID: int = 0,
+        classifier = None,
+        target_class: int = 1,
+        min_mask_area: int = 100,
+        min_rel_box_size: float = 0.025
+    ):
+        super().__init__(sam2_cfg, deviceID, classifier, target_class, min_mask_area, min_rel_box_size)
+    """
+    Initialize the multiDepthTomoSegmenter
+    """
+
+    def segment(self,
+        vol,
+        slab_thickness: int,
+        zSlice: int = None,
+        save_run: str = None, 
+        show_segmentations: bool = False, 
+    ):
+        """
+        Segment a 3D tomogram using the Video Predictor
+        """
+        pass
