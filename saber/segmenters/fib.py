@@ -130,10 +130,3 @@ class fibSegmenter(generalSegmenter):
             np.maximum(final_masks, masks3d, out=final_masks)
         
         return final_masks
-
-
-    def _preprocess(self, image: np.ndarray):
-        image = preprocessing.contrast(image, std_cutoff=2)
-        image = preprocessing.normalize(image, rgb=False)
-        image = np.repeat(image[..., None], 3, axis=2)
-        return image

@@ -236,8 +236,6 @@ class saber3Dsegmenter(saber2Dsegmenter):
 
         # Flag to Plot the Z-Slice Confidence Estimations
         self.confidence_debug = False
-
-        self.progress_bar = True
         
     @torch.inference_mode()
     def propagate_segementation(

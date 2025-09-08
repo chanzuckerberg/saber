@@ -19,8 +19,10 @@ class cryoMicroSegmenter(saber2Dsegmenter):
         """
         Class for Segmenting Micrographs
         """
-
         super().__init__(sam2_cfg, deviceID, classifier, target_class, min_mask_area, window_size, overlap_ratio)
+
+        # Max pixels for single inference
+        self.max_pixels = 1280
 
     @torch.inference_mode()
     def segment(self,
@@ -42,20 +44,14 @@ class cryoMicroSegmenter(saber2Dsegmenter):
         (nx, ny) = image0.shape
 
         # (Optional)Fourier Crop the Image to the Desired Resolution
-        if not use_sliding_window and (nx > 1536 or ny > 1536):
-            scale_factor =  max(nx, ny) / 1024 
+        if not use_sliding_window and (nx > self.max_pixels or ny > self.max_pixels):
+            scale_factor =  max(nx, ny) / self.max_pixels
             self.image0 = FourierRescale2D.run(self.image0, scale_factor)
             (nx, ny) = self.image0.shape
-
-        # Increase Contrast of Image and Normalize the Image to [0,1]        
-        self.image0 = preprocess.contrast(self.image0, std_cutoff=2)
-        self.image0 = preprocess.normalize(self.image0, rgb = False)
-
-        # Extend From Grayscale to RGB 
-        self.image = np.repeat(self.image0[..., None], 3, axis=2)   
-
+            
         # Segment Image
         self.segment_image(
+            self.image0,
             display_image = display_image, 
             use_sliding_window = use_sliding_window)
 

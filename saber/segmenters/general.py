@@ -20,7 +20,7 @@ class generalSegmenter(saber3Dsegmenter):
         super().__init__(sam2_cfg, deviceID, classifier, target_class, min_mask_area, min_rel_box_size)
 
         # Flag to Bound the Segmentation to the Tomogram
-        self.bound_segmentation = True        
+        self.bound_segmentation = True
 
     @torch.inference_mode()
     def segment_3d(
