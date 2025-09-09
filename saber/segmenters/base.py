@@ -7,6 +7,7 @@ from saber import pretrained_weights
 from saber.segmenters import utils
 from typing import List, Tuple
 from saber.utils import io
+from scipy import ndimage
 from tqdm import tqdm
 import numpy as np
 import torch
@@ -279,6 +280,109 @@ class saber3Dsegmenter(saber2Dsegmenter):
 
         return vol_mask, video_segments
 
+    def _setup_score_capture_hook(self):
+        """
+        Set up hook to capture object score logits from mask decoder.
+        Returns: (captured_scores dict, hook_handle)
+        """
+        captured_scores = {}
+        self.current_frame = None
+        
+        def mask_decoder_hook(module, inputs, output):
+            """Capture object score logits from SAM mask decoder output."""
+            logits = output[3].detach().cpu().to(torch.float32).numpy()
+            frame_idx = self.current_frame
+            if frame_idx not in captured_scores:
+                captured_scores[frame_idx] = []
+            captured_scores[frame_idx].append(logits)
+        
+        hook_handle = self.video_predictor.predictor.sam_mask_decoder.register_forward_hook(mask_decoder_hook)
+        return captured_scores, hook_handle
+    
+    def _add_masks_to_predictor(self, masks, ann_frame_idx, ny):
+        """
+        Add masks to the video predictor with automatic prompting.
+        
+        Args:
+            masks: List of mask arrays or mask dictionaries
+            ann_frame_idx: Frame index for annotation
+            ny: Height dimension for scaling
+        
+        Returns:
+            prompts: Dictionary of prompts added
+        """
+        # Handle both mask arrays and mask dictionaries
+        if isinstance(masks[0], dict):
+            mask_arrays = [m['segmentation'] for m in masks]
+        else:
+            mask_arrays = masks
+            
+        # Extract centers of mass for prompting
+        auto_points = np.array([
+            ndimage.center_of_mass(mask)
+            for mask in mask_arrays
+        ])[:, ::-1]
+        
+        # Set up prompts
+        prompts = {}
+        scale = self.video_predictor.predictor.image_size / ny
+        labels = np.array([1], np.int32)
+        
+        for ii, mask in enumerate(mask_arrays):
+            sam_points = (auto_points[ii, :] * scale).reshape(1, 2)
+            ann_obj_id = ii + 1
+            
+            # Add new mask
+            _, out_obj_ids, out_mask_logits = self.video_predictor.add_new_mask(
+                inference_state=self.inference_state,
+                frame_idx=ann_frame_idx,
+                obj_id=ann_obj_id,
+                mask=mask,
+            )
+            
+            prompts.setdefault(ann_obj_id, {})
+            prompts[ann_obj_id].setdefault(ann_frame_idx, [])
+            prompts[ann_obj_id][ann_frame_idx].append((sam_points, labels))
+            
+        return prompts
+
+    def _propagate_and_filter(self, vol, masks, captured_scores, mask_shape, 
+                              filter_segmentation=True, show_segmentations=False):
+        """
+        Propagate segmentation and optionally filter results.
+        
+        Args:
+            vol: Volume array
+            masks: Input masks
+            captured_scores: Captured confidence scores
+            mask_shape: Shape of the output mask
+            filter_segmentation: Whether to filter low-confidence segments
+            show_segmentations: Whether to display results
+            
+        Returns:
+            vol_masks: Final segmentation masks
+            video_segments: Video segmentation dictionary
+        """
+        # Propagate segmentation
+        vol_masks, video_segments = self.propagate_segementation(mask_shape)
+        
+        # Filter if requested
+        if filter_segmentation:
+            self.frame_scores = np.zeros([vol.shape[0], len(masks)])
+            vol_masks, video_segments = self.filter_video_segments(
+                video_segments, captured_scores, mask_shape
+            )
+        else:
+            vol_masks = filters.segments_to_mask(
+                video_segments, vol_masks, mask_shape, len(masks)
+            )
+        
+        # Display if requested
+        if show_segmentations:
+            viz.display_video_segmentation(video_segments, self.inference_state)
+            
+        return vol_masks, video_segments        
+
     def filter_video_segments(self, video_segments, captured_scores, mask_shape):
         """
         Filter out masks with low confidence scores.
@@ -319,5 +423,3 @@ class saber3Dsegmenter(saber2Dsegmenter):
         masks = filters.segments_to_mask(filtered_video_segments, masks, mask_shape, nMasks)
 
         return masks, filtered_video_segments
-    
-    
