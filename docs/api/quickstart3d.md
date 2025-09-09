@@ -69,7 +69,7 @@ segmenter = cryoTomoSegmenter(
 SABER uses a slab-based approach for tomogram segmentation, which extracts 2D representations from 3D volumes:
 ```python
 # Segment a 2D slab from the tomogram
-vol, masks = segmenter.segment_slab(
+masks = segmenter.segment_slab(
     vol=vol,
     slab_thickness=10,          # Thickness of the slab in pixels
     zSlice=None,                # Use middle slice if None

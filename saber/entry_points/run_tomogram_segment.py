@@ -1,6 +1,6 @@
+from saber.segmenters.tomo import cryoTomoSegmenter, multiDepthTomoSegmenter
 from saber.entry_points.inference_core import segment_tomogram_core
 from saber.segmenters.loaders import tomogram_workflow
-from saber.segmenters.tomo import cryoTomoSegmenter
 import saber.utils.slurm_submit as slurm_submit
 import copick, click, torch, os, matplotlib
 from saber.classifier.models import common
@@ -56,7 +56,7 @@ def slab(
     segmenter.save_button = True
 
     # For 2D segmentation, call segment_image
-    masks = segmenter.segment_slab(vol, slab_thickness, display_image=True)
+    segmenter.segment_slab(vol, slab_thickness, display_image=True)
 
 @cli.command(context_settings={"show_default": True})
 @slurm_submit.copick_commands
@@ -115,7 +115,7 @@ def tomograms(
     pool = parallelization.GPUPool(
         init_fn=tomogram_workflow,
         approach="threading",
-        init_args=(model_weights, model_config, target_class, sam2_cfg),
+        init_args=(model_weights, model_config, target_class, sam2_cfg, num_slabs),
         verbose=True
     )
 
@@ -171,12 +171,21 @@ def segment_tomogram_interactive(
     # Load models fresh for interactive use
     torch.cuda.set_device(gpu_id)
     classifier = common.get_predictor(model_weights, model_config, gpu_id)
-    segmenter = cryoTomoSegmenter(
-        sam2_cfg=sam2_cfg,
-        deviceID=gpu_id,
-        classifier=classifier,
-        target_class=target_class
-    )
+
+    if num_slabs > 1:
+        segmenter = multiDepthTomoSegmenter(
+            sam2_cfg=sam2_cfg,
+            deviceID=gpu_id,
+            classifier=classifier,
+            target_class=target_class
+        )
+    else:
+        segmenter = cryoTomoSegmenter(
+            sam2_cfg=sam2_cfg,
+            deviceID=gpu_id,
+            classifier=classifier,
+            target_class=target_class
+        )
     
     # Call core function
     segment_tomogram_core(

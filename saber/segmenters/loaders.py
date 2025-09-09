@@ -1,5 +1,5 @@
+from saber.segmenters.tomo import cryoTomoSegmenter, multiDepthTomoSegmenter
 from saber.segmenters.micro import cryoMicroSegmenter
-from saber.segmenters.tomo import cryoTomoSegmenter
 from saber.classifier.models import common
 import torch
 
@@ -24,19 +24,27 @@ def micrograph_workflow(gpu_id:int, model_weights:str, model_config:str, target_
     }
 
 
-def tomogram_workflow(gpu_id:int, model_weights:str, model_config:str, target_class:int, sam2_cfg:str):
+def tomogram_workflow(gpu_id:int, model_weights:str, model_config:str, target_class:int, sam2_cfg:str, num_slabs:int):
     """Load tomogram segmentation models once per GPU"""
     
     torch.cuda.set_device(gpu_id)
     
     # Load models
     predictor = common.get_predictor(model_weights, model_config, gpu_id)
-    segmenter = cryoTomoSegmenter(
-        sam2_cfg=sam2_cfg, 
-        deviceID=gpu_id,
-        classifier=predictor,
-        target_class=target_class
-    )
+    if num_slabs > 1:
+        segmenter = multiDepthTomoSegmenter(
+            sam2_cfg=sam2_cfg,
+            deviceID=gpu_id,
+            classifier=predictor,
+            target_class=target_class
+        )
+    else:
+        segmenter = cryoTomoSegmenter(
+            sam2_cfg=sam2_cfg, 
+            deviceID=gpu_id,
+            classifier=predictor,
+            target_class=target_class
+        )
     
     return {
         'predictor': predictor,

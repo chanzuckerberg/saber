@@ -1,5 +1,4 @@
 from saber.segmenters.general import generalSegmenter
-from saber.utils import preprocessing
 from tqdm import tqdm
 import numpy as np
 import torch
@@ -34,6 +33,44 @@ class fibSegmenter(generalSegmenter):
             return self.single_segment(volume, ini_depth)
         else:
             return self.multiclass_segment(volume, ini_depth)
+
+    @torch.inference_mode()
+    def single_segment(self, volume: np.ndarray, ini_depth: int):
+        """
+        Segment the volume with a single class or without the classifier
+
+        Args:
+            volume: The volume to segment
+            ini_depth: The spacing between slices to segment
+        """
+
+        # Single 3D array instead of accumulating 4D
+        final_masks = np.zeros(volume.shape, dtype=np.uint16)
+
+        # Main Loop
+        for ii in tqdm(range(ini_depth, volume.shape[0], ini_depth)):
+            
+            # Set image and segment
+            im = volume[ii]
+            masks = self.segment_image(im, display_image=False)
+            
+            if len(masks) == 0:
+                continue
+                
+            # Extract mask list
+            mask_list = [m['segmentation'] for m in masks]
+            
+            # 3D propagation
+            masks3d = self.segment_3d(volume, mask_list, ann_frame_idx=ii)
+            
+            # Convert to binary if target class specified
+            if self.target_class > 0:
+                masks3d = (masks3d > 0).astype(np.uint8)
+            
+            # Update final masks with maximum operation (in-place)
+            np.maximum(final_masks, masks3d, out=final_masks)
+        
+        return final_masks
 
     @torch.inference_mode()
     def multiclass_segment(self, volume: np.ndarray, ini_depth: int):
@@ -90,43 +127,5 @@ class fibSegmenter(generalSegmenter):
                     update_mask = mask_region & (confidence > max_confidence)
                     final_masks[update_mask] = class_id
                     max_confidence[update_mask] = confidence
-        
-        return final_masks
-
-    @torch.inference_mode()
-    def single_segment(self, volume: np.ndarray, ini_depth: int):
-        """
-        Segment the volume with a single class or without the classifier
-
-        Args:
-            volume: The volume to segment
-            ini_depth: The spacing between slices to segment
-        """
-
-        # Single 3D array instead of accumulating 4D
-        final_masks = np.zeros(volume.shape, dtype=np.uint16)
-
-        # Main Loop
-        for ii in tqdm(range(ini_depth, volume.shape[0], ini_depth)):
-            
-            # Set image and segment
-            im = volume[ii]
-            masks = self.segment_image(im, display_image=False)
-            
-            if len(masks) == 0:
-                continue
-                
-            # Extract mask list
-            mask_list = [m['segmentation'] for m in masks]
-            
-            # 3D propagation
-            masks3d = self.segment_3d(volume, mask_list, ann_frame_idx=ii)
-            
-            # Convert to binary if target class specified
-            if self.target_class > 0:
-                masks3d = (masks3d > 0).astype(np.uint8)
-            
-            # Update final masks with maximum operation (in-place)
-            np.maximum(final_masks, masks3d, out=final_masks)
         
         return final_masks

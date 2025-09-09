@@ -41,57 +41,16 @@ def segment_tomogram_core(
     # Ensure we're on the correct GPU
     torch.cuda.set_device(gpu_id)
     
-    # Handle multiple slabs
-    if num_slabs > 1:
-        # Default Showing Segmentation to False for multi-slab
-        display_segmentation = False
+    # Segment the Tomogram
+    segment_mask = segmenter.segment(
+        vol, slab_thickness, 
+        save_run=run.name + '-' + segmentation_session_id, 
+        show_segmentations=display_segmentation)
 
-        # Get the Center Index of the Tomogram
-        depth = vol.shape[0]
-        center_index = depth // 2
-        
-        # Initialize combined mask with zeros (using volume shape)
-        combined_mask = np.zeros((vol.shape), dtype=np.uint8)
-
-        # Process each slab
-        mask_label = 0
-        for i in range(num_slabs):
-            # Define the center of the slab
-            offset = (i - num_slabs // 2) * slab_thickness
-            slab_center = center_index + offset
-            
-            # Segment this slab
-            segment_mask = segmenter.segment(
-                vol, slab_thickness, zSlice=slab_center, 
-                save_run=run.name + '-' + segmentation_session_id, 
-                show_segmentations=display_segmentation)        
-
-            # Process and combine masks immediately if valid
-            if segment_mask is not None:
-                # Offset non-zero values by the mask label
-                mask_copy = segment_mask.copy()
-                mask_copy[mask_copy > 0] += mask_label
-                combined_mask = np.maximum(combined_mask, mask_copy)
-                mask_label += 1
-
-        # Apply Adaptive Gaussian Smoothing to the Segmentation Mask              
-        combined_mask = mask_filters.fast_3d_gaussian_smoothing(
-            combined_mask, scale=0.075, deviceID=gpu_id)        
-
-        # Combine masks from all slabs
-        segment_mask = mask_filters.merge_segmentation_masks(combined_mask)
-
-    else:
-        # Single slab case
-        segment_mask = segmenter.segment(
-            vol, slab_thickness, 
-            save_run=run.name + '-' + segmentation_session_id, 
-            show_segmentations=display_segmentation)
-
-        # Check if the segment_mask is None
-        if segment_mask is None:
-            print(f'No Segmentation Found for {run.name}')
-            return None
+    # Check if the segment_mask is None
+    if segment_mask is None:
+        print(f'No Segmentation Found for {run.name}')
+        return None
 
     # Write Segmentation if We aren't Displaying Results
     if not display_segmentation and segment_mask is not None: 

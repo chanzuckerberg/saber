@@ -1,10 +1,8 @@
 from saber.utils import preprocessing as preprocess
 from saber.segmenters.base import saber3Dsegmenter
+from saber.filters import masks as mask_filters
 import saber.visualization.results as cryoviz
 import saber.filters.gaussian as gauss
-import saber.visualization.sam2 as viz
-from saber.filters import masks
-from scipy import ndimage
 import numpy as np
 import torch
 
@@ -47,23 +45,36 @@ class cryoTomoSegmenter(saber3Dsegmenter):
         """
 
         # 1D Smoothing along Z-Dimension
-        vol = gauss.gaussian_smoothing(vol, 5, dim=0)
-        vol = preprocess.normalize(vol)
+        self.vol = gauss.gaussian_smoothing(self.vol, 5, dim=0)
+        self.vol = preprocess.normalize(self.vol)
 
         # If No Z-Slice is Provided, Use the Middle of the Tomogram
         if zSlice is None:
-            zSlice = int(vol.shape[0] // 2)
+            zSlice = int(self.vol.shape[0] // 2)
             
         # Generate Slab
-        self.generate_slab(vol, zSlice, slab_thickness)
+        self.generate_slab(self.vol, zSlice, slab_thickness)
 
         # Segment Slab 
         self.segment_image(self.image, display_image = display_image)
 
-        return vol, self.masks
+        return self.masks
+
+    def segment(
+        self, 
+        vol,
+        slab_thickness: int,
+        zSlice: int = None,
+        save_run: str = None, 
+        show_segmentations: bool = False, 
+    ):
+        """
+        Segment a 3D tomogram using the Video Predictor
+        """
+        return self.segment_vol(vol, slab_thickness, zSlice, save_run, show_segmentations)
 
     @torch.inference_mode()
-    def segment(
+    def segment_vol(
         self, 
         vol,
         slab_thickness: int,
@@ -81,7 +92,7 @@ class cryoTomoSegmenter(saber3Dsegmenter):
         self.is_tomogram_mode = True        
 
         # Segment Initial Slab 
-        vol = self.segment_slab(vol, slab_thickness, zSlice, display_image=False)[0]
+        self.segment_slab(vol, slab_thickness, zSlice, display_image=False)
 
         # Optional: Save Save Segmentation to PNG or Plot Segmentation with Matplotlib
         if save_mask and save_run is not None: # TODO: Figure out a better name / method for this.
@@ -95,7 +106,7 @@ class cryoTomoSegmenter(saber3Dsegmenter):
 
         # Initialize Video Predictor
         if self.inference_state is None:
-            self.inference_state = self.video_predictor.create_inference_state_from_tomogram(vol)  
+            self.inference_state = self.video_predictor.create_inference_state_from_tomogram(self.vol)  
 
         # Set up score capture hook
         captured_scores, hook_handle = self._setup_score_capture_hook()                  
@@ -116,7 +127,7 @@ class cryoTomoSegmenter(saber3Dsegmenter):
         # Propagate and filter
         mask_shape = (nx, ny, nz)
         vol_masks, video_segments = self._propagate_and_filter(
-            vol, self.masks, captured_scores, mask_shape,
+            self.vol, self.masks, captured_scores, mask_shape,
             filter_segmentation=self.bound_segmentation,
             show_segmentations=show_segmentations
         )
@@ -165,6 +176,7 @@ class multiDepthTomoSegmenter(cryoTomoSegmenter):
     def segment(self,
         vol,
         slab_thickness: int,
+        num_slabs: int = 3,
         zSlice: int = None,
         save_run: str = None, 
         show_segmentations: bool = False, 
@@ -172,4 +184,53 @@ class multiDepthTomoSegmenter(cryoTomoSegmenter):
         """
         Segment a 3D tomogram using the Video Predictor
         """
-        pass
+        if self.target_class > 0 or self.classifier is None:
+            return self.single_segment(vol, slab_thickness, num_slabs)
+        else:
+            print("Multiclass Segmentation is not implemented yet")
+            # return self.multiclass_segment(vol, slab_thickness, num_slabs)
+
+    @torch.inference_mode()
+    def single_segment(self, vol, slab_thickness, num_slabs):
+        """
+        Segment a 3D tomogram using the Video Predictor
+        """
+        
+        depth = vol.shape[0]
+        center_index = depth // 2
+        
+        # Initialize combined mask with zeros (using volume shape)
+        combined_mask = np.zeros((vol.shape), dtype=np.uint16)
+
+        # Process each slab
+        mask_label = 0
+        for i in range(num_slabs):
+            # Define the center of the slab
+            offset = (i - num_slabs // 2) * slab_thickness
+            slab_center = center_index + offset
+            
+            # Segment this slab
+            masks3d = self.segment_vol(vol, slab_thickness, zSlice=slab_center, show_segmentations=False)        
+
+            # Convert to binary
+            masks3d = (masks3d > 0).astype(np.uint16)
+
+            # Update final masks with maximum operation (in-place)
+            np.maximum(combined_mask, masks3d, out=combined_mask)
+
+        # Operation to Separate the Segmentation Masks
+        combined_mask = self.separate_masks(combined_mask)
+
+        # Apply Adaptive Gaussian Smoothing to the Segmentation Mask              
+        combined_mask = mask_filters.fast_3d_gaussian_smoothing(
+            combined_mask, scale=0.075, deviceID=self.deviceID)        
+
+        return combined_mask
+
+    def separate_masks(self, combined_mask):
+        """
+        Separate the Segmentation Masks
+        """
+        # TODO: Implement this
+        return combined_mask
+

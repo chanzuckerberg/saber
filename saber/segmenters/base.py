@@ -53,6 +53,7 @@ class saber2Dsegmenter:
 
         # Determine device
         self.device = io.get_available_devices(deviceID)
+        self.deviceID = deviceID
 
         # Build SAM2 model
         (cfg, checkpoint) = pretrained_weights.get_sam2_checkpoint(sam2_cfg)
@@ -210,7 +211,7 @@ class saber2Dsegmenter:
         return windows
     
     def _preprocess(self, image: np.ndarray):
-        image = preprocessing.contrast(image, std_cutoff=2)
+        image = preprocessing.contrast(image, std_cutoff=3)
         image = preprocessing.normalize(image, rgb=False)
         image = np.repeat(image[..., None], 3, axis=2)
         return image

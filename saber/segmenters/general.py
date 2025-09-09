@@ -1,6 +1,4 @@
 from saber.segmenters.base import saber3Dsegmenter
-from saber.visualization import sam2 as viz
-import numpy as np
 import torch
 
 class generalSegmenter(saber3Dsegmenter):
