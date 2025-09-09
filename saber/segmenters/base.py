@@ -1,5 +1,6 @@
 import saber.filters.estimate_thickness as estimate_thickness
 from saber.visualization import classifier as viz
+import saber.visualization.sam2 as vidviz
 from saber.sam2 import tomogram_predictor
 from saber.utils import preprocessing
 import saber.filters.masks as filters
@@ -379,7 +380,7 @@ class saber3Dsegmenter(saber2Dsegmenter):
         
         # Display if requested
         if show_segmentations:
-            viz.display_video_segmentation(video_segments, self.inference_state)
+            vidviz.display_video_segmentation(video_segments, self.inference_state)
             
         return vol_masks, video_segments        
 
