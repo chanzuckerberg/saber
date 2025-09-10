@@ -2,7 +2,9 @@ from saber.utils import preprocessing as preprocess
 from saber.segmenters.base import saber3Dsegmenter
 from saber.filters import masks as mask_filters
 import saber.visualization.results as cryoviz
+import saber.visualization.sam2 as vidviz
 import saber.filters.gaussian as gauss
+from tqdm import tqdm
 import numpy as np
 import torch
 
@@ -45,7 +47,7 @@ class cryoTomoSegmenter(saber3Dsegmenter):
         """
 
         # 1D Smoothing along Z-Dimension
-        self.vol = gauss.gaussian_smoothing(self.vol, 5, dim=0)
+        self.vol = gauss.gaussian_smoothing(vol, 5, dim=0)
         self.vol = preprocess.normalize(self.vol)
 
         # If No Z-Slice is Provided, Use the Middle of the Tomogram
@@ -203,11 +205,10 @@ class multiDepthTomoSegmenter(cryoTomoSegmenter):
         combined_mask = np.zeros((vol.shape), dtype=np.uint16)
 
         # Process each slab
-        mask_label = 0
-        for i in range(num_slabs):
+        for i in tqdm(range(num_slabs)):
             # Define the center of the slab
             offset = (i - num_slabs // 2) * slab_thickness
-            slab_center = center_index + offset
+            slab_center = int(center_index + offset)
             
             # Segment this slab
             masks3d = self.segment_vol(vol, slab_thickness, zSlice=slab_center, show_segmentations=False)        
@@ -218,12 +219,12 @@ class multiDepthTomoSegmenter(cryoTomoSegmenter):
             # Update final masks with maximum operation (in-place)
             np.maximum(combined_mask, masks3d, out=combined_mask)
 
-        # Operation to Separate the Segmentation Masks
+        # (TODO): Operation to Separate the Segmentation Masks
         combined_mask = self.separate_masks(combined_mask)
 
         # Apply Adaptive Gaussian Smoothing to the Segmentation Mask              
         combined_mask = mask_filters.fast_3d_gaussian_smoothing(
-            combined_mask, scale=0.075, deviceID=self.deviceID)        
+            combined_mask, scale=0.075, deviceID=self.deviceID) 
 
         return combined_mask
 
