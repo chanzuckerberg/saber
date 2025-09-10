@@ -83,4 +83,3 @@ def remove_duplicate_masks(masks: List[Dict[str, Any]],
         processed_indices.add(i)
     
     return unique_masks
-
