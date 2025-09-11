@@ -11,6 +11,7 @@ try:
     from saber.gui.text.zarr_text_gui import text_gui
     gui_available = True
 except Exception as e:
+    print(f"GUI is not available: {e}")
     gui_available = False
 
 @click.group()
