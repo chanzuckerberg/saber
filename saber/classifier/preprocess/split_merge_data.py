@@ -31,7 +31,7 @@ def split(
     val_path = input_path.parent / f"{input_path.stem}_val.zarr"
     
     # Open the input Zarr file
-    zfile = zarr.open(input, mode='r')
+    zfile = zarr.open_group(input, mode='r')
     all_keys = list(zfile.keys())
     
     # Set random seed for reproducibility
@@ -61,6 +61,7 @@ def split(
         copy_attributes(zfile[key], train_zarr[key])
         for item in items:
             train_zarr[key][item] = zfile[key][item][:]  # [:] ensures a full copy
+        copy_attributes(zfile[key]['labels'], train_zarr[key]['labels'])
     
     print('Copying data to validation zarr file...')
     for key in val_keys:
@@ -68,6 +69,7 @@ def split(
         copy_attributes(zfile[key], val_zarr[key])
         for item in items:
             val_zarr[key][item] = zfile[key][item][:]  # [:] ensures a full copy
+        copy_attributes(zfile[key]['labels'], val_zarr[key]['labels'])
     
     # Print summary
     print(f"\nSplit Summary:")
@@ -102,6 +104,7 @@ def merge(inputs: List[str], output: str):
     Merge multiple Zarr files into a single Zarr file.
     """
     # Create the output zarr group
+    print('Creating merged zarr file at:', output)
     mergedZarr = zarr.open_group(output, mode='w')
 
     # Copy data from each input zarr file to the merged zarr file
@@ -111,41 +114,40 @@ def merge(inputs: List[str], output: str):
         session_label, zarr_path = input.split(',')
 
         # Open the zarr file
+        print('Merging data from:', zarr_path)
         zfile = zarr.open_group(zarr_path, mode='r')
         keys = list(zfile.keys())
 
         # Copy data to new zarr files
         items = ['0', 'labels/0', 'labels/rejected']
         for key in keys:
-            # write_key = session_label + '_' + key
-            # mergedZarr.create_group(write_key)  # Explicitly create the group first
-            # for item in items:
-            #     mergedZarr[write_key][item] = zfile[key][item][:]  # [:] ensures a full copy
-            
             write_key = session_label + '_' + key
             
             # Create the group and copy its attributes
             new_group = mergedZarr.create_group(write_key)  # Explicitly create the group first
-            
-            copy_attributes(zfile[key], new_group)
+            copy_attributes(zfile[key], new_group)  
+
+            # Copy the data arrays
             for item in items:
                 try:
                     # [:] ensures a full copy
                     mergedZarr[write_key][item] = zfile[key][item][:] 
                 except Exception as e:
                     pass
-    print("Merge complete!")
+            # Copy attributes for labels subgroup
+            copy_attributes(zfile[key]['labels'], new_group['labels'])
 
-    # # Copy all attributes from the last input zarr file
-    # for attr_name, attr_value in zfile.attrs.items():
-    #     mergedZarr.attrs[attr_name] = attr_value
+        # Copy all attributes from the last input zarr file
+        for attr_name, attr_value in zfile.attrs.items():
+            if attr_name not in mergedZarr.attrs:
+                mergedZarr.attrs[attr_name] = attr_value
 
     print("Merge complete!")
 
 @click.command(context_settings={"show_default": True})
 @click.option("--inputs", type=str, required=True, multiple=True,
               help="Path to the Zarr file with an associated session label provided as <session_label>,<path_to_zarr_file>.")
-@click.option("--output", type=str, required=True, 
+@click.option("--output", type=str, required=False, default='labeled.zarr',
               help="Path to the output Zarr file.")
 def merge_data(inputs: List[str], output: str):
     """

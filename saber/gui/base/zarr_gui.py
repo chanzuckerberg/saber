@@ -3,6 +3,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout, QPushButton, QHBoxLayout, QLabel, QComboBox, QMessageBox,
     QLineEdit, QListWidgetItem, QInputDialog, QColorDialog, QFileDialog
 )
+from saber.gui.base.annotation_viewer_3d import AnnotationSegmentationViewer3D
 from saber.gui.base.annotation_viewer import AnnotationSegmentationViewer
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QColor, QIcon, QPixmap
@@ -222,16 +223,32 @@ class MainWindow(QMainWindow):
         initial_run_id = self.run_ids[0]
         (initial_image, initial_masks) = self.read_data(initial_run_id)
         
-        # Create the viewer with direct access to annotations dictionary
-        self.segmentation_viewer = AnnotationSegmentationViewer(
-            initial_image, 
-            initial_masks,
-            self.class_manager.get_class_dict(),
-            self.class_manager.get_selected_class(),
-            self.annotations,  # Pass the annotations dict directly
-            initial_run_id
-        )
-        
+        # Check dimensionality and create appropriate viewer
+        if initial_image.ndim == 2 or (initial_image.ndim == 3 and initial_image.shape[0] == 3):
+            # 2D image or RGB image (3 channels)
+            print('2D Images are Loaded')
+            self.segmentation_viewer = AnnotationSegmentationViewer(
+                initial_image, 
+                initial_masks,
+                self.class_manager.get_class_dict(),
+                self.class_manager.get_selected_class(),
+                self.annotations,
+                initial_run_id
+            )
+        else:
+            # 3D volume
+            print('3D Volumes are Loaded')
+            self.segmentation_viewer = AnnotationSegmentationViewer3D(
+                initial_image, 
+                initial_masks,
+                self.class_manager.get_class_dict(),
+                self.class_manager.get_selected_class(),
+                self.annotations,
+                initial_run_id
+            )
+            # For 3D viewer, use the special setup method that adds both viewer and slider
+            self.middle_layout.addWidget(self.segmentation_viewer)
+                
         self.middle_layout.addWidget(self.segmentation_viewer)
         
         # Export/Import buttons
@@ -312,10 +329,24 @@ class MainWindow(QMainWindow):
         except:
             masks = self.root[run_id]['masks'][:]
         
-        (nx, ny) = base_image.shape
-        if nx < ny:
-            base_image = base_image.T
-            masks = np.swapaxes(masks, 1, 2)
+        # Handle both 2D and 3D cases
+        if base_image.ndim == 2:
+            (nx, ny) = base_image.shape
+            if nx < ny:
+                base_image = base_image.T
+                masks = np.swapaxes(masks, 1, 2)
+        elif base_image.ndim == 3 and base_image.shape[0] == 3:
+            # RGB image (3, H, W)
+            (_, nx, ny) = base_image.shape
+            if nx < ny:
+                base_image = np.transpose(base_image, (0, 2, 1))
+                masks = np.swapaxes(masks, 1, 2)
+        elif base_image.ndim == 3:
+            # 3D volume (Nz, Nx, Ny)
+            (nz, nx, ny) = base_image.shape
+            if nx < ny:
+                base_image = np.swapaxes(base_image, 1, 2)
+                masks = np.swapaxes(masks, -2, -1)  # Swap last two axes
         
         return base_image, masks
     

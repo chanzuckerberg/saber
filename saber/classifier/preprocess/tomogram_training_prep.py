@@ -51,7 +51,7 @@ def extract_sam2_candidates(
         return
     
     # Hard coded conversion from Angstroms to nanometers
-    voxel_size = voxel_size * 10
+    voxel_size /= 10
     
     # Process Multiple Slabs or Single Slab at the Center of the Volume
     if multiple_slabs > 1:

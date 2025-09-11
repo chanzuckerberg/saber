@@ -119,9 +119,9 @@ def segment_micrograph_core(
     # Convert Masks to Numpy Array
     masks = mask_filters.masks_to_array(masks_list)
 
-    # For now let's hard code the conversion from Angstroms to nanometers
+    # For now let's assume the pixel size is in nanometers
     if pixel_size is not None:
-        pixel_size = pixel_size * 10
+        pixel_size /= 10
     else: 
         pixel_size = 1
 

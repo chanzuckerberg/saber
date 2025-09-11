@@ -32,9 +32,9 @@ To enable the graphical interface for manual annotation, install with:
 ```bash
 pip install saber-em[gui]
 ```
-- One of the current dependencies is currently not working with pip 25. To temporarily reduce the pip version, run:
+- One of the current dependencies is currently not working with pip 25.1. We recommend using pip 25.2 or higher when installing saber:
 ```bash
-pip install --upgrade "pip<25"
+pip install --upgrade "pip>=25.2"
 ```
 
 ### Basic Usage
