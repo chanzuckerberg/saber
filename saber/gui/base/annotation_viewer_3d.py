@@ -104,11 +104,12 @@ class AnnotationSegmentationViewer3D(QtWidgets.QWidget):
         # Main layout
         main_layout = QtWidgets.QHBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(5)
         
         # Create the graphics widget (like the parent class would have)
         self.graphics_widget = pg.GraphicsLayoutWidget()
         
-        # Add two views side by side
+        # Add two views side by side with centered alignment
         self.left_view = self.graphics_widget.addViewBox(row=0, col=0)
         self.right_view = self.graphics_widget.addViewBox(row=0, col=1)
         
@@ -126,6 +127,10 @@ class AnnotationSegmentationViewer3D(QtWidgets.QWidget):
         self.left_view.addItem(self.left_base_img_item)
         self.right_view.addItem(self.right_base_img_item)
         
+        # Auto-range to fit the images and center them
+        self.left_view.autoRange()
+        self.right_view.autoRange()
+        
         # Connect mouse click event
         self.graphics_widget.scene().sigMouseClicked.connect(self.mouse_clicked)
         
@@ -140,13 +145,15 @@ class AnnotationSegmentationViewer3D(QtWidgets.QWidget):
         """Create slider widget for slice navigation"""
         self.slider_widget = QtWidgets.QWidget()
         slider_layout = QtWidgets.QVBoxLayout()
-        slider_layout.setContentsMargins(5, 5, 5, 5)
+        slider_layout.setContentsMargins(20, 10, 5, 10)  # Add top/bottom margins
+        slider_layout.setSpacing(5)
         
-        # Slice label
-        self.slice_label = QtWidgets.QLabel(f'{self.current_slice + 1}')
-        self.slice_label.setAlignment(QtCore.Qt.AlignCenter)
+        # Top label showing maximum slice
+        top_label = QtWidgets.QLabel(str(self.n_slices))
+        top_label.setAlignment(QtCore.Qt.AlignCenter)
+        top_label.setStyleSheet("color: gray; font-size: 10px;")
         
-        # Slice slider
+        # Slice slider - will expand to fill available space
         self.slice_slider = QtWidgets.QSlider(QtCore.Qt.Vertical)
         self.slice_slider.setMinimum(0)
         self.slice_slider.setMaximum(self.n_slices - 1)
@@ -154,14 +161,30 @@ class AnnotationSegmentationViewer3D(QtWidgets.QWidget):
         self.slice_slider.setTickPosition(QtWidgets.QSlider.TicksRight)
         self.slice_slider.setTickInterval(max(1, self.n_slices // 10))
         self.slice_slider.valueChanged.connect(self.on_slice_changed)
+        # Make slider inverted so top = last slice, bottom = first slice
+        self.slice_slider.setInvertedAppearance(True)
         
+        # Bottom label showing slice 1
+        bottom_label = QtWidgets.QLabel("1")
+        bottom_label.setAlignment(QtCore.Qt.AlignCenter)
+        bottom_label.setStyleSheet("color: gray; font-size: 10px;")
+        
+        # Current slice label (larger, bold)
+        self.slice_label = QtWidgets.QLabel(f'{self.current_slice + 1}')
+        self.slice_label.setAlignment(QtCore.Qt.AlignCenter)
+        self.slice_label.setStyleSheet("font-weight: bold; font-size: 11px;")
+        
+        # Add widgets to layout
         slider_layout.addWidget(self.slice_label)
-        slider_layout.addWidget(self.slice_slider)
-        slider_layout.addStretch()
+        slider_layout.addWidget(top_label)
+        slider_layout.addWidget(self.slice_slider, stretch=1)  # Slider expands
+        slider_layout.addWidget(bottom_label)
+        
         self.slider_widget.setLayout(slider_layout)
         
         # Set fixed width for slider widget
         self.slider_widget.setMaximumWidth(80)
+        self.slider_widget.setMinimumWidth(10)
     
     def _get_slice_masks(self, slice_idx):
         """Extract 2D masks for a specific slice"""
@@ -284,6 +307,10 @@ class AnnotationSegmentationViewer3D(QtWidgets.QWidget):
         
         # Restore annotations for this slice
         self._restore_slice_annotations()
+        
+        # Re-center the views after updating
+        self.left_view.autoRange()
+        self.right_view.autoRange()
     
     def _restore_slice_annotations(self):
         """Restore annotation visibility for current slice"""
@@ -461,9 +488,9 @@ class AnnotationSegmentationViewer3D(QtWidgets.QWidget):
         self.class_dict = class_dict
         self.n_slices = base_image.shape[0]
         
-        # Reset slice to 0
-        self.current_slice =  int(self.n_slices / 2)
-        self.slice_slider.setValue( int(self.n_slices / 2) )
+        # Reset slice to middle
+        self.current_slice = int(self.n_slices / 2)
+        self.slice_slider.setValue(int(self.n_slices / 2))
         self.slice_slider.setMaximum(self.n_slices - 1)
         
         # Re-extract mask values for the new data
