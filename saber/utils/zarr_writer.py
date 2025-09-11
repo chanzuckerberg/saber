@@ -131,11 +131,17 @@ def get_zarr_writer(zarr_path: str) -> ParallelZarrWriter:
             _zarr_writer = ParallelZarrWriter(zarr_path)
         return _zarr_writer
     
-def add_attributes(zarr_group: zarr.Group, voxel_size: float = 1.0, is_3d: bool = False) -> None:
+def add_attributes(
+    zarr_group: zarr.Group,
+    voxel_size: float = 1.0, 
+    is_3d: bool = False,
+    voxel_size_z: float = 1.0) -> None:
     """
     Add VCP-compatible multiscale attributes to any zarr group.
     
     :param zarr_group: Any zarr group (run group, labels group, etc.)
+    :param voxel_size: Voxel size in nanometers
+    :param voxel_size_z: Voxel size in nanometers for the z-axis
     :param is_3d: Whether this is 3D data (z,y,x) or 2D data (y,x)
     """
     if is_3d:
@@ -144,7 +150,7 @@ def add_attributes(zarr_group: zarr.Group, voxel_size: float = 1.0, is_3d: bool 
             {"name": "y", "type": "space", "unit": "nanometer"},
             {"name": "x", "type": "space", "unit": "nanometer"}
         ]
-        scale = [1.0, voxel_size, voxel_size]
+        scale = [voxel_size_z, voxel_size, voxel_size]
     else:
         axes = [
             {"name": "y", "type": "space", "unit": "nanometer"},
