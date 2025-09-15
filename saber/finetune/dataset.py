@@ -222,6 +222,11 @@ class AutoMaskDataset(Dataset):
             labels_t = [torch.from_numpy(np.ones((1,), dtype=np.float32))]
             boxes_t = [torch.from_numpy(np.array([0, 0, 1, 1], dtype=np.float32))]
 
+        # Apply transforms
+        if self.transform:
+            data = self.transform({'image': image_2d, 'masks': masks_t})
+            image_2d, masks_t = data['image'], data['masks']
+
         return {
             "image": image_2d,     # HxWx3 uint8
             "masks": masks_t,     # list[H x W] float32 in {0,1}
