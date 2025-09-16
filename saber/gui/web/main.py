@@ -1,10 +1,15 @@
-"""Command-line entry point for the annotation GUI."""
+"""
+Command-line entry point for the SABER Annotation GUI Web Server
+"""
 
+import click
+import logging
+from pathlib import Path
 from saber.gui.web.server import run_server
-import click, logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 @click.command(context_settings={"show_default": True},name='web')
 @click.option('--data', '-d', type=click.Path(exists=True), required=True,
@@ -27,19 +32,22 @@ def main(data, output, port, host, dask_scheduler, workers, debug):
     
     Examples:
         # Basic usage
-        annotation-gui --data /path/to/zarr/files --port 8080
+        python main.py --data /path/to/zarr/files --port 8080
+        
+        # With output directory
+        python main.py --data /data --output /annotations
         
         # With external Dask cluster
-        annotation-gui --data /data --dask-scheduler tcp://scheduler:8786
+        python main.py --data /data --dask-scheduler tcp://scheduler:8786
         
         # Remote access via SSH tunnel
         ssh -L 8080:localhost:8080 user@remote-server
         Then access at http://localhost:8080
     """
     
-    logger.info(f"Starting Annotation GUI Server...")
+    logger.info(f"Starting SABER Annotation GUI Server...")
     logger.info(f"Data directory: {data}")
-    logger.info(f"Output directory: {output or 'Not specified (read-only mode)'}")
+    logger.info(f"Output directory: {output or 'Current directory'}")
     logger.info(f"Server: http://{host}:{port}")
     
     if dask_scheduler:
