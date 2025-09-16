@@ -5,10 +5,10 @@ from saber.analysis.analysis_cli import methods as analysis
 from saber.entry_points.run_analysis import cli as save
 from saber.pretrained_weights import cli as download
 from saber.utils.importers import cli as importers
+from saber.gui.web.main import main as web
 import click
 try:
     from saber.gui.base.zarr_gui import gui
-    from saber.gui.web.main import main as web
     gui_available = True
 except Exception as e:
     print(f"GUI is not available: {e}")

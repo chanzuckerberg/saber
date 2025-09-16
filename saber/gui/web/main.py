@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
               help='Path to local data directory containing Zarr files')
 @click.option('--output', '-o', type=click.Path(), default=None,
               help='Output path for saved annotations')
-@click.option('--port', '-p', type=int, default=8080,
+@click.option('--port', '-p', type=int, default=9090,
               help='Port to run the web server on')
 @click.option('--host', '-h', type=str, default='localhost',
               help='Host to bind the server to (localhost for external access)')
