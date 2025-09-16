@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
               help='Output path for saved annotations')
 @click.option('--port', '-p', type=int, default=8080,
               help='Port to run the web server on')
-@click.option('--host', '-h', type=str, default='0.0.0.0',
-              help='Host to bind the server to (0.0.0.0 for external access)')
+@click.option('--host', '-h', type=str, default='localhost',
+              help='Host to bind the server to (localhost for external access)')
 @click.option('--dask-scheduler', type=str, default=None,
               help='Dask scheduler address (e.g., tcp://localhost:8786)')
 @click.option('--workers', '-w', type=int, default=4,
