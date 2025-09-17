@@ -1,6 +1,7 @@
 import saber.finetune.helper as helper
 from saber.utils import preprocessing 
 from torch.utils.data import Dataset
+from tqdm import tqdm
 import numpy as np
 import zarr, torch
 
@@ -11,7 +12,8 @@ class AutoMaskDataset(Dataset):
                  transform = None,
                  slabs_per_volume_per_epoch: int = 10,
                  slices_per_fib_per_epoch: int = 5,
-                 slab_thickness: int = 5):
+                 slab_thickness: int = 5,
+                 seed: int = 42):
         """
         Args:
             tomogram_zarr_path: Path to the tomogram zarr store
@@ -29,9 +31,10 @@ class AutoMaskDataset(Dataset):
         
         # Grid and Positive Points for AutoMaskGenerator
         self.points_per_side = 32
-        self.points_per_batch = 64
         self.min_area = 0.001
-        self.k_pos = 2
+        self.k_min = 1
+        self.k_max = 10
+        self.transform = transform
 
         # Check if both data types are available
         if tomogram_zarr_path is None and fib_zarr_path is None:
@@ -45,10 +48,16 @@ class AutoMaskDataset(Dataset):
         if self.has_tomogram:
             self.tomogram_store = zarr.open(tomogram_zarr_path, mode='r')
             self.tomogram_keys = [k for k in self.tomogram_store.keys() if not k.startswith('.')]
-            self.n_tomogram_volumes = len(self.tomogram_keys)
             self.tomo_shapes = {}
-            for i, key in enumerate(self.tomogram_keys):
-                self.tomo_shapes[i] = self.tomogram_store[key]['0'].shape
+            for i, key in tqdm(enumerate(self.tomogram_keys), 
+                               total=len(self.tomogram_keys), desc="Estimating zrange for tomograms"):
+                try: 
+                    self.tomo_shapes[i] = self._estimate_zrange(key)
+                except Exception as e:
+                    print(f"Error estimating zrange for tomogram {key}: {e}")
+                    # remove key from tomogram_keys
+                    self.tomogram_keys.remove(key)
+            self.n_tomogram_volumes = len(self.tomogram_keys)
         else:
             self.n_tomogram_volumes = 0
             self.tomo_shapes = {}
@@ -66,12 +75,33 @@ class AutoMaskDataset(Dataset):
             self.n_fib_volumes = 0
             self.fib_shapes = {}
             self.fib_keys = []
+        
+        # Random seed
+        self.seed = seed
+        self._rng = np.random.RandomState(seed)
 
         # Resample epoch
         self.resample_epoch()
 
         # Verbose Flag
         self.verbose = False
+
+    def _estimate_zrange(self, key, band=(0.25, 0.75), threshold=0):
+        """
+        Returns (z_min, z_max) inclusive bounds for valid slab centers
+        where there is some foreground in the labels.
+        - threshold: min # of fg pixels to count a slice as non-empty (0 = any)
+        - band: fraction of Z to consider (lo, hi)
+        """
+
+        nz = self.tomogram_store[key]['0'].shape[0]
+        min_offset, max_offset = int(nz * band[0]), int(nz * band[1])
+        mask = self.tomogram_store[key]['labels/0'][min_offset:max_offset,]
+        vals = mask.sum(axis=(1,2))
+        vals = np.nonzero(vals)[0]
+        max_val = vals.max() - self.slab_thickness // 2 + min_offset
+        min_val = vals.min() + self.slab_thickness // 2 + min_offset
+        return int(min_val), int(max_val)
     
     def resample_epoch(self):
         """ Generate new random samples for this epoch """
@@ -80,25 +110,24 @@ class AutoMaskDataset(Dataset):
         
         # Sample random slabs from each tomogram
         if self.has_tomogram:
+            print(f"Re-Sampling {self.slabs_per_volume_per_epoch} slabs from {self.n_tomogram_volumes} tomograms")
             for vol_idx in range(self.n_tomogram_volumes):
-                volume_shape = self.tomo_shapes[vol_idx]
-                # Valid range for center of slab
-                valid_z_min = int(volume_shape[0] / 4)
-                valid_z_max = int(volume_shape[0] * (3 / 4))
-                
-                if valid_z_max > valid_z_min:
-                    z_positions = np.random.randint(
-                        valid_z_min, 
-                        valid_z_max, 
-                        size=self.slabs_per_volume_per_epoch
-                    )
-                    
-                    for z_pos in z_positions:
-                        self.tomogram_samples.append((vol_idx, z_pos))
+
+                # Sample random z positions from this tomogram volume
+                z_min, z_max = self.tomo_shapes[vol_idx]
+                z_positions = np.random.randint(
+                    z_min, 
+                    z_max, 
+                    size=self.slabs_per_volume_per_epoch
+                )
+                # Add to samples
+                for z_pos in z_positions:
+                    self.tomogram_samples.append((vol_idx, z_pos))
             np.random.shuffle(self.tomogram_samples) # Shuffle samples
         
         # Sample random slices from each FIB volume
         if self.has_fib:
+            print(f"Re-Sampling {self.slices_per_fib_per_epoch} slices from {self.n_fib_volumes} FIB volumes")
             for fib_idx in range(self.n_fib_volumes):
                 fib_shape = self.fib_shapes[fib_idx]
                 # Sample random z positions from this FIB volume
@@ -154,7 +183,7 @@ class AutoMaskDataset(Dataset):
         key = self.fib_keys[fib_idx]
         
         # Load FIB image and segmentation
-        image = self.fib_store[key]['0'][z_pos,]
+        image = self.fib_store[key]['0'][z_pos,].astype(np.float32)
         image_2d = preprocessing.proprocess(image)
         seg_2d = self.fib_store[key]['labels/0'][z_pos,]
         
@@ -168,6 +197,50 @@ class AutoMaskDataset(Dataset):
         ys = np.linspace(0.5, h - 0.5, self.points_per_side, dtype=np.float32)
         xx, yy = np.meshgrid(xs, ys)
         return np.stack([xx.ravel(), yy.ravel()], axis=1)  # (G,2) as (x,y)
+
+    def _sample_points_in_mask(
+        self,
+        comp: np.ndarray,
+        grid_points: np.ndarray,
+        jitter_px: float = 0.0,
+        shape: tuple[int, int] = None,
+    ) -> np.ndarray:
+        """
+        Pick clicks from a regular grid, restricted to those that land inside `comp`.
+        Optionally jitter each kept grid point by up to ±jitter_px.
+        Returns float32 array [K,2] in (x,y).
+        """
+        
+        if comp.sum() == 0:
+            return np.zeros((0, 2), dtype=np.float32)
+        
+        h, w = shape
+
+        # round grid coords to nearest pixel for mask lookup
+        gx = np.clip(np.rint(grid_points[:, 0]).astype(int), 0, w - 1)
+        gy = np.clip(np.rint(grid_points[:, 1]).astype(int), 0, h - 1)
+
+        inside = comp[gy, gx] > 0
+        cand = grid_points[inside]  # (M,2) subset of the grid
+
+        if cand.shape[0] == 0:
+            return np.zeros((0, 2), dtype=np.float32)
+
+        k = int(self._rng.randint(self.k_min, self.k_max + 1))
+        k = min(k, cand.shape[0])
+
+        idx = self._rng.choice(cand.shape[0], size=k, replace=False)
+        pts = cand[idx].astype(np.float32)
+
+        # optional jitter to avoid perfectly regular patterns
+        if jitter_px > 0:
+            jitter = self._rng.uniform(-jitter_px, jitter_px, size=pts.shape).astype(np.float32)
+            pts = pts + jitter
+            # keep inside image bounds
+            pts[:, 0] = np.clip(pts[:, 0], 0, w - 1)
+            pts[:, 1] = np.clip(pts[:, 1], 0, h - 1)
+
+        return pts
 
     def _package_image_item(self, 
         image_2d: np.ndarray, 
@@ -186,6 +259,11 @@ class AutoMaskDataset(Dataset):
                 "boxes":  list[4] float32 (x0,y0,x1,y1)
             }
         """
+        
+        # Apply transforms to image and segmentation
+        if self.transform:
+            data = self.transform({'image': image_2d, 'masks': segmentation})
+            image_2d, segmentation = data['image'], data['masks']
 
         h, w = segmentation.shape
         min_pixels = 0
@@ -205,7 +283,8 @@ class AutoMaskDataset(Dataset):
                     continue
 
                 # sample clicks from this component (NOT the full instance)
-                pts = helper.sample_positive_points(comp, k=self.k_pos)
+                # pts = helper.sample_positive_points(comp, k=self.k_pos)
+                pts = self._sample_points_in_mask(comp, grid_points, shape=(h, w))
                 if pts.shape[0] == 0:
                     continue
 
@@ -221,11 +300,6 @@ class AutoMaskDataset(Dataset):
             points_t = [torch.from_numpy(np.zeros((1, 2), dtype=np.float32))]
             labels_t = [torch.from_numpy(np.ones((1,), dtype=np.float32))]
             boxes_t = [torch.from_numpy(np.array([0, 0, 1, 1], dtype=np.float32))]
-
-        # Apply transforms
-        if self.transform:
-            data = self.transform({'image': image_2d, 'masks': masks_t})
-            image_2d, masks_t = data['image'], data['masks']
 
         return {
             "image": image_2d,     # HxWx3 uint8

@@ -21,23 +21,22 @@ def finetune_sam2(
     """
 
     # Determine device
-    device = io.get_available_devices(0)
     (cfg, checkpoint) = pretrained_weights.get_sam2_checkpoint(sam2_cfg)
     sam2_model = build_sam2(cfg, checkpoint, device='cuda', postprocess_mask=False)
     predictor = SAM2ImagePredictor(sam2_model)
-
+    
     # Option 1 : Train the Mask Decoder and Prompt Encoder
     predictor.model.sam_mask_decoder.train(True)
     predictor.model.sam_prompt_encoder.train(True)
 
     # Load data loaders
-    train_loader = DataLoader(AutoMaskDataset(tomo_train, fib_train), batch_size=16, shuffle=True,
-                               num_workers=4, pin_memory=True, collate_fn=collate_autoseg)
-    val_loader = DataLoader(AutoMaskDataset(tomo_val, fib_val), batch_size=16, shuffle=False,
-                             num_workers=4, pin_memory=True, collate_fn=collate_autoseg) if (tomo_val or fib_val) else None
+    train_loader = DataLoader( AutoMaskDataset(tomo_train, fib_train), batch_size=16, shuffle=True,
+                               num_workers=4, pin_memory=True, collate_fn=collate_autoseg )
+    val_loader = DataLoader( AutoMaskDataset(tomo_val, fib_val), batch_size=16, shuffle=False,
+                             num_workers=4, pin_memory=True, collate_fn=collate_autoseg ) if (tomo_val or fib_val) else None
 
     # Initialize trainer and train
-    trainer = SAM2FinetuneTrainer(predictor, train_loader, val_loader)
+    trainer = SAM2FinetuneTrainer( predictor, train_loader, val_loader )
     trainer.train( num_epochs )
 
 @click.command()
@@ -58,10 +57,10 @@ def finetune(sam2_cfg: str, epochs: int, fib_train: str, fib_val: str, tomo_trai
     )
     print(f"Using SAM2 Config: {sam2_cfg}")
     print(f"Using Number of Epochs: {epochs}")
-    print(f"Using Train Zarr: {fib_train}")
-    print(f"Using Val Zarr: {fib_val}")
     print(f"Using Train Zarr: {tomo_train}")
     print(f"Using Val Zarr: {tomo_val}")
+    print(f"Using Train Zarr: {fib_train}")
+    print(f"Using Val Zarr: {fib_val}")
     print("--------------------------------")
 
     finetune_sam2(tomo_train, fib_train, tomo_val, fib_val, sam2_cfg, epochs)

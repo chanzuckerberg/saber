@@ -40,7 +40,7 @@ def proprocess(image: np.ndarray, std_cutoff=3, rgb=False):
     """
     image = contrast(image, std_cutoff=std_cutoff)
     image = normalize(image, rgb=rgb)
-    image = np.repeat(image[..., None], 3, axis=2) if rgb else image
+    image = image if rgb else np.repeat(image[..., None], 3, axis=2)
     return image
 
 def project_tomogram(vol, zSlice = None, deltaZ = None):

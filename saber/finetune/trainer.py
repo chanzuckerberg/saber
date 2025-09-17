@@ -1,3 +1,4 @@
+from saber.finetune.metrics import automask_metrics
 from saber.finetune.losses import MultiMaskIoULoss
 from lightning import fabric
 from tqdm import tqdm
@@ -18,21 +19,33 @@ class SAM2FinetuneTrainer:
         ]
 
         # Initialize the optimizer and dataloaders
-        self.num_gpus = torch.cuda.device_count()
-        self.fabric = fabric.Fabric(accelerator="cuda", strategy="ddp", devices=self.num_gpus)
+        self.num_gpus = torch.cuda.device_count() 
         optimizer = torch.optim.AdamW(params, weight_decay=4e-5)
-        self.predictor.model, self.optimizer = self.fabric.setup(self.predictor.model,optimizer)
-
-        if val_loader is None:
-            self.train_loader = self.fabric.setup_dataloaders(train_loader)
+        if self.num_gpus > 1:
+            self.fabric = fabric.Fabric(accelerator="cuda", strategy="ddp", devices=self.num_gpus)
+            self.fabric.launch()
+            self.predictor.model, self.optimizer = self.fabric.setup(self.predictor.model,optimizer)
+            self.autocast = self.fabric.autocast
+            self.use_fabric = True
         else:
+            self.optimizer = optimizer
+            self.use_fabric = False
+            self.autocast = torch.cuda.amp.autocast
+        self.device = next(self.predictor.model.parameters()).device
+
+        if val_loader is None and self.use_fabric:
+                self.train_loader = self.fabric.setup_dataloaders(train_loader)
+        elif self.use_fabric and val_loader is not None:
             self.train_loader, self.val_loader = self.fabric.setup_dataloaders(train_loader, val_loader)
+        else:
+            self.train_loader, self.val_loader = train_loader, val_loader
 
         # Initialize the loss function
         self.focal_alpha = 0.25
         self.focal_gamma = 2.0
         self.supervise_all_iou = False
         self.iou_use_l1_loss = True
+        self.predict_multimask = True
 
         # Initialize the use_boxes flag
         self.use_boxes = False
@@ -51,12 +64,12 @@ class SAM2FinetuneTrainer:
             hr_feats:     list[level] of [B, C, H', W']
         """
         # image_embed is a list[len=B] of [C, H', W']; stack to [B, C, H', W']
-        image_embeds = torch.stack(list(self.predictor.model._features["image_embed"]), dim=0).to(self.fabric.device)
+        image_embeds = torch.stack(list(self.predictor._features["image_embed"]), dim=0).to(self.device)
 
         # high_res_feats is a list[level], where each level is a list[len=B] of [C, H', W']
-        hr = self.predictor.model._features["high_res_feats"]
+        hr = self.predictor._features["high_res_feats"]
         B = image_embeds.shape[0]
-        hr_feats = [torch.stack([lvl[b] for b in range(B)], dim=0).to(self.fabric.device) for lvl in hr]
+        hr_feats = [torch.stack([lvl[b] for b in range(B)], dim=0).to(self.device) for lvl in hr]
         return image_embeds, hr_feats
 
     def forward_step(self, batch):
@@ -75,20 +88,20 @@ class SAM2FinetuneTrainer:
         for b in range(B):
             for m, p, l, bx in zip(batch["masks"][b], batch["points"][b], batch["labels"][b], batch["boxes"][b]):
                 inst_img_ix.append(b)
-                gt_all.append(m.to(self.fabric.device))
-                pts_all.append(p.to(self.fabric.device))
-                lbl_all.append(l.to(self.fabric.device))
-                box_all.append(bx.to(self.fabric.device))
+                gt_all.append(m.to(self.device))
+                pts_all.append(p.to(self.device))
+                lbl_all.append(l.to(self.device))
+                box_all.append(bx.to(self.device))
 
         N = len(gt_all)
         if N == 0:
             return None, None, None, None
-        inst_img_ix = torch.tensor(inst_img_ix, device=self.fabric.device, dtype=torch.long)
+        inst_img_ix = torch.tensor(inst_img_ix, device=self.device, dtype=torch.long)
 
         # 3) Pad clicks to (N,P,2) and (N,P)
         P = max(p.shape[0] for p in pts_all)
-        pts_pad = torch.zeros((N, P, 2), device=self.fabric.device, dtype=torch.float32)
-        lbl_pad = torch.zeros((N, P), device=self.fabric.device, dtype=torch.float32)
+        pts_pad = torch.zeros((N, P, 2), device=self.device, dtype=torch.float32)
+        lbl_pad = torch.zeros((N, P), device=self.device, dtype=torch.float32)
         for i, (p, l) in enumerate(zip(pts_all, lbl_all)):
             pts_pad[i, :p.shape[0]] = p
             lbl_pad[i, :l.shape[0]] = l
@@ -98,7 +111,9 @@ class SAM2FinetuneTrainer:
 
         # 4) Prompt encoding
         mask_input, unnorm_coords, labels, _ = self.predictor._prep_prompts(
-            input_point=pts_pad, input_label=lbl_pad, box=boxes, mask_logits=None, normalize_coords=True
+            pts_pad, lbl_pad, 
+            box=boxes, mask_logits=None, 
+            normalize_coords=True
         )
         sparse_embeddings, dense_embeddings = self.predictor.model.sam_prompt_encoder(
             points=(unnorm_coords, labels),
@@ -116,7 +131,7 @@ class SAM2FinetuneTrainer:
             image_pe=self.predictor.model.sam_prompt_encoder.get_dense_pe(),
             sparse_prompt_embeddings=sparse_embeddings,
             dense_prompt_embeddings=dense_embeddings,
-            multimask_output=True,
+            multimask_output=self.predict_multimask,
             repeat_image=False,
             high_res_features=hr_feats,
         )
@@ -125,27 +140,62 @@ class SAM2FinetuneTrainer:
         prd_masks = self.predictor._transforms.postprocess_masks(
             low_res_masks, self.predictor._orig_hw[-1]
         )  # [N,K,H,W] logits
-        gt_masks = torch.stack(gt_all, dim=0)                        # [N,H,W]
+        gt_masks = torch.stack(gt_all, dim=0).float()                       # [N,H,W]
 
         return prd_masks, prd_scores, gt_masks, inst_img_ix
 
     @torch.no_grad()
-    def validate_step(self, batch):
+    def validate_step(self):
         """
         Validate the model on the given batch.
         """
-        if 'embeddings' in batch:
-            embeddings = batch['embeddings']
+
+        self.predictor.model.eval()
+
+        # Local accumulators (weighted by number of images in each call)
+        abiou_sum = torch.tensor(0.0, device=self.device)
+        map_sum   = torch.tensor(0.0, device=self.device)
+        n_imgs    = torch.tensor(0.0, device=self.device)
+
+        # Each rank iterates only its shard (Fabric sets DistributedSampler for you)
+        for batch in self.val_loader:
+            # Compute metrics on THIS batch only (keeps memory small & parallel)
+            m = automask_metrics(
+                self.predictor,                 # predictor or predictor.model (your function supports either)
+                batch["images"],                # list[H×W×3] or list[H×W]
+                batch["masks"],                 # list[list[H×W]]
+                amg_kwargs={"points_per_side": 16, "pred_iou_thresh": 0.7, "crop_n_layers": 1},
+                top_k=100,
+                compute_map=True,
+                device=self.device
+            )
+
+            # Weight by number of images so we can average correctly later
+            num = float(m["num_images"])
+            abiou_sum += torch.tensor(m["ABIoU"] * num, device=self.device)
+            if m["mAP"] is not None:
+                map_sum += torch.tensor(m["mAP"] * num, device=self.device)
+            n_imgs    += torch.tensor(num, device=self.device)
+
+        # Global reduction (sum across all ranks)
+        if self.use_fabric:
+            abiou_sum = self.fabric.all_reduce(abiou_sum, reduce_op="sum")
+            map_sum   = self.fabric.all_reduce(map_sum,   reduce_op="sum")
+            n_imgs    = self.fabric.all_reduce(n_imgs,    reduce_op="sum")
         else:
-            self.predictor.set_image_batch(batch['images'])
+            abiou_sum = abiou_sum.sum()
+            map_sum   = map_sum.sum()
+            n_imgs    = n_imgs.sum()
 
-        # Run AMG to get proposals
-        # proposals = self.predictor
+        # Avoid divide-by-zero
+        denom = max(n_imgs.item(), 1.0)
+        return {
+            "ABIoU": (abiou_sum / denom).item(),
+            "mAP":   (map_sum   / denom).item(),
+            "num_images": int(denom),
+        }
 
-        metrics = {}
-        return metrics
-
-    def train(self, num_epochs):
+    def train(self, num_epochs, best_metric = 'mAP'):
         """
         Fine Tune SAM2 on the given data.
         """
@@ -159,37 +209,44 @@ class SAM2FinetuneTrainer:
             iou_use_l1_loss=self.iou_use_l1_loss
         )
 
+        best_metric_value = float('-inf')
         self.optimizer.zero_grad()
-        for epoch in tqdm(range(num_epochs)):
-
-            # Initialize the epoch loss
-            epoch_loss_train = 0
-            epoch_loss_val = 0
-
+        for epoch in tqdm(range(num_epochs), desc="Training", unit="epoch"):
             # Train 
+            epoch_loss_train = 0
             self.predictor.model.train()
+            self.train_loader.dataset.resample_epoch()
             for batch in self.train_loader:
-                with self.fabric.autocast():
-                    out = self.forward_step(batch)
-                    if out[0] is None:
-                        continue
-                    prd_masks, prd_scores, gt_masks, _ = out
+                out = self.forward_step(batch)
+                if out[0] is None:
+                    continue
+                prd_masks, prd_scores, gt_masks, _ = out
+                with self.autocast():
                     losses = self.loss_fn(prd_masks, prd_scores, gt_masks)
-                self.fabric.backward(losses)
+                if self.use_fabric:
+                    self.fabric.backward(losses['loss_total'])
+                else:
+                    losses['loss_total'].backward()
                 self.optimizer.step()
                 self.optimizer.zero_grad()
                 epoch_loss_train += float(losses["loss_total"].detach().cpu())
 
+            import pdb; pdb.set_trace()
+
             # Validate
-            self.predictor.model.eval()
-            with torch.no_grad():
-                for batch in self.val_loader:
-                    with self.fabric.autocast():
-                        out = self.validate_step(batch)
-                        losses = self.loss_fn(out)
+            metrics = self.validate_step()
+
+            import pdb; pdb.set_trace()
 
             # Print Only on Rank 0
             if self.fabric.is_global_zero:
-                #Checkpoint 
-                print(f"Epoch {epoch+1}/{num_epochs}, Train Loss: {epoch_loss_train/len(self.train_loader)}, Val Loss: {epoch_loss_val/len(self.val_loader)}")
-                torch.save(self.predictor.model.state_dict(), f"{self.save_dir}/model.pth")
+                print(
+                    f"Epoch {epoch+1}/{num_epochs} "
+                    f"Loss={epoch_loss_train/len(self.train_loader):.5f} "
+                    f"mAP={metrics['mAP']:.4f} - ABIoU={metrics['ABIoU']:.4f} "
+                )
+
+                if metrics[best_metric] > best_metric_value:
+                    best_metric_value = metrics[best_metric]
+                    torch.save(self.predictor.model.state_dict(), f"{self.save_dir}/best_model.pth")
+                    print(f"Best {best_metric} saved!")
