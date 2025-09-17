@@ -1,14 +1,12 @@
-from saber.entry_points.segment_methods import methods as segment
 from saber.classifier.cli import classifier_routines as classifier
 from saber.entry_points.run_low_pass_filter import cli as filter3d
+from saber.entry_points.segment_methods import methods as segment
 from saber.analysis.analysis_cli import methods as analysis
 from saber.entry_points.run_analysis import cli as save
-from saber.pretrained_weights import cli as download
-from saber.utils.importers import cli as importers
+from saber.finetune.train import finetune
 import click
 try:
     from saber.gui.base.zarr_gui import gui
-    from saber.gui.text.zarr_text_gui import text_gui
     gui_available = True
 except Exception as e:
     print(f"GUI is not available: {e}")
@@ -23,9 +21,9 @@ def routines():
 routines.add_command(analysis)
 routines.add_command(filter3d)
 routines.add_command(classifier)
+routines.add_command(finetune)
 if gui_available: 
     routines.add_command(gui)
-    routines.add_command(text_gui)
 routines.add_command(segment)
 routines.add_command(save)
 
