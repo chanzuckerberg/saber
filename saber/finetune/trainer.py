@@ -165,7 +165,7 @@ class SAM2FinetuneTrainer:
                 batch["images"],                # list[H×W×3] or list[H×W]
                 batch["masks"],                 # list[list[H×W]]
                 amg_kwargs={"points_per_side": 16, "pred_iou_thresh": 0.7, "crop_n_layers": 1},
-                top_k=100,
+                top_k=20,
                 compute_map=True,
                 device=self.device
             )
@@ -231,12 +231,8 @@ class SAM2FinetuneTrainer:
                 self.optimizer.zero_grad()
                 epoch_loss_train += float(losses["loss_total"].detach().cpu())
 
-            import pdb; pdb.set_trace()
-
             # Validate
             metrics = self.validate_step()
-
-            import pdb; pdb.set_trace()
 
             # Print Only on Rank 0
             if self.fabric.is_global_zero:

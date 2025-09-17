@@ -32,8 +32,8 @@ class AutoMaskDataset(Dataset):
         # Grid and Positive Points for AutoMaskGenerator
         self.points_per_side = 32
         self.min_area = 0.001
-        self.k_min = 1
-        self.k_max = 10
+        self.k_min = 50
+        self.k_max = 100
         self.transform = transform
 
         # Check if both data types are available

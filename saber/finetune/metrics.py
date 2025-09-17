@@ -1,9 +1,8 @@
+from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
+import torch.nn.functional as F
 import numpy as np
 import torch
-import torch.nn.functional as F
 
-# Adjust this import to your package layout
-from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
 
 
 # --------------------- IoU / metric helpers ---------------------
@@ -136,15 +135,15 @@ def automask_metrics(
     # local alias to avoid confusion with user's np
     _amg_kwargs = dict(
         points_per_side=32,
-        points_per_batch=64,
+        points_per_batch=128,
         pred_iou_thresh=0.7,
         stability_score_thresh=0.92,
         stability_score_offset=0.7,
         crop_n_layers=1,
         crop_n_points_downscale_factor=2,
         box_nms_thresh=0.7,
-        use_m2m=True,
-        multimask_output=True,
+        use_m2m=False,
+        multimask_output=False,
     )
     if amg_kwargs:
         _amg_kwargs.update(amg_kwargs)
@@ -158,7 +157,7 @@ def automask_metrics(
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     per_image = []
-    abiou_vals, ap50_vals, map_vals = [], [], []
+    abiou_vals, map_vals = [], []
 
     for img, gt_list in zip(images, gt_masks_per_image):
         
