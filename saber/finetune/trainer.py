@@ -1,3 +1,5 @@
+from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR, SequentialLR
+from saber.finetune.helper import save_training_log
 from saber.finetune.metrics import automask_metrics
 from saber.finetune.losses import MultiMaskIoULoss
 from lightning import fabric
@@ -20,22 +22,24 @@ class SAM2FinetuneTrainer:
 
         # Initialize the optimizer and dataloaders
         self.num_gpus = torch.cuda.device_count() 
-        optimizer = torch.optim.AdamW(params, weight_decay=4e-5)
+        optimizer = torch.optim.AdamW(params, weight_decay=1e-5)
         if self.num_gpus > 1:
             self.fabric = fabric.Fabric(accelerator="cuda", strategy="ddp", devices=self.num_gpus)
             self.fabric.launch()
             self.predictor.model, self.optimizer = self.fabric.setup(self.predictor.model,optimizer)
+            self.predictor.model.mark_forward_method('forward_image')
             self.autocast = self.fabric.autocast
             self.use_fabric = True
         else:
             self.optimizer = optimizer
             self.use_fabric = False
-            self.autocast = torch.cuda.amp.autocast
+            def _autocast():
+                return torch.autocast(device_type="cuda", enabled=torch.cuda.is_available())
+            self.autocast = _autocast
         self.device = next(self.predictor.model.parameters()).device
 
-        if val_loader is None and self.use_fabric:
-                self.train_loader = self.fabric.setup_dataloaders(train_loader)
-        elif self.use_fabric and val_loader is not None:
+        # Setup dataloaders
+        if self.use_fabric:
             self.train_loader, self.val_loader = self.fabric.setup_dataloaders(train_loader, val_loader)
         else:
             self.train_loader, self.val_loader = train_loader, val_loader
@@ -43,8 +47,8 @@ class SAM2FinetuneTrainer:
         # Initialize the loss function
         self.focal_alpha = 0.25
         self.focal_gamma = 2.0
-        self.supervise_all_iou = False
-        self.iou_use_l1_loss = True
+        self.supervise_all_iou = True
+        self.iou_use_l1_loss = False
         self.predict_multimask = True
 
         # Initialize the use_boxes flag
@@ -53,6 +57,11 @@ class SAM2FinetuneTrainer:
         # Initialize the save directory
         self.save_dir = 'results'
         os.makedirs(self.save_dir, exist_ok=True)
+
+    @property
+    def is_global_zero(self):
+        # True on single-process runs; Fabric guards inside when present
+        return (not self.use_fabric) or (self.use_fabric is not None and self.fabric.is_global_zero)
 
     @torch.no_grad()
     def _stack_image_embeddings_from_predictor(self):
@@ -100,9 +109,9 @@ class SAM2FinetuneTrainer:
 
         # 3) Pad clicks to (N,P,2) and (N,P)
         P = max(p.shape[0] for p in pts_all)
-        pts_pad = torch.zeros((N, P, 2), device=self.device, dtype=torch.float32)
-        lbl_pad = torch.zeros((N, P), device=self.device, dtype=torch.float32)
-        for i, (p, l) in enumerate(zip(pts_all, lbl_all)):
+        pts_pad = torch.zeros((N, P, 2), device=self.device)
+        lbl_pad = torch.full((N, P), -1.0, device=self.device)  # <- ignore
+        for i,(p,l) in enumerate(zip(pts_all, lbl_all)):
             pts_pad[i, :p.shape[0]] = p
             lbl_pad[i, :l.shape[0]] = l
 
@@ -154,95 +163,150 @@ class SAM2FinetuneTrainer:
 
         # Local accumulators (weighted by number of images in each call)
         abiou_sum = torch.tensor(0.0, device=self.device)
-        map_sum   = torch.tensor(0.0, device=self.device)
+        loss_sum = torch.tensor(0.0, device=self.device)
         n_imgs    = torch.tensor(0.0, device=self.device)
+        n_inst    = torch.tensor(0.0, device=self.device)
 
         # Each rank iterates only its shard (Fabric sets DistributedSampler for you)
         for batch in self.val_loader:
+
+            # Compute Loss on decoder outputs
+            out = self.forward_step(batch)
+            if out[0] is None:  
+                continue # no instances in this batch
+            prd_masks, prd_scores, gt_masks = out[:3]
+            batch_n = torch.tensor(float(gt_masks.shape[0]), device=self.device)
+
+            with self.autocast():
+                losses = self.loss_fn(prd_masks, prd_scores, gt_masks)
+            # convert to sum over instances
+            loss_sum += float(losses["loss_total"].detach().cpu()) * batch_n
+            n_inst += batch_n
+
             # Compute metrics on THIS batch only (keeps memory small & parallel)
             m = automask_metrics(
                 self.predictor,                 # predictor or predictor.model (your function supports either)
                 batch["images"],                # list[H×W×3] or list[H×W]
                 batch["masks"],                 # list[list[H×W]]
-                amg_kwargs={"points_per_side": 16, "pred_iou_thresh": 0.7, "crop_n_layers": 1},
                 top_k=20,
-                compute_map=True,
-                device=self.device
+                device=self.device,
+                autocast_ctx=self.autocast,
             )
 
             # Weight by number of images so we can average correctly later
             num = float(m["num_images"])
             abiou_sum += torch.tensor(m["ABIoU"] * num, device=self.device)
-            if m["mAP"] is not None:
-                map_sum += torch.tensor(m["mAP"] * num, device=self.device)
             n_imgs    += torch.tensor(num, device=self.device)
 
         # Global reduction (sum across all ranks)
         if self.use_fabric:
+            loss_sum  = self.fabric.all_reduce(loss_sum,  reduce_op="sum")
             abiou_sum = self.fabric.all_reduce(abiou_sum, reduce_op="sum")
-            map_sum   = self.fabric.all_reduce(map_sum,   reduce_op="sum")
             n_imgs    = self.fabric.all_reduce(n_imgs,    reduce_op="sum")
+            n_inst    = self.fabric.all_reduce(n_inst,    reduce_op="sum")
         else:
             abiou_sum = abiou_sum.sum()
-            map_sum   = map_sum.sum()
             n_imgs    = n_imgs.sum()
 
         # Avoid divide-by-zero
         denom = max(n_imgs.item(), 1.0)
+        loss_denom = max(n_inst.item(), 1.0)
         return {
+            "loss": (loss_sum / loss_denom).item(),
             "ABIoU": (abiou_sum / denom).item(),
-            "mAP":   (map_sum   / denom).item(),
             "num_images": int(denom),
         }
 
-    def train(self, num_epochs, best_metric = 'mAP'):
+    def train(self, num_epochs, best_metric = 'ABIoU', resample_frequency = 10):
         """
         Fine Tune SAM2 on the given data.
         """
 
         # Initialize the loss function
         self.loss_fn = MultiMaskIoULoss(
-            weight_dict={"loss_mask": 1.0, "loss_dice": 1.0, "loss_iou": 0.05},
+            weight_dict={"loss_mask": 1.0, "loss_dice": 1.0, "loss_iou": 0.15},
             focal_alpha=self.focal_alpha,
             focal_gamma=self.focal_gamma,
             supervise_all_iou=self.supervise_all_iou,
             iou_use_l1_loss=self.iou_use_l1_loss
         )
 
+        # Cosine scheduler w/Warmup ----
+        warmup_epochs = max(int(0.05 * num_epochs), 1)
+        self.warmup_sched = LinearLR(self.optimizer, start_factor=1e-3, total_iters=warmup_epochs)
+        self.cosine_sched = CosineAnnealingLR(self.optimizer, T_max=(num_epochs - warmup_epochs), eta_min=1e-6)
+        self.scheduler = SequentialLR(self.optimizer, [self.warmup_sched, self.cosine_sched], milestones=[warmup_epochs])
+
+        # Progress bar only on rank 0
+        if self.is_global_zero:
+            pbar = tqdm(total=num_epochs, desc='Fine Tuning SAM2', unit='epoch', 
+                        leave=True, dynamic_ncols=True)
+        else:
+            pbar = None
+
         best_metric_value = float('-inf')
         self.optimizer.zero_grad()
-        for epoch in tqdm(range(num_epochs), desc="Training", unit="epoch"):
+        for epoch in range(num_epochs):
             # Train 
             epoch_loss_train = 0
             self.predictor.model.train()
-            self.train_loader.dataset.resample_epoch()
+            if (epoch+1) % resample_frequency == 0:
+                self.train_loader.dataset.resample_epoch()
             for batch in self.train_loader:
                 out = self.forward_step(batch)
                 if out[0] is None:
                     continue
-                prd_masks, prd_scores, gt_masks, _ = out
+                prd_masks, prd_scores, gt_masks = out[:3]
                 with self.autocast():
                     losses = self.loss_fn(prd_masks, prd_scores, gt_masks)
                 if self.use_fabric:
                     self.fabric.backward(losses['loss_total'])
                 else:
                     losses['loss_total'].backward()
+
+                # (optional) gradient clip:
+                if self.use_fabric:
+                    # norm-based clipping (L2) on all params in the optimizer
+                    self.fabric.clip_gradients(
+                        self.predictor.model,
+                        self.optimizer,
+                        max_norm=1.0,         
+                        norm_type=2.0
+                    )
+                else:
+                    torch.nn.utils.clip_grad_norm_(
+                        self.predictor.model.parameters(), 
+                        1.0, norm_type=2.0)
+
                 self.optimizer.step()
                 self.optimizer.zero_grad()
                 epoch_loss_train += float(losses["loss_total"].detach().cpu())
+
+            # Learning Rate Scheduler
+            self.scheduler.step()
 
             # Validate
             metrics = self.validate_step()
 
             # Print Only on Rank 0
-            if self.fabric.is_global_zero:
-                print(
-                    f"Epoch {epoch+1}/{num_epochs} "
-                    f"Loss={epoch_loss_train/len(self.train_loader):.5f} "
-                    f"mAP={metrics['mAP']:.4f} - ABIoU={metrics['ABIoU']:.4f} "
-                )
+            if self.is_global_zero:
+                # Print Metrics
+                metrics['train'] = {'loss': epoch_loss_train/len(self.train_loader)}
+                pbar.set_postfix({
+                    "train_loss": f"{metrics['train']['loss']:.4f}",
+                    "val_loss": f"{metrics['loss']:.4f}",
+                    "ABIoU": f"{metrics['ABIoU']:.4f}",
+                })
+                pbar.update(1)
 
+                # Save Training Log
+                metrics['epoch'] = epoch
+                metrics['lr'] = self.scheduler.get_last_lr()[0]
+                save_training_log(metrics, self.save_dir)
+
+                # Save Model if best metric is achieved
                 if metrics[best_metric] > best_metric_value:
                     best_metric_value = metrics[best_metric]
-                    torch.save(self.predictor.model.state_dict(), f"{self.save_dir}/best_model.pth")
+                    ckpt = {"model": self.predictor.model.state_dict()}
+                    torch.save(ckpt, f"{self.save_dir}/best_model.pth")
                     print(f"Best {best_metric} saved!")

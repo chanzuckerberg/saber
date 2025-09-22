@@ -1,3 +1,4 @@
+from scipy.ndimage import binary_erosion, binary_dilation
 import saber.finetune.helper as helper
 from saber.utils import preprocessing 
 from torch.utils.data import Dataset
@@ -86,7 +87,7 @@ class AutoMaskDataset(Dataset):
         # Verbose Flag
         self.verbose = False
 
-    def _estimate_zrange(self, key, band=(0.25, 0.75), threshold=0):
+    def _estimate_zrange(self, key, band=(0.3, 0.7), threshold=0):
         """
         Returns (z_min, z_max) inclusive bounds for valid slab centers
         where there is some foreground in the labels.
@@ -99,8 +100,8 @@ class AutoMaskDataset(Dataset):
         mask = self.tomogram_store[key]['labels/0'][min_offset:max_offset,]
         vals = mask.sum(axis=(1,2))
         vals = np.nonzero(vals)[0]
-        max_val = vals.max() - self.slab_thickness // 2 + min_offset
-        min_val = vals.min() + self.slab_thickness // 2 + min_offset
+        max_val = vals.max() - self.slab_thickness + min_offset
+        min_val = vals.min() + self.slab_thickness + min_offset
         return int(min_val), int(max_val)
     
     def resample_epoch(self):
@@ -198,49 +199,98 @@ class AutoMaskDataset(Dataset):
         xx, yy = np.meshgrid(xs, ys)
         return np.stack([xx.ravel(), yy.ravel()], axis=1)  # (G,2) as (x,y)
 
+    def _sample_negative_ring(self, comp, other_inst=None, ring=3, max_neg=16, shape=None):
+        h, w = shape
+        comp_b = comp.astype(np.bool_)
+        outer = binary_dilation(comp_b, iterations=ring) & (~comp_b)
+        if other_inst is not None:
+            # avoid putting negatives inside any other instance
+            outer = outer & (~other_inst.astype(np.bool_))
+        ys, xs = np.where(outer)
+        if len(xs) == 0:
+            return np.zeros((0, 2), np.float32)
+        k = min(max_neg, len(xs))
+        idx = self._rng.choice(len(xs), size=k, replace=False)
+        return np.stack([xs[idx].astype(np.float32), ys[idx].astype(np.float32)], axis=1)
+
     def _sample_points_in_mask(
         self,
         comp: np.ndarray,
         grid_points: np.ndarray,
-        jitter_px: float = 0.0,
-        shape: tuple[int, int] = None,
+        shape: tuple[int, int],
+        jitter_px: float = 1.0,
+        k_cap: int = 300,
+        boundary_frac: float = 0.35,
     ) -> np.ndarray:
         """
-        Pick clicks from a regular grid, restricted to those that land inside `comp`.
-        Optionally jitter each kept grid point by up to ±jitter_px.
+        Pick informative clicks from a dense grid:
+        - favor boundary points
+        - cap count ~sqrt(area) up to k_cap
         Returns float32 array [K,2] in (x,y).
         """
-        
-        if comp.sum() == 0:
-            return np.zeros((0, 2), dtype=np.float32)
-        
         h, w = shape
+        if comp.sum() == 0:
+            return np.zeros((0, 2), np.float32)
 
-        # round grid coords to nearest pixel for mask lookup
+        # ----- cast to boolean for morphology -----
+        comp_b = comp.astype(np.bool_)             # important: avoid TypeError with '^'
+
+        # grid → nearest pixel indices for inside/boundary tests
         gx = np.clip(np.rint(grid_points[:, 0]).astype(int), 0, w - 1)
         gy = np.clip(np.rint(grid_points[:, 1]).astype(int), 0, h - 1)
 
-        inside = comp[gy, gx] > 0
-        cand = grid_points[inside]  # (M,2) subset of the grid
-
+        inside = comp_b[gy, gx]
+        cand = grid_points[inside]
         if cand.shape[0] == 0:
-            return np.zeros((0, 2), dtype=np.float32)
+            return np.zeros((0, 2), np.float32)
 
-        k = int(self._rng.randint(self.k_min, self.k_max + 1))
-        k = min(k, cand.shape[0])
+        # ----- boundary mask (inner ring) -----
+        eroded = binary_erosion(comp_b, iterations=2)
+        boundary_b = np.logical_and(comp_b, np.logical_not(eroded))  # same as comp ^ eroded on booleans
 
-        idx = self._rng.choice(cand.shape[0], size=k, replace=False)
-        pts = cand[idx].astype(np.float32)
+        on_b = boundary_b[gy, gx] & inside
+        cand_b = grid_points[on_b]
+        cand_i = grid_points[inside & (~on_b)]
 
-        # optional jitter to avoid perfectly regular patterns
-        if jitter_px > 0:
-            jitter = self._rng.uniform(-jitter_px, jitter_px, size=pts.shape).astype(np.float32)
-            pts = pts + jitter
-            # keep inside image bounds
+        # target k ~ c * area but capped
+        area = float(comp_b.sum())
+        k_target = int(
+            min( k_cap, max(24, area * 0.12) )
+        )
+
+        kb = int(boundary_frac * k_target)
+        ki = k_target - kb
+
+        rng = self._rng
+        take_b = min(kb, len(cand_b))
+        take_i = min(ki, len(cand_i))
+
+        # if boundary is too small, backfill from interior
+        if take_b + take_i == 0:
+            return np.zeros((0, 2), np.float32)
+
+        if take_b:
+            idx_b = rng.choice(len(cand_b), size=take_b, replace=False)
+            pts_b = cand_b[idx_b]
+        else:
+            pts_b = np.zeros((0, 2), np.float32)
+
+        if take_i:
+            idx_i = rng.choice(len(cand_i), size=take_i, replace=False)
+            pts_i = cand_i[idx_i]
+        else:
+            pts_i = np.zeros((0, 2), np.float32)
+
+        pts = np.concatenate([pts_b, pts_i], axis=0).astype(np.float32)
+
+        # jitter a touch to avoid perfect grid regularity
+        if jitter_px > 0 and pts.shape[0] > 0:
+            jitter = rng.uniform(-jitter_px, jitter_px, size=pts.shape).astype(np.float32)
+            pts += jitter
             pts[:, 0] = np.clip(pts[:, 0], 0, w - 1)
             pts[:, 1] = np.clip(pts[:, 1], 0, h - 1)
 
-        return pts
+        return pts   
 
     def _package_image_item(self, 
         image_2d: np.ndarray, 

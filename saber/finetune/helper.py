@@ -1,8 +1,8 @@
 from saber.visualization.classifier import get_colors, add_masks
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
+import cv2, torch, csv, os
 import numpy as np
-import cv2, torch
 
 def mask_to_box(mask: np.ndarray) -> np.ndarray | None:
     """xyxy box from a binary mask (H,W) in {0,1}."""
@@ -115,27 +115,6 @@ def _resize_one(s, max_res: int):
         "boxes":  bxs,
     }
 
-# def collate_autoseg(batch, max_res: int = 768):
-#     # batch: list of dicts from _package_image_item
-
-#     output = { "images": [],"masks": [],"points": [],"labels": [],"boxes": []}
-#     for b in batch:
-#         results = _resize_inputs(b, max_res)
-#         for k, v in results.items():
-#             output[k].append(v)
-
-#     return output
-
-# def _resize_inputs(b, max_res):
-#     h, w = b["image"].shape[:2]
-#     if h > max_res or w > max_res:
-#         b["image"] = cv2.resize(b["image"], (max_res, max_res))
-#         b["masks"] = [cv2.resize(m, (max_res, max_res), interpolation=cv2.INTER_NEAREST) for m in b["masks"]]
-#         b["points"] = [p * max_res / h for p in b["points"]]
-#         b["labels"] = [l * max_res / h for l in b["labels"]]
-#         b["boxes"] = [b * max_res / h for b in b["boxes"]]
-#     return b
-
 def _to_numpy_mask_stack(masks):
     """
     Accepts list/tuple of tensors or np arrays shaped [H,W];
@@ -204,23 +183,21 @@ def visualize_item_with_points(image, masks, points, boxes=None,
         ax.set_title(title)
     ax.axis("off")
     plt.tight_layout()
-    # plt.show()
 
-# def sample_points_in_mask(mask: np.ndarray, k_min: int = 1, k_max: int = 10) -> np.ndarray:
-#     """
-#     Uniformly sample a random number of clicks in [k_min, k_max] from a binary component mask.
-#     Always inside the mask; capped by the number of foreground pixels.
-#     Returns float32 array of shape [K, 2] in (x, y).
-#     """
-#     ys, xs = np.nonzero(mask)  # foreground coordinates
-#     n = xs.size
-#     if n == 0:
-#         return np.zeros((0, 2), dtype=np.float32)
+def save_training_log(results, outdir="results"):
 
-#     k = int(_rng.randint(k_min, k_max + 1))  # inclusive range
-#     k = min(k, n)  # cap by available pixels
+    # CSV (epoch-aligned, pad with blanks if needed)
+    path = os.path.join(outdir, "metrics.csv")
+    is_new = not os.path.exists(path)
 
-#     # sample without replacement so clicks are distinct
-#     idx = self._rng.choice(n, size=k, replace=False)
-#     pts = np.stack([xs[idx], ys[idx]], axis=1).astype(np.float32)  # (x, y)
-#     return pts
+    with open(path, "a", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["epoch", "lr", "train_loss", "val_loss", "ABIoU"])
+        if is_new:
+            writer.writeheader()
+        writer.writerow({
+            "epoch": int(results['epoch']),
+            "lr": f"{results['lr']:.1e}",
+            "train_loss": float(results['train']['loss']),
+            "val_loss": float(results['loss']),
+            "ABIoU": float(results['ABIoU']),
+        })

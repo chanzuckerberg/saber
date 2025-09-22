@@ -34,14 +34,15 @@ dependencies = [
     "starfile",
     "lightning",
     "matplotlib",
-    "opencv-python",
-    "multiprocess",
-    "torchmetrics",
-    "scikit-learn",    
     "ipywidgets",
     "umap-learn",
     "torch-ema",
+    "tensorboard",
+    "multiprocess",
+    "torchmetrics",
+    "scikit-learn",
     "copick-utils",
+    "opencv-python",
 ]
 
 [project.optional-dependencies]
