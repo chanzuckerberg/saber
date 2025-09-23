@@ -2,8 +2,8 @@ from saber.entry_points.inference_core import segment_micrograph_core
 from saber.utils import parallelization, slurm_submit, io
 from saber.segmenters.loaders import base_microsegmenter
 from saber.visualization import galleries
+import click, glob, os, shutil
 from skimage import io as sio
-import click, glob, os
 from tqdm import tqdm
 
 @click.group()
@@ -66,7 +66,8 @@ def prepare_micrograph_training(
             os.makedirs('stack', exist_ok=True)
             fname = f'stack/slice_{ii:03d}.tif'
             sio.imsave(fname, image[ii])
-            files.append(fname)           
+            files.append(fname)    
+        
 
     # Create pool with model pre-loading
     pool = parallelization.GPUPool(
@@ -99,5 +100,9 @@ def prepare_micrograph_training(
 
     # Create a Gallery of the Training Data
     galleries.convert_zarr_to_gallery(output)
+
+    # Remove the temporary stack folder if it was created
+    if os.path.exists('stack'):
+        shutil.rmtree('stack')
 
     print('Preparation of Saber Training Data Complete!')     
