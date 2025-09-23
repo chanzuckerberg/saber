@@ -1,9 +1,9 @@
 from saber.gui.base.segmentation_picker import SegmentationViewer
+from typing import Dict, List, Optional
 from pyqtgraph.Qt import QtCore
 import pyqtgraph as pg
 import numpy as np
 import cv2
-from typing import Dict, List, Optional
 
 
 class AnnotationSegmentationViewer(SegmentationViewer):
