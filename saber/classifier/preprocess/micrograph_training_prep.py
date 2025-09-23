@@ -2,7 +2,9 @@ from saber.entry_points.inference_core import segment_micrograph_core
 from saber.utils import parallelization, slurm_submit, io
 from saber.segmenters.loaders import base_microsegmenter
 from saber.visualization import galleries
-import click, glob
+import click, glob, os, shutil
+from skimage import io as sio
+from tqdm import tqdm
 
 @click.group()
 @click.pass_context
@@ -14,7 +16,7 @@ def micrograph_options(func):
     options = [
         click.option("--input", type=str, required=True,
                       help="Path to Micrograph or Project, in the case of project provide the file extention (e.g. 'path/*.mrc')"),
-        click.option("--output", type=str, required=False, default='saber_training_data.zarr',
+        click.option("--output", type=str, required=False, default='training.zarr',
                       help="Path to the output Zarr file (if input points to a folder)."),
         click.option("--scale-factor", type=float, required=False, default=None, 
                       help="Scale Factor to Downsample Images. If not provided, no downsampling will be performed."),
@@ -55,6 +57,18 @@ def prepare_micrograph_training(
         if pixel_size is None:
             raise ValueError(f"Pixel size is not provided for {files[0]}. Please provide scale factor input instead.")
 
+    # Check if we need to split 3D stack into 2D slices
+    image = io.read_micrograph(files[0])[0]
+    if image.ndim == 3 and image.shape[0] > 3:
+        files = []
+        print('Writing all the slices to a temporary stack folder...')
+        for ii in range(image.shape[0]):
+            os.makedirs('stack', exist_ok=True)
+            fname = f'stack/slice_{ii:03d}.tif'
+            sio.imsave(fname, image[ii])
+            files.append(fname)    
+        
+
     # Create pool with model pre-loading
     pool = parallelization.GPUPool(
         init_fn=base_microsegmenter,
@@ -86,5 +100,9 @@ def prepare_micrograph_training(
 
     # Create a Gallery of the Training Data
     galleries.convert_zarr_to_gallery(output)
+
+    # Remove the temporary stack folder if it was created
+    if os.path.exists('stack'):
+        shutil.rmtree('stack')
 
     print('Preparation of Saber Training Data Complete!')     
