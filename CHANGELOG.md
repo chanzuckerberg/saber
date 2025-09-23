@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.8.0](https://github.com/chanzuckerberg/saber/compare/saber-em-v0.7.0...saber-em-v0.8.0) (2025-09-23)
+
+
+### ✨ Features
+
+* 3D annotation gui and tracking of metadata for zarr files ([2253097](https://github.com/chanzuckerberg/saber/commit/2253097524da325a6ee2f8ff189de39e63d258a5))
+* run 2D preprocessing on tif stack ([3c75d77](https://github.com/chanzuckerberg/saber/commit/3c75d7700a7259c851df22cbcf8a7d7597d6d68c))
+* vcp dataio ([6d227b4](https://github.com/chanzuckerberg/saber/commit/6d227b4e59c3212f010be644f94c84876fe6cb2a))
+* workflow for fib segmentation ([d53b297](https://github.com/chanzuckerberg/saber/commit/d53b29726981e2bd0f6c212b531276e8d23dadee))
+
+
+### 🐞 Bug Fixes
+
+* Gui3d ([0fff24d](https://github.com/chanzuckerberg/saber/commit/0fff24db4aba9ce3c25fbb80768a996797ad871f))
+
 ## [0.7.0](https://github.com/chanzuckerberg/saber/compare/saber-em-v0.6.1...saber-em-v0.7.0) (2025-08-19)
 
 
