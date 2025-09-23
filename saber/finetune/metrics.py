@@ -81,6 +81,7 @@ def automask_metrics(
     )
     if amg_kwargs:
         _amg.update(amg_kwargs)
+    print(_amg)
     model_for_amg = getattr(sam2_model_or_predictor, "model", sam2_model_or_predictor)
     mask_generator = SAM2AutomaticMaskGenerator(model=model_for_amg, **_amg)
 
@@ -90,6 +91,8 @@ def automask_metrics(
 
     # AutoCast 
     ac = autocast_ctx if autocast_ctx is not None else (lambda: nullcontext())
+
+    print('TEST')
 
     # Per-image loop
     per_image, abiou_vals = [], []

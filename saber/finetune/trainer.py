@@ -3,8 +3,8 @@ from saber.finetune.helper import save_training_log
 from saber.finetune.metrics import automask_metrics
 from saber.finetune.losses import MultiMaskIoULoss
 from lightning import fabric
+import torch, os, optuna
 from tqdm import tqdm
-import torch, os
 
 class SAM2FinetuneTrainer:
     def __init__(self, predictor, train_loader, val_loader):
@@ -47,9 +47,24 @@ class SAM2FinetuneTrainer:
         # Initialize the loss function
         self.focal_alpha = 0.25
         self.focal_gamma = 2.0
-        self.supervise_all_iou = True
+        self.supervise_all_iou = False
         self.iou_use_l1_loss = False
         self.predict_multimask = True
+
+        # Automask Generator Parameters
+        self.amg_kwargs = dict(
+            points_per_side=32,
+            points_per_batch=128,
+            pred_iou_thresh=0.5,
+            stability_score_thresh=0.7,
+            stability_score_offset=0.0,
+            crop_n_layers=0,
+            crop_n_points_downscale_factor=2,
+            box_nms_thresh=0.9,
+            use_m2m=False,
+            multimask_output=True,
+        )
+        self.nAMGtrials = 10
 
         # Initialize the use_boxes flag
         self.use_boxes = False
@@ -154,7 +169,7 @@ class SAM2FinetuneTrainer:
         return prd_masks, prd_scores, gt_masks, inst_img_ix
 
     @torch.no_grad()
-    def validate_step(self):
+    def validate_step(self, amg_kwargs=None, max_images=float('inf'), reduce_all_ranks=True):
         """
         Validate the model on the given batch.
         """
@@ -166,8 +181,12 @@ class SAM2FinetuneTrainer:
         loss_sum = torch.tensor(0.0, device=self.device)
         n_imgs    = torch.tensor(0.0, device=self.device)
         n_inst    = torch.tensor(0.0, device=self.device)
+        
+        if amg_kwargs is None:
+            amg_kwargs = self.amg_kwargs
 
         # Each rank iterates only its shard (Fabric sets DistributedSampler for you)
+        num_images = 0
         for batch in self.val_loader:
 
             # Compute Loss on decoder outputs
@@ -191,15 +210,19 @@ class SAM2FinetuneTrainer:
                 top_k=20,
                 device=self.device,
                 autocast_ctx=self.autocast,
+                amg_kwargs=amg_kwargs,
             )
 
             # Weight by number of images so we can average correctly later
             num = float(m["num_images"])
             abiou_sum += torch.tensor(m["ABIoU"] * num, device=self.device)
             n_imgs    += torch.tensor(num, device=self.device)
+            num_images += num
+            if num_images >= max_images:
+                break
 
         # Global reduction (sum across all ranks)
-        if self.use_fabric:
+        if self.use_fabric and reduce_all_ranks:
             loss_sum  = self.fabric.all_reduce(loss_sum,  reduce_op="sum")
             abiou_sum = self.fabric.all_reduce(abiou_sum, reduce_op="sum")
             n_imgs    = self.fabric.all_reduce(n_imgs,    reduce_op="sum")
@@ -286,7 +309,10 @@ class SAM2FinetuneTrainer:
             self.scheduler.step()
 
             # Validate
-            metrics = self.validate_step()
+            if (epoch+1) % 50 == 0:
+                metrics = self.amg_param_tuner()
+            else:  
+                metrics = self.validate_step()
 
             # Print Only on Rank 0
             if self.is_global_zero:
@@ -310,3 +336,78 @@ class SAM2FinetuneTrainer:
                     ckpt = {"model": self.predictor.model.state_dict()}
                     torch.save(ckpt, f"{self.save_dir}/best_model.pth")
                     print(f"Best {best_metric} saved!")
+
+    def amg_param_tuner(self, n_trials=10):
+        """
+        Tune a few AMG thresholds with Bayesian optimization (TPE).
+        Warm-start from the current self.amg_kwargs.
+        """
+
+        if self.use_fabric and not self.is_global_zero:
+            # Non-zero ranks: wait for rank 0 to finish tuning and broadcast params.
+            self.fabric.barrier()
+            # Receive updated dict from rank 0
+            self.amg_kwargs = self.fabric.broadcast(self.amg_kwargs, src=0)
+            # Now run normal distributed validation so logs are comparable
+            return self.validate_step()
+
+
+        # Use a fixed sampler (seed for reproducibility)
+        study = optuna.create_study(direction='maximize', sampler=optuna.samplers.TPESampler(seed=0))
+
+        # ---- Warm start with current params ----
+        # IMPORTANT: names must match suggest_* names in objective
+        warm = {
+            "pred_iou_thresh":        float(self.amg_kwargs["pred_iou_thresh"]),
+            "stability_score_thresh": float(self.amg_kwargs["stability_score_thresh"]),
+            "stability_score_offset": float(self.amg_kwargs["stability_score_offset"]),
+        }
+        study.enqueue_trial(warm)
+
+        def objective(trial: optuna.Trial) -> float:
+            """
+            Objective for Optuna: maximize ABIoU on a held-out validation set,
+            varying only a few AMG thresholds. Do NOT mutate self.amg_kwargs here.
+            """
+            # Suggest in sensible finetuned ranges
+            pred_iou_thresh        = trial.suggest_float("pred_iou_thresh",        0.40, 0.75)
+            stability_score_thresh = trial.suggest_float("stability_score_thresh", 0.55, 0.90)
+            stability_score_offset = trial.suggest_float("stability_score_offset", 0.00, 0.30)
+
+            # Build a LOCAL kwargs dict (copy), keep other knobs fixed
+            amg_kwargs_trial = dict(self.amg_kwargs)
+            amg_kwargs_trial.update({
+                "pred_iou_thresh":        pred_iou_thresh,
+                "stability_score_thresh": stability_score_thresh,
+                "stability_score_offset": stability_score_offset,
+            })
+
+            # Validate the model with the new AMG thresholds
+            metrics = self.validate_step(
+                amg_kwargs_trial, max_images=100, 
+                reduce_all_ranks=not self.use_fabric
+            )
+            return metrics['ABIoU']
+
+        # Optimize
+        study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
+
+        # Update trainer state with the best params
+        best = study.best_params
+        self.amg_kwargs.update({
+            "pred_iou_thresh":        float(best["pred_iou_thresh"]),
+            "stability_score_thresh": float(best["stability_score_thresh"]),
+            "stability_score_offset": float(best["stability_score_offset"]),
+        })
+
+        # Let other ranks proceed and receive the dict
+        if self.use_fabric:
+            self.fabric.barrier()
+            self.amg_kwargs = self.fabric.broadcast(self.amg_kwargs, src=0)
+
+
+        if self.is_global_zero:
+            print("AMG tuned →", {k: self.amg_kwargs[k] for k in ["pred_iou_thresh","stability_score_thresh","stability_score_offset"]})
+
+        # Now run the normal distributed validate_step() so metrics are globally averaged
+        return self.validate_step()

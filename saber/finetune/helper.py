@@ -201,3 +201,104 @@ def save_training_log(results, outdir="results"):
             "val_loss": float(results['loss']),
             "ABIoU": float(results['ABIoU']),
         })
+
+########################################################################################
+
+def _orig_hw_tuple(pred):
+    ohw = pred._orig_hw
+    # Cases seen in SAM/SAM2 wrappers: (H,W), [H,W], [(H,W)], possibly numpy ints
+    if isinstance(ohw, list):
+        # list of tuples -> pick the last tuple
+        if len(ohw) and isinstance(ohw[-1], (list, tuple)):
+            h, w = ohw[-1]
+        else:
+            # flat [H, W]
+            h, w = ohw[0], ohw[1]
+    elif isinstance(ohw, tuple):
+        h, w = ohw
+    else:
+        # e.g., numpy array-like
+        h, w = ohw[0], ohw[1]
+    return (int(h), int(w))
+
+@torch.no_grad()
+def infer_on_single_image(
+    predictor,
+    image,
+    inst_points,     # list[Tensor(Pi,2)]
+    inst_labels,     # list[Tensor(Pi)]
+    inst_masks=None, # optional list[H,W]
+    inst_boxes=None, # list[Tensor(4)] or None
+    use_boxes=True,
+    predict_multimask=False,
+    device="cuda",
+):
+    # 1) Encode image once
+    predictor.set_image(image)
+
+    # 2) Normalize cached features to [1,C,H',W']
+    def _to_batched_4d(x):
+        if isinstance(x, (list, tuple)):
+            x = x[0]
+        if x.dim() == 3: x = x.unsqueeze(0)
+        return x.to(device)
+
+    image_embeddings = _to_batched_4d(predictor._features["image_embed"])               # [1,C,H′,W′]
+    high_res_features = [_to_batched_4d(lvl) for lvl in predictor._features["high_res_feats"]]
+
+    # 3) Pack prompts to (N,P,2) / (N,P)
+    pts_all  = [torch.as_tensor(p, device=device, dtype=torch.float32) for p in inst_points]
+    lbl_all  = [torch.as_tensor(l, device=device, dtype=torch.float32) for l in inst_labels]
+    N = len(pts_all)
+    if N == 0:
+        return None, None, None
+
+    P = max(p.shape[0] for p in pts_all)
+    pts_pad = torch.zeros((N, P, 2), device=device)
+    lbl_pad = torch.full((N, P), -1.0, device=device)
+    for i,(p,l) in enumerate(zip(pts_all, lbl_all)):
+        pts_pad[i, :p.shape[0]] = p
+        lbl_pad[i, :l.shape[0]] = l
+
+    boxes = None
+    if use_boxes and inst_boxes:
+        boxes = torch.stack([torch.as_tensor(bx, device=device, dtype=torch.float32) for bx in inst_boxes], dim=0)
+
+    # 4) Prompt encoding
+    _, unnorm_coords, labels, _ = predictor._prep_prompts(
+        pts_pad, lbl_pad, box=boxes, mask_logits=None, normalize_coords=True
+    )
+    sparse_embeddings, dense_embeddings = predictor.model.sam_prompt_encoder(
+        points=(unnorm_coords, labels),
+        boxes=boxes if use_boxes else None,
+        masks=None,
+    )
+
+    # 5) Decode with repeat_image=True  ✅ no manual feature tiling
+    low_res_masks, prd_scores, _, _ = predictor.model.sam_mask_decoder(
+        image_embeddings=image_embeddings,   # [1,C,H′,W′]
+        image_pe=predictor.model.sam_prompt_encoder.get_dense_pe(),
+        sparse_prompt_embeddings=sparse_embeddings,   # [N, ...]
+        dense_prompt_embeddings=dense_embeddings,     # [N, ...]
+        multimask_output=predict_multimask,
+        repeat_image=True,                  # <-- let decoder repeat internally
+        high_res_features=high_res_features,          # each [1,C,H′,W′]
+    )
+
+    # 6) Upscale + optional stack GT
+    def _orig_hw_tuple(pred):
+        ohw = pred._orig_hw
+        if isinstance(ohw, list) and len(ohw) and isinstance(ohw[-1], (list, tuple)):
+            return (int(ohw[-1][0]), int(ohw[-1][1]))
+        if isinstance(ohw, tuple):
+            return (int(ohw[0]), int(ohw[1]))
+        return tuple(int(v) for v in ohw)
+
+    out_hw = _orig_hw_tuple(predictor)  # (H, W) e.g., (928, 960)
+    prd_masks = predictor._transforms.postprocess_masks(low_res_masks, out_hw)  # [N,K,H,W]
+
+    gt_masks = None
+    if inst_masks:
+        gt_masks = torch.stack([torch.as_tensor(m, device=device).float() for m in inst_masks], dim=0)
+
+    return prd_masks, prd_scores, gt_masks

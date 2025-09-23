@@ -45,68 +45,60 @@ class MultiMaskIoULoss(nn.Module):
         prd_scores: [N, K] predicted IoU scores
         gt_masks: [N, H, W] float {0,1}
         """
+        device = prd_masks.device
         N, K, H, W = prd_masks.shape
+        gt_masks = gt_masks.to(prd_masks.dtype)
 
-        # compute per-proposal losses
-        loss_mask_k, loss_dice_k = [], []
-        for k in range(K):
-            l_focal = focal_loss_from_logits(
-                prd_masks[:, k], gt_masks,
-                alpha=self.focal_alpha, gamma=self.focal_gamma
-            )  # scalar over batch
-            l_dice = dice_loss_from_logits(prd_masks[:, k], gt_masks)  # [N]
-            loss_mask_k.append(l_focal.expand_as(l_dice))
-            loss_dice_k.append(l_dice)
-        loss_mask_k = torch.stack(loss_mask_k, dim=1)   # [N,K]
-        loss_dice_k = torch.stack(loss_dice_k, dim=1)   # [N,K]
-
-        # combine to pick best proposal per instance
-        combo = (self.weight_dict["loss_mask"] * loss_mask_k +
-                 self.weight_dict["loss_dice"] * loss_dice_k)
-        best_idx = combo.argmin(dim=1)  # [N]
-        row = torch.arange(N, device=prd_masks.device)
-
-        # select best proposal losses
-        loss_mask = loss_mask_k[row, best_idx].mean()
-        loss_dice = loss_dice_k[row, best_idx].mean()
-
-        # IoU calibration loss
+        # ---- 1) Choose proposal by *true IoU* (no grad) -------------------------
         with torch.no_grad():
-            probs = torch.sigmoid(prd_masks[row, best_idx])   # [N,H,W]
-            pred_bin = (probs > 0.5).float()
-            inter = (gt_masks * pred_bin).sum(dim=(1, 2))
-            union = gt_masks.sum(dim=(1, 2)) + pred_bin.sum(dim=(1, 2)) - inter + 1e-6
-            true_iou = inter / union                          # [N]
+            probs_k = prd_masks.sigmoid()                           # [N,K,H,W]
+            pred_bin_k = (probs_k > 0.5).to(gt_masks.dtype)         # hard masks
+            gt_k = gt_masks[:, None].expand_as(pred_bin_k)          # [N,K,H,W]
+            inter = (pred_bin_k * gt_k).sum(dim=(2, 3))             # [N,K]
+            union = (pred_bin_k + gt_k - pred_bin_k * gt_k)\
+                        .sum(dim=(2, 3)).clamp_min(1e-6)            # [N,K]
+            true_iou_k = inter / union                               # [N,K]
+            best_idx = true_iou_k.argmax(dim=1)                      # [N]
 
-        if self.supervise_all_iou:
-            # supervise all proposals
-            iou_targets = []
-            for k in range(K):
-                probs = torch.sigmoid(prd_masks[:, k])
-                pred_bin = (probs > 0.5).float()
-                inter = (gt_masks * pred_bin).sum(dim=(1, 2))
-                union = gt_masks.sum(dim=(1, 2)) + pred_bin.sum(dim=(1, 2)) - inter + 1e-6
-                iou_targets.append(inter / union)
-            iou_targets = torch.stack(iou_targets, dim=1)  # [N,K]
-            if self.iou_use_l1_loss:
-                loss_iou = F.l1_loss(prd_scores, iou_targets)
-            else:
-                loss_iou = F.mse_loss(prd_scores, iou_targets)
+        row = torch.arange(N, device=device)
+        logits_star = prd_masks[row, best_idx]                       # [N,H,W]
+        score_star  = prd_scores[row, best_idx]                      # [N]
+        true_iou_star = true_iou_k[row, best_idx].detach()           # [N]
+
+        # ---- 2) Mask losses on the chosen proposal ------------------------------
+        l_focal = focal_loss_from_logits(
+            logits_star, gt_masks,
+            alpha=self.focal_alpha, gamma=self.focal_gamma
+        ).mean()                                                     # scalar
+
+        l_dice = dice_loss_from_logits(logits_star, gt_masks).mean() # scalar
+
+        # ---- 3) IoU head regression on the chosen proposal ----------------------
+        if self.iou_use_l1_loss:
+            l_iou = F.smooth_l1_loss(score_star, true_iou_star)
         else:
-            score_best = prd_scores[row, best_idx]          # [N]
-            if self.iou_use_l1_loss:
-                loss_iou = F.l1_loss(score_best, true_iou)
-            else:
-                loss_iou = F.mse_loss(score_best, true_iou)
+            l_iou = F.mse_loss(score_star, true_iou_star)
 
-        # weighted sum
+        # (optional) small regularizer on *all* proposals to stabilize ranking
+        if self.supervise_all_iou:
+            if self.iou_use_l1_loss:
+                l_iou_all = F.smooth_l1_loss(prd_scores, true_iou_k.detach())
+            else:
+                l_iou_all = F.mse_loss(prd_scores, true_iou_k.detach())
+            l_iou = l_iou + 0.1 * l_iou_all   # small weight; tune 0.05–0.2
+
+        # ---- 4) Weighted sum -----------------------------------------------------
+        loss_mask = l_focal
+        loss_dice = l_dice
+        loss_iou  = l_iou
+
         total_loss = (self.weight_dict["loss_mask"] * loss_mask +
-                      self.weight_dict["loss_dice"] * loss_dice +
-                      self.weight_dict["loss_iou"] * loss_iou)
+                    self.weight_dict["loss_dice"] * loss_dice +
+                    self.weight_dict["loss_iou"]  * loss_iou)
 
         return {
             "loss_mask": loss_mask,
             "loss_dice": loss_dice,
-            "loss_iou": loss_iou,
+            "loss_iou":  loss_iou,
             "loss_total": total_loss,
         }
