@@ -57,7 +57,7 @@ def prepare_micrograph_training(
         if pixel_size is None:
             raise ValueError(f"Pixel size is not provided for {files[0]}. Please provide scale factor input instead.")
 
-    # Check to make sure if we need 
+    # Check if we need to split 3D stack into 2D slices
     image = io.read_micrograph(files[0])[0]
     if image.ndim == 3 and image.shape[0] > 3:
         files = []
