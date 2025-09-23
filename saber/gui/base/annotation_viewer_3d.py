@@ -295,6 +295,11 @@ class AnnotationSegmentationViewer3D(QtWidgets.QWidget):
 
         # Close the contour
         boundary_pts = np.vstack([boundary_pts, boundary_pts[0:1]])
+
+        # Align contour (pixel centers) to ImageItem's unit-square geometry (pixel corners)
+        # OpenCV returns (y, x) after our squeeze; we plot as (x, y).
+        xs = boundary_pts[:, 0].astype(float) + 0.5
+        ys = boundary_pts[:, 1].astype(float) + 0.5
         
         # Determine which panel to show boundary on
         run_annotations = self.annotations_dict.get(self.current_run_id, {})
@@ -302,12 +307,12 @@ class AnnotationSegmentationViewer3D(QtWidgets.QWidget):
         
         if label_str in run_annotations:
             # Annotated - show on right panel
-            self.boundary_items['right'].setData(boundary_pts[:, 1], boundary_pts[:, 0])
+            self.boundary_items['right'].setData(xs, ys)
             self.boundary_items['right'].setVisible(True)
             self.boundary_items['left'].setVisible(False)
         else:
             # Not annotated - show on left panel
-            self.boundary_items['left'].setData(boundary_pts[:, 1], boundary_pts[:, 0])
+            self.boundary_items['left'].setData(xs, ys)
             self.boundary_items['left'].setVisible(True)
             self.boundary_items['right'].setVisible(False)
 
