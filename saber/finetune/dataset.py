@@ -1,10 +1,17 @@
 from scipy.ndimage import binary_erosion, binary_dilation
+from monai.transforms import Compose, EnsureChannelFirstd
 import saber.finetune.helper as helper
-from saber.utils import preprocessing 
+from saber.utils import preprocessing
 from torch.utils.data import Dataset
 from tqdm import tqdm
 import numpy as np
 import zarr, torch
+
+from monai.transforms import (
+    Compose, EnsureChannelFirstd, RandRotate90d, RandFlipd, RandScaleIntensityd, 
+    RandShiftIntensityd, RandAdjustContrastd, RandGaussianNoised, 
+    RandomOrder, RandGaussianSmoothd,
+)
 
 class AutoMaskDataset(Dataset):
     def __init__(self, 
@@ -168,11 +175,8 @@ class AutoMaskDataset(Dataset):
         image_slab = self.tomogram_store[key]['0'][z_start:z_end]
         seg_slab = self.tomogram_store[key]['labels/0'][z_start:z_end]
         
-        # Project slab and normalize 
-        image_projection = preprocessing.project_tomogram(image_slab)
-        image_2d = preprocessing.proprocess(image_projection)          # 3xHxW
-        
-        # Project segmentation  
+        # Project slab and segmentation 
+        image_2d = preprocessing.project_tomogram(image_slab)
         seg_2d = preprocessing.project_segmentation(seg_slab)  # HxW
         
         return self._package_image_item(image_2d, seg_2d)
@@ -302,7 +306,7 @@ class AutoMaskDataset(Dataset):
         - Emits only positive clicks + boxes (no negatives).
         Returns:
             {
-                "image": HxWx3 uint8,
+                "image": HxW,
                 "masks":  list[H x W] float32 in {0,1},
                 "points": list[#p x 2] float32 (xy),
                 "labels": list[#p] float32 (all ones),
@@ -312,9 +316,10 @@ class AutoMaskDataset(Dataset):
         
         # Apply transforms to image and segmentation
         if self.transform:
-            data = self.transform({'image': image_2d, 'masks': segmentation})
-            image_2d, segmentation = data['image'], data['masks']
+            sample = self.transform({'image': image_2d, 'mask': segmentation})
+            image_2d, segmentation = sample['image'], sample['mask']      
 
+        # Get image and segmentation shapes
         h, w = segmentation.shape
         min_pixels = 0
         # min_pixels = int(self.min_area * h * w)
@@ -351,8 +356,11 @@ class AutoMaskDataset(Dataset):
             labels_t = [torch.from_numpy(np.ones((1,), dtype=np.float32))]
             boxes_t = [torch.from_numpy(np.array([0, 0, 1, 1], dtype=np.float32))]
 
+        # Normalize the Image
+        image_2d = preprocessing.proprocess(image_2d)          # 3xHxW
+
         return {
-            "image": image_2d,     # HxWx3 uint8
+            "image": image_2d,     # HxWx3
             "masks": masks_t,     # list[H x W] float32 in {0,1}
             "points": points_t,   # list[#p x 2] float32 (xy)
             "labels": labels_t,   # list[#p] all ones
