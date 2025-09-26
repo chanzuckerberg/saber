@@ -309,7 +309,7 @@ class SAM2FinetuneTrainer:
             self.scheduler.step()
 
             # Validate
-            if (epoch+1) % 50 == 0:
+            if (epoch+1) % 500 == 0:
                 metrics = self.amg_param_tuner()
             else:  
                 metrics = self.validate_step()

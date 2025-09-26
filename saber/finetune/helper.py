@@ -156,7 +156,7 @@ def visualize_item_with_points(image, masks, points, boxes=None,
     add_masks(mstack, ax)  # uses get_colors internally
 
     # color-match points (and boxes) to mask color
-    colors = get_colors()
+    colors = get_colors(len(masks))
     for i, pts in enumerate(points):
         if pts is None or len(pts) == 0:
             continue

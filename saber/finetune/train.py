@@ -1,3 +1,4 @@
+from saber.classifier.datasets.augment import get_finetune_transforms
 from sam2.sam2_image_predictor import SAM2ImagePredictor
 from saber.finetune.trainer import SAM2FinetuneTrainer
 from saber.finetune.dataset import AutoMaskDataset
@@ -31,10 +32,16 @@ def finetune_sam2(
     predictor.model.sam_prompt_encoder.train(True)
 
     # Load data loaders
-    train_loader = DataLoader( AutoMaskDataset(tomo_train, fib_train), batch_size=batch_size, shuffle=True,
-                               num_workers=4, pin_memory=True, collate_fn=collate_autoseg )
-    val_loader = DataLoader( AutoMaskDataset(tomo_val, fib_val), batch_size=batch_size, shuffle=False,
-                            num_workers=4, pin_memory=True, collate_fn=collate_autoseg ) if (tomo_val or fib_val) else train_loader
+    train_loader = DataLoader( AutoMaskDataset(
+                               tomo_train, fib_train, transform=get_finetune_transforms(), 
+                               batch_size=batch_size, shuffle=True,
+                               num_workers=4, pin_memory=True, collate_fn=collate_autoseg ) 
+                            )
+    val_loader = DataLoader( AutoMaskDataset(
+                             tomo_val, fib_val,  
+                             batch_size=batch_size, shuffle=False,
+                            num_workers=4, pin_memory=True, collate_fn=collate_autoseg )
+                            ) if (tomo_val or fib_val) else train_loader
 
     # Initialize trainer and train
     trainer = SAM2FinetuneTrainer( predictor, train_loader, val_loader )
