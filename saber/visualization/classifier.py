@@ -1,5 +1,5 @@
+from matplotlib.colors import ListedColormap, hsv_to_rgb
 from matplotlib.widgets import TextBox, Button
-from matplotlib.colors import ListedColormap
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -29,7 +29,8 @@ def display_mask_list(image: np.ndarray, masks: list, save_button: bool = False)
         display_mask_array(image, masks, save_button)
 
 def display_mask_array(image: np.ndarray, masks: np.ndarray, save_button: bool = False):
-    colors = get_colors()
+    n_labels = int(np.max(masks))
+    colors = get_colors(n_needed=n_labels)
     
     # Create figure with extra space for widgets
     fig = plt.figure(figsize=(9, 7))
@@ -38,7 +39,7 @@ def display_mask_array(image: np.ndarray, masks: np.ndarray, save_button: bool =
     ax_img = plt.axes([0.1, 0.2, 0.8, 0.75])
     ax_img.imshow(image, cmap='gray')
     
-    cmap_colors = [(1, 1, 1, 0)] + colors[:np.max(masks)]
+    cmap_colors = [(1, 1, 1, 0)] + colors
     cmap = ListedColormap(cmap_colors)
     ax_img.imshow(masks, cmap=cmap, alpha=0.6)
     ax_img.axis('off')
@@ -303,45 +304,58 @@ def plot_per_class_metrics(per_class_results, save_path=None):
     else:
         plt.show()
 
-def get_colors():
+def get_colors(n_needed=None, alpha=0.5):
 
     # Extended vibrant color palette
-    colors = [
-        (0, 1, 1, 0.5),        # Cyan (bright, high contrast)
-        (1, 0, 1, 0.5),        # Magenta
-        (0, 0, 1, 0.5),        # Blue
-        (0, 1, 0, 0.5),        # Green
+    base = [
+        (0, 1, 1, alpha),        # Cyan (bright, high contrast)
+        (1, 0, 1, alpha),        # Magenta
+        (0, 0, 1, alpha),        # Blue
+        (0, 1, 0, alpha),        # Green
 
-        (1, 0.5, 0, 0.5),      # Orange
-        (0.5, 0, 0.5, 0.5),    # Purple
-        (0.2, 0.6, 0.9, 0.5),  # Sky Blue
-        (0.9, 0.2, 0.6, 0.5),  # Hot Pink
-        (0.6, 0.2, 0.8, 0.5),  # Violet
+        (1, 0.5, 0, alpha),      # Orange
+        (0.5, 0, 0.5, alpha),    # Purple
+        (0.2, 0.6, 0.9, alpha),  # Sky Blue
+        (0.9, 0.2, 0.6, alpha),  # Hot Pink
+        (0.6, 0.2, 0.8, alpha),  # Violet
 
-        (0.4, 0.7, 0.2, 0.5),  # Lime
-        (0.8, 0.4, 0, 0.5),    # Burnt Orange
-        (0, 0.5, 0, 0.5),      # Dark Green
-        (0.7, 0.3, 0.6, 0.5),  # Orchid
-        (0.9, 0.6, 0.2, 0.5),  # Gold
+        (0.4, 0.7, 0.2, alpha),  # Lime
+        (0.8, 0.4, 0, alpha),    # Burnt Orange
+        (0, 0.5, 0, alpha),      # Dark Green
+        (0.7, 0.3, 0.6, alpha),  # Orchid
+        (0.9, 0.6, 0.2, alpha),  # Gold
 
-        (1, 1, 0.3, 0.5),      # Yellow
-        (0.5, 0.5, 0, 0.5),    # Olive
-        (0, 0, 0.5, 0.5),      # Navy
-        (0.5, 0, 0, 0.5),      # Maroon
+        (1, 1, 0.3, alpha),      # Yellow
+        (0.5, 0.5, 0, alpha),    # Olive
+        (0, 0, 0.5, alpha),      # Navy
+        (0.5, 0, 0, alpha),      # Maroon
 
         # Pastel shades (can be used for less prominent classes)
-        (1, 0.7, 0.7, 0.5),    # Light Red/Pink
-        (0.7, 1, 0.7, 0.5),    # Light Green
-        (0.7, 0.7, 1, 0.5),    # Light Blue
-        (1, 1, 0.7, 0.5),      # Light Yellow
+        (1, 0.7, 0.7, alpha),    # Light Red/Pink
+        (0.7, 1, 0.7, alpha),    # Light Green
+        (0.7, 0.7, 1, alpha),    # Light Blue
+        (1, 1, 0.7, alpha),      # Light Yellow    
     ]
 
-    return colors
+    if n_needed is None:
+        return base
+    n_needed = int(n_needed)
+    if n_needed <= len(base):
+        return base[:n_needed]
+
+    extra_needed = n_needed - len(base)
+    hues = np.linspace(0, 1, extra_needed, endpoint=False)
+    extra = [tuple(hsv_to_rgb((h, 0.9, 0.9))) + (alpha,) for h in hues]
+
+    return base + extra
 
 def add_masks(masks, ax):
 
+    # Get number of masks
+    num_masks = masks.shape[0]
+
     # Get colors
-    colors = get_colors()
+    colors = get_colors(n_needed=num_masks)
 
     # Get number of masks
     num_masks = masks.shape[0]
