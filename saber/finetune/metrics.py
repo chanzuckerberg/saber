@@ -1,351 +1,246 @@
 from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
-from typing import List, Dict, Any, Optional, Callable, Union
-from contextlib import nullcontext
+from typing import Dict, Any, List, Tuple
+import torch.nn.functional as F
 import numpy as np
 import torch
 
-# --------------------- IoU / ABIoU ---------------------
+# Subset of IoU thresholds, as requested:
+AR_THRESHOLDS = np.array([0.50, 0.65, 0.75, 0.85], dtype=np.float32)
 
-def _mask_iou(a, b, eps=1e-6):
+# ------------------------ Decoder-side helpers ------------------------
+
+def _binary_iou(a: torch.Tensor, b: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
     """
-    a: [Na,H,W] {0,1}; b: [Nb,H,W] {0,1} -> IoU [Na,Nb]
+    Fast IoU for binary masks (boolean or {0,1} tensors).
+    Shapes: a,b: (H, W)
     """
-    if a.numel() == 0 or b.numel() == 0:
-        dev = a.device if a.numel() > 0 else (b.device if b.numel() > 0 else torch.device("cpu"))
-        Na = a.shape[0] if a.numel() > 0 else 0
-        Nb = b.shape[0] if b.numel() > 0 else 0
-        return torch.zeros((Na, Nb), device=dev, dtype=torch.float32)
-
-    a = a.float()
-    b = b.float()
-    inter = torch.einsum("nhw,mhw->nm", a, b)   # [Na,Nb]
-
-    ua = a.sum(dim=(1,2))[:, None]              # [Na,1]
-    ub = b.sum(dim=(1,2))[None, :]              # [1,Nb]
-
-    union = ua + ub - inter + eps               # [Na,Nb]
-    return inter / union
-
-def _abiou(proposals, gts):
-    """
-    Average Best IoU (coverage metric).
-    proposals: [Np,H,W] {0,1}, gts: [Ng,H,W] {0,1}
-    """
-    if gts.numel() == 0 and proposals.numel() == 0:
-        dev = proposals.device if proposals.numel() > 0 else gts.device
-        return torch.tensor(1.0, device=dev, dtype=torch.float32)
-    if gts.numel() == 0 or proposals.numel() == 0:
-        dev = proposals.device if proposals.numel() > 0 else gts.device
-        return torch.tensor(0.0, device=dev, dtype=torch.float32)
-    iou = _mask_iou(gts, proposals)          # [Ng,Np]
-    best = iou.max(dim=1).values             # [Ng]
-    return best.mean()
-
-# --------------------- Utilities ---------------------
-
-def _to_bool_tensor(x: Union[np.ndarray, torch.Tensor], device: torch.device) -> torch.Tensor:
-    """
-    Accepts HxW or [N,H,W] arrays/tensors, binarizes (>0) and returns bool tensor on device with shape [N,H,W].
-    """
-    if isinstance(x, np.ndarray):
-        arr = x
-        if arr.ndim == 2:
-            arr = arr[None, ...]
-        t = torch.from_numpy(arr)
-    elif isinstance(x, torch.Tensor):
-        t = x
-        if t.ndim == 2:
-            t = t.unsqueeze(0)
-    else:
-        raise TypeError(f"Unsupported mask type: {type(x)}")
-    # binarize and cast to bool
-    t = (t != 0)
-    return t.to(device=device, dtype=torch.bool)
-
-
-def _downsample_bool_masks(m: torch.Tensor, factor: int) -> torch.Tensor:
-    """
-    Downsample boolean masks by a small integer factor via max-pooling (keeps foreground coverage).
-    m: [N,H,W] bool
-    """
-    if factor <= 1 or m.numel() == 0:
-        return m
-    # reshape for pooling
-    N, H, W = m.shape
-    H2 = H // factor
-    W2 = W // factor
-    if H2 == 0 or W2 == 0:
-        return m
-    # crop to divisible
-    m = m[:, :H2 * factor, :W2 * factor]
-    # convert to float for pooling-like reduction via unfold
-    mf = m.float()
-    mf = mf.unfold(1, factor, factor).unfold(2, factor, factor)  # [N, H2, W2, f, f]
-    # max over the small window -> any(True)
-    mf = mf.contiguous().view(N, H2, W2, -1).max(dim=-1).values
-    return (mf > 0).to(dtype=torch.bool)
-
-
-# --------------------- IoU (vectorized) ---------------------
-
-def _pairwise_iou_bool(a: torch.Tensor, b: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
-    """
-    a: [Na,H,W] bool, b: [Nb,H,W] bool -> IoU [Na,Nb] float32
-    Vectorized via flatten + matmul. Stays on device.
-    """
-    Na = a.shape[0]
-    Nb = b.shape[0]
-    if Na == 0 or Nb == 0:
-        return a.new_zeros((Na, Nb), dtype=torch.float32)
-
-    # Flatten (reshape tolerates non-contiguous inputs)
-    a_f = a.reshape(Na, -1).float()
-    b_f = b.reshape(Nb, -1).float()
-
-    # Areas and intersections
-    areas_a = a_f.sum(dim=1)             # [Na]
-    areas_b = b_f.sum(dim=1)             # [Nb]
-    inter = a_f @ b_f.t()                # [Na,Nb]
-
-    # Unions
-    union = areas_a[:, None] + areas_b[None, :] - inter + eps
-    return (inter / union).to(torch.float32)
-
-
-# --------------------- Metrics ---------------------
-
-def abiou_original(proposals: torch.Tensor, gts: torch.Tensor) -> torch.Tensor:
-    """
-    ABIoU as mean over GTs of max IoU to any proposal (allows proposal reuse).
-    proposals, gts: [N,H,W] bool (on same device)
-    """
-    dev = gts.device if gts.numel() > 0 else (proposals.device if proposals.numel() > 0 else torch.device("cpu"))
-    if gts.numel() == 0 and proposals.numel() == 0:
-        return torch.tensor(1.0, device=dev, dtype=torch.float32)
-    if gts.numel() == 0 or proposals.numel() == 0:
-        return torch.tensor(0.0, device=dev, dtype=torch.float32)
-
-    iou = _pairwise_iou_bool(gts, proposals)  # [Ng,Np]
-    best = iou.max(dim=1).values              # [Ng]
-    return best.mean()
-
-
-def abiou_one_to_one_greedy(proposals: torch.Tensor, gts: torch.Tensor) -> torch.Tensor:
-    """
-    ABIoU with one-to-one greedy matching (no proposal reuse).
-    proposals, gts: [N,H,W] bool
-    """
-    dev = gts.device if gts.numel() > 0 else (proposals.device if proposals.numel() > 0 else torch.device("cpu"))
-    if gts.numel() == 0 and proposals.numel() == 0:
-        return torch.tensor(1.0, device=dev, dtype=torch.float32)
-    if gts.numel() == 0 or proposals.numel() == 0:
-        return torch.tensor(0.0, device=dev, dtype=torch.float32)
-
-    iou = _pairwise_iou_bool(gts, proposals)  # [Ng,Np]
-    Ng, Np = iou.shape
-    used_g = torch.zeros(Ng, dtype=torch.bool, device=dev)
-    used_p = torch.zeros(Np, dtype=torch.bool, device=dev)
-
-    matched_sum = torch.tensor(0.0, device=dev)
-    # Greedy loop at most min(Ng, Np) steps
-    for _ in range(min(Ng, Np)):
-        # mask used rows/cols by setting to -1
-        iou_masked = iou.clone()
-        if used_g.any():
-            iou_masked[used_g, :] = -1
-        if used_p.any():
-            iou_masked[:, used_p] = -1
-        val, idx = torch.max(iou_masked.view(-1), dim=0)
-        if val <= 0:
-            break
-        g_idx = idx // Np
-        p_idx = idx % Np
-        matched_sum = matched_sum + val
-        used_g[g_idx] = True
-        used_p[p_idx] = True
-
-    # Average over ALL GTs (unmatched GTs count 0)
-    return matched_sum / max(Ng, 1)
-
-
-def union_iou(proposals: torch.Tensor, gts: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
-    """
-    Pixel-set IoU between union of proposals and union of GTs.
-    proposals, gts: [N,H,W] bool
-    """
-    dev = gts.device if gts.numel() > 0 else (proposals.device if proposals.numel() > 0 else torch.device("cpu"))
-    if gts.numel() == 0 and proposals.numel() == 0:
-        return torch.tensor(1.0, device=dev, dtype=torch.float32)
-
-    if proposals.numel() > 0:
-        P = proposals.any(dim=0)
-    else:
-        # create zero map based on gts ref
-        H, W = gts.shape[-2], gts.shape[-1]
-        P = torch.zeros((H, W), dtype=torch.bool, device=dev)
-
-    if gts.numel() > 0:
-        G = gts.any(dim=0)
-    else:
-        H, W = proposals.shape[-2], proposals.shape[-1]
-        G = torch.zeros((H, W), dtype=torch.bool, device=dev)
-
-    inter = (P & G).sum().float()
-    uni = (P | G).sum().float() + eps
-    return (inter / uni).to(torch.float32)
-
-
-# --------------------- Main evaluator ---------------------
+    inter = (a & b).float().sum()
+    uni   = (a | b).float().sum().clamp_min(eps)
+    return inter / uni
 
 @torch.no_grad()
-def automask_metrics(
-    sam2_model_or_predictor: Any,
-    images: List[Union[np.ndarray, torch.Tensor]],   # HxW or HxWx3 (uint8 preferred)
-    gt_masks_per_image: List[List[Union[np.ndarray, torch.Tensor]]],  # per-image list of HxW masks
-    *,
-    amg_kwargs: Optional[Dict[str, Any]] = None,
-    top_k: Optional[int] = 20,
-    device: Optional[torch.device] = None,
-    autocast_ctx: Optional[Callable[[], Any]] = None,
-    downsample_factor: int = 1,
-    return_per_image: bool = False,
+def decoder_prompt_miou(prd_masks: torch.Tensor, gt_masks: torch.Tensor) -> float:
+    """
+    Best-of-K decoder prompt mIoU.
+    Args:
+        prd_masks: [N, K, H, W] LOGITS from the decoder
+        gt_masks:  [N, H, W]    binary {0,1}
+    Returns:
+        mean over N of (max IoU over K), using SAM2's thresholding rule (logits > 0).
+    """
+    N, K, H, W = prd_masks.shape
+    # SAM2 convention: threshold decoder outputs by logits > 0
+    pred_bin = (prd_masks > 0)  # bool, [N,K,H,W]
+    ious = []
+    for n in range(N):
+        gt = gt_masks[n].bool()
+        if gt.sum() == 0:
+            continue  # skip empty GT
+        best = torch.stack([_binary_iou(pred_bin[n, k], gt) for k in range(K)], dim=0).max()
+        ious.append(best)
+    if len(ious) == 0:
+        return float("nan")
+    return float(torch.stack(ious).mean().item())
+
+@torch.no_grad()
+def iou_head_calibration_from_decoder(
+    prd_masks: torch.Tensor,
+    prd_scores: torch.Tensor,
+    gt_masks:   torch.Tensor,
+    num_bins:   int = 15,
 ) -> Dict[str, Any]:
     """
-    Run SAM2AutomaticMaskGenerator once per image and compute:
-      - ABIoU_one_to_one (greedy, no reuse)
-      - UnionIoU
-      - ABIoU_original (optional reference)
-
-    Speed features:
-      - Single IoU matrix fuels both ABIoUs.
-      - Everything stays on GPU; masks are boolean.
-      - Optional downsample_factor (e.g., 2 or 4) for huge speedups.
-
+    Compare predicted IoU (sigmoid(prd_scores)) vs true IoU (from logits>0 masks).
+    Args:
+        prd_masks:  [N,K,H,W] LOGITS
+        prd_scores: [N,K]     raw IoU logits
+        gt_masks:   [N,H,W]
     Returns:
-      {
-        'ABIoU_one_to_one': float,
-        'UnionIoU': float,
-        'ABIoU_original': float,
-        'num_images': int,
-        'per_image': [ ... ]  # if return_per_image
-      }
+        dict with calibration MAE, Brier, ECE, and a per-bin table (for diagnostics).
     """
+    N, K, H, W = prd_masks.shape
+    preds, trues = [], []
+    pred_bin = (prd_masks > 0)  # bool
 
-    # AMG defaults (safe, tweak as needed)
-    _amg = dict(
-        points_per_side=32,
-        points_per_batch=128,
-        pred_iou_thresh=0.7,
-        stability_score_thresh=0.92,
-        stability_score_offset=0.7,
-        crop_n_layers=1,
-        crop_n_points_downscale_factor=2,
-        box_nms_thresh=0.7,
-        use_m2m=False,
-        multimask_output=True,
-    )
-    if amg_kwargs:
-        _amg.update(amg_kwargs)
+    for n in range(N):
+        gt = gt_masks[n].bool()
+        if gt.sum() == 0:
+            continue
+        # True IoU per K proposal
+        true_iou_k = torch.stack([_binary_iou(pred_bin[n, k], gt) for k in range(K)], dim=0)  # [K]
+        pred_iou_k = prd_scores[n].sigmoid().clamp(0, 1)                                       # [K]
+        trues.append(true_iou_k)
+        preds.append(pred_iou_k)
 
-    model_for_amg = getattr(sam2_model_or_predictor, "model", sam2_model_or_predictor)
-    mask_generator = SAM2AutomaticMaskGenerator(model=model_for_amg, **_amg)
+    if len(preds) == 0:
+        return {"mae": float("nan"), "brier": float("nan"), "ece": float("nan"), "table": []}
 
-    # Device
-    if device is None:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    preds = torch.cat(preds)  # [N'*K]
+    trues = torch.cat(trues)  # [N'*K]
 
-    # Autocast (AMG forward only)
-    ac = autocast_ctx if autocast_ctx is not None else (lambda: nullcontext())
+    mae   = torch.abs(preds - trues).mean().item()
+    brier = torch.mean((preds - trues) ** 2).item()
 
-    # Accumulators
-    one2one_vals, union_vals, abiou_orig_vals = [], [], []
-    per_image_out = []
+    # Expected Calibration Error (ECE) over uniform bins
+    bins = np.linspace(0.0, 1.0, num_bins + 1)
+    pred_np, true_np = preds.cpu().numpy(), trues.cpu().numpy()
+    idx = np.clip(np.digitize(pred_np, bins, right=True) - 1, 0, num_bins - 1)
 
-    for img, gt_list in zip(images, gt_masks_per_image):
-        # ---- Ensure numpy uint8 image for AMG ----
-        if isinstance(img, torch.Tensor):
-            img_np = img.detach().cpu().numpy()
-        else:
-            img_np = img
-        H, W = img_np.shape[:2]
+    ece = 0.0
+    table = []
+    total = len(pred_np)
+    for b in range(num_bins):
+        m = (idx == b)
+        n_b = int(m.sum())
+        if n_b == 0:
+            table.append({"bin": f"[{bins[b]:.2f},{bins[b+1]:.2f})", "count": 0,
+                          "mean_pred": None, "mean_true": None, "gap": None})
+            continue
+        mp = float(pred_np[m].mean())
+        mt = float(true_np[m].mean())
+        gap = abs(mp - mt)
+        ece += (n_b / total) * gap
+        table.append({"bin": f"[{bins[b]:.2f},{bins[b+1]:.2f})", "count": n_b,
+                      "mean_pred": round(mp, 4), "mean_true": round(mt, 4), "gap": round(gap, 4)})
 
-        # ---- AMG forward ----
-        with ac():
-            proposals = mask_generator.generate(img_np)  # list of dict
+    return {"mae": mae, "brier": float(brier), "ece": float(ece), "table": table}
 
-        # ---- Convert proposals -> [Np,H,W] bool on device ----
-        if len(proposals) == 0:
-            prop_masks = torch.zeros((0, H, W), dtype=torch.bool, device=device)
-        else:
-            # sort by predicted_iou (or score), keep top_k
-            def _score(d):
-                return float(d.get("predicted_iou", d.get("score", 0.0)))
-            proposals.sort(key=_score, reverse=True)
-            if top_k is not None and top_k > 0:
-                proposals = proposals[:top_k]
-            masks_np = [(p["segmentation"] > 0).astype(np.uint8) for p in proposals]
-            prop_masks = torch.from_numpy(np.stack(masks_np, axis=0)).to(device=device, dtype=torch.bool)
-            prop_masks = prop_masks.contiguous()
+# ------------------------ AMG proposal metrics ------------------------
 
-        # ---- Convert GTs -> [Ng,H,W] bool on device ----
-        if len(gt_list) == 0:
-            gt_masks = torch.zeros((0, H, W), dtype=torch.bool, device=device)
-        else:
-            gt_bool = []
-            for g in gt_list:
-                if isinstance(g, torch.Tensor):
-                    g_np = g.detach().cpu().numpy()
-                else:
-                    g_np = g
-                gt_bool.append((g_np > 0).astype(np.uint8))
-            gt_masks = torch.from_numpy(np.stack(gt_bool, axis=0)).to(device=device, dtype=torch.bool)
-            gt_masks = gt_masks.contiguous()
+def _iou(a: np.ndarray, b: np.ndarray) -> float:
+    """IoU for boolean numpy masks (H,W)."""
+    inter = np.logical_and(a, b).sum()
+    union = np.logical_or(a, b).sum()
+    return float(inter) / max(1.0, float(union))
 
-        # ---- Optional downsample (max-pool style) ----
-        if downsample_factor > 1:
-            prop_masks_ds = _downsample_bool_masks(prop_masks, downsample_factor)
-            gt_masks_ds = _downsample_bool_masks(gt_masks, downsample_factor)
-        else:
-            prop_masks_ds = prop_masks
-            gt_masks_ds = gt_masks
+def _iou_matrix(preds: List[np.ndarray], gts: List[np.ndarray]) -> np.ndarray:
+    """
+    Build P x G IoU matrix for numpy boolean masks.
+    preds: list of predicted masks (H,W)
+    gts:   list of gt masks      (H,W)
+    """
+    if len(preds) == 0 or len(gts) == 0:
+        return np.zeros((len(preds), len(gts)), dtype=np.float32)
+    M = np.zeros((len(preds), len(gts)), dtype=np.float32)
+    for i, p in enumerate(preds):
+        for j, g in enumerate(gts):
+            M[i, j] = _iou(p, g)
+    return M
 
-        # ---- Metrics (single IoU matrix shared under the hood) ----
-        m_one2one = abiou_one_to_one_greedy(prop_masks_ds, gt_masks_ds)
-        m_union = union_iou(prop_masks_ds, gt_masks_ds)
-        m_orig = abiou_original(prop_masks_ds, gt_masks_ds)
+def _greedy_match(M: np.ndarray, tau: float) -> Tuple[int, int, int]:
+    """
+    Greedy bipartite matching by IoU descending with threshold tau.
+    Returns:
+        TP, FP, FN
+    """
+    P, G = M.shape
+    used_p, used_g, matches = set(), set(), []
+    pairs = [(i, j, M[i, j]) for i in range(P) for j in range(G)]
+    pairs.sort(key=lambda x: x[2], reverse=True)
+    for i, j, iou in pairs:
+        if iou < tau:
+            break
+        if i in used_p or j in used_g:
+            continue
+        used_p.add(i); used_g.add(j); matches.append((i, j))
+    TP = len(matches); FP = P - TP; FN = G - TP
+    return TP, FP, FN
 
-        one2one_vals.append(m_one2one)
-        union_vals.append(m_union)
-        abiou_orig_vals.append(m_orig)
+def average_recall_amg(
+    amg_outputs: List[List[dict]],
+    gt_masks_list: List[List[torch.Tensor]],
+    iou_thresholds: np.ndarray = AR_THRESHOLDS,
+    max_proposals: int = None,
+) -> Dict[str, Any]:
+    """
+    Average Recall across IoU thresholds.
+    Args:
+        amg_outputs:   list over images of list[mask_dict]; each dict has 'segmentation' (np.bool array) and 'predicted_iou'
+        gt_masks_list: list over images of list[tensor HxW] for ground-truth instances
+        iou_thresholds: numpy array of IoU taus to average over
+        max_proposals: cap #proposals per image (after ranking by predicted_iou) for speed
+    Returns:
+        {"AR": scalar, "per_tau_recall": {tau: recall_tau}}
+    """
+    recalls = []
+    for tau in iou_thresholds:
+        tp = fn = 0
+        for img_masks, gts in zip(amg_outputs, gt_masks_list):
+            # rank by predicted_iou then cap
+            if max_proposals is not None:
+                img_masks = sorted(img_masks, key=lambda d: d.get('predicted_iou', 0.0), reverse=True)[:max_proposals]
+            preds = [m['segmentation'].astype(bool) for m in img_masks]
+            gts_np = [g.cpu().numpy().astype(bool) for g in gts]
+            M = _iou_matrix(preds, gts_np)
+            tpi, _, fni = _greedy_match(M, float(tau))
+            tp += tpi; fn += fni
+        denom = tp + fn
+        recalls.append(tp / denom if denom > 0 else np.nan)
 
-        if return_per_image:
-            per_image_out.append({
-                "ABIoU": float(m_one2one.detach().cpu()),
-                "ABIoU_original": float(m_orig.detach().cpu()),
-                "num_props": int(prop_masks.shape[0]),
-                "num_gt": int(gt_masks.shape[0]),
-                "H": int(H),
-                "W": int(W),
-            })
+    per_tau = {float(t): (None if np.isnan(r) else float(r)) for t, r in zip(iou_thresholds, recalls)}
+    return {"AR": float(np.nanmean(recalls)), "per_tau_recall": per_tau}
 
-    # ---- Averages ----
-    if len(one2one_vals) == 0:
-        return {
-            "ABIoU_one_to_one": 0.0,
-            "UnionIoU": 0.0,
-            "ABIoU_original": 0.0,
-            "num_images": 0,
-            "per_image": [],
-        }
+def recall_at_k_amg(
+    amg_outputs: List[List[dict]],
+    gt_masks_list: List[List[torch.Tensor]],
+    ks: Tuple[int, ...] = (10, 50, 100),
+    iou_thresh: float = 0.5,
+) -> Dict[str, Any]:
+    """
+    Recall@K at a fixed IoU threshold (default 0.5).
+    """
+    out = {}
+    for K in ks:
+        tp = fn = 0
+        for img_masks, gts in zip(amg_outputs, gt_masks_list):
+            sel = sorted(img_masks, key=lambda d: d.get('predicted_iou', 0.0), reverse=True)[:K]
+            preds = [m['segmentation'].astype(bool) for m in sel]
+            gts_np = [g.cpu().numpy().astype(bool) for g in gts]
+            M = _iou_matrix(preds, gts_np)
+            tpi, _, fni = _greedy_match(M, iou_thresh)
+            tp += tpi; fn += fni
+        denom = tp + fn
+        out[K] = tp / denom if denom > 0 else float('nan')
+    return {"Recall@K": out, "iou_thresh": iou_thresh}
 
-    ABIoU_one_to_one = torch.stack(one2one_vals).mean().item()
-    ABIoU_original_avg = torch.stack(abiou_orig_vals).mean().item()
+# ------------------------ Wrapper for validation loop ------------------------
 
-    out = {
-        "ABIoU": ABIoU_one_to_one,
-        "ABIoU_original": ABIoU_original_avg,
-        "num_images": len(one2one_vals),
+@torch.no_grad()
+def sam2_metrics(batch: Dict[str, Any], outputs: Tuple[torch.Tensor, torch.Tensor, torch.Tensor], amg) -> Dict[str, Any]:
+    """
+    Compute a SAM2-style metric bundle for a single validation batch.
+    Args:
+        batch:   {"images": list[np.ndarray or torch tensor], "masks": list[list[torch.Tensor HxW]]}
+        outputs: (prd_masks, prd_scores, gt_masks) where
+                 prd_masks: [N,K,H,W] logits, prd_scores: [N,K] logits, gt_masks: [N,H,W] {0,1}
+        amg:     a SAM2AutomaticMaskGenerator instance
+    Returns:
+        dict with prompt_mIoU, IoU calibration (mae/brier/ece + table),
+        AR averaged over {0.50,0.65,0.75,0.85}, per-threshold recalls,
+        and Recall@{10,50,100}. Includes "num_images" for weighted averaging.
+    """
+    prd_masks, prd_scores, gt_masks = outputs[:3]
+
+    # Decoder-side metrics (cheap; no extra forward)
+    pm = decoder_prompt_miou(prd_masks, gt_masks)
+    cal = iou_head_calibration_from_decoder(prd_masks, prd_scores, gt_masks, num_bins=15)
+
+    # AMG proposals (dominates runtime; run once, reuse for AR and R@K)
+    all_amg = [amg.generate(img) for img in batch["images"]]
+    all_gt  = batch["masks"]
+
+    ar = average_recall_amg(all_amg, all_gt, iou_thresholds=AR_THRESHOLDS, max_proposals=200)
+    # rK = recall_at_k_amg(all_amg, all_gt, ks=(10, 50), iou_thresh=0.5)
+
+    return {
+        "prompt_miou": float(pm) if pm == pm else float("nan"),
+        "cal_mae":   cal["mae"],
+        "cal_brier": cal["brier"],
+        "cal_ece":   cal["ece"],
+        "cal_tables": cal["table"],             # keep for inspection; don’t reduce across ranks
+        "AR": ar["AR"],
+        "num_images": len(batch["images"]),
     }
-    if return_per_image:
-        out["per_image"] = per_image_out
-    return out
+        # # "per_tau_recall": ar["per_tau_recall"], # keep for plotting; don’t reduce as a scalar
+        # "R@10": rK["Recall@K"][10],
+        # "R@50": rK["Recall@K"][50],

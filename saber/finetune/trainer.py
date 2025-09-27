@@ -1,7 +1,9 @@
 from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR, SequentialLR
+from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
 from saber.finetune.helper import save_training_log
-from saber.finetune.metrics import automask_metrics
+from saber.finetune.abiou import automask_metrics
 from saber.finetune.losses import MultiMaskIoULoss
+from saber.finetune.metrics import sam2_metrics
 from lightning import fabric
 import torch, os, optuna
 from tqdm import tqdm
@@ -47,20 +49,20 @@ class SAM2FinetuneTrainer:
         # Initialize the loss function
         self.focal_alpha = 0.25
         self.focal_gamma = 2.0
-        self.supervise_all_iou = False
-        self.iou_use_l1_loss = False
+        self.supervise_all_iou = True
+        self.iou_use_l1_loss = True
         self.predict_multimask = True
 
         # Automask Generator Parameters
         self.amg_kwargs = dict(
             points_per_side=32,
             points_per_batch=128,
-            pred_iou_thresh=0.5,
+            pred_iou_thresh=0.7,
             stability_score_thresh=0.7,
             stability_score_offset=0.0,
             crop_n_layers=0,
             crop_n_points_downscale_factor=2,
-            box_nms_thresh=0.9,
+            box_nms_thresh=0.6,
             use_m2m=False,
             multimask_output=True,
         )
@@ -160,33 +162,47 @@ class SAM2FinetuneTrainer:
             high_res_features=hr_feats,
         )
 
-        # 7) Upscale + stack GT
-        prd_masks = self.predictor._transforms.postprocess_masks(
-            low_res_masks, self.predictor._orig_hw[-1]
-        )  # [N,K,H,W] logits
-        gt_masks = torch.stack(gt_all, dim=0).float()                       # [N,H,W]
+        # 7) Upscale + stack GT 
+        target_sizes = [self.predictor._orig_hw[int(b)] for b in inst_img_ix]  # list of (H, W), len = N
+        # postprocess per instance (supports single size); do it in a loop then stack
+        upsampled = []
+        for i in range(low_res_masks.shape[0]):           # N
+            H, W = target_sizes[i]
+            up_i = self.predictor._transforms.postprocess_masks(
+                low_res_masks[i:i+1], (H, W)
+            )  # [1,K,H,W]
+            upsampled.append(up_i)
+
+        prd_masks = torch.cat(upsampled, dim=0)           # [N,K,H,W]
+        gt_masks  = torch.stack(gt_all, dim=0).float()    # [N,H,W]
 
         return prd_masks, prd_scores, gt_masks, inst_img_ix
 
     @torch.no_grad()
-    def validate_step(self, amg_kwargs=None, max_images=float('inf'), reduce_all_ranks=True):
+    def validate_step(self, max_images=float('inf'), best_metric='ABIoU'):
         """
         Validate the model on the given batch.
         """
 
+        # Set the model to evaluation mode
         self.predictor.model.eval()
 
-        # Local accumulators (weighted by number of images in each call)
-        abiou_sum = torch.tensor(0.0, device=self.device)
-        loss_sum = torch.tensor(0.0, device=self.device)
-        n_imgs    = torch.tensor(0.0, device=self.device)
-        n_inst    = torch.tensor(0.0, device=self.device)
-        
-        if amg_kwargs is None:
-            amg_kwargs = self.amg_kwargs
+        # Initialize the AMG
+        amg = SAM2AutomaticMaskGenerator(
+            model=self.predictor.model,
+            **self.amg_kwargs
+        )
 
-        # Each rank iterates only its shard (Fabric sets DistributedSampler for you)
-        num_images = 0
+        # --- local accumulators (tensor) ---
+        loss_keys = ["loss_total", "loss_iou", "loss_dice", "loss_mask"]
+        losses_sum = {k: torch.tensor(0.0, device=self.device) for k in loss_keys}
+        n_inst     = torch.tensor(0.0, device=self.device)
+        n_imgs     = torch.tensor(0.0, device=self.device)
+
+        # Initialize the metrics sum
+        metrics_sum = {k: torch.tensor(0.0, device=self.device) for k in self.metric_keys}
+
+        num_images_seen = 0
         for batch in self.val_loader:
 
             # Compute Loss on decoder outputs
@@ -194,69 +210,86 @@ class SAM2FinetuneTrainer:
             if out[0] is None:  
                 continue # no instances in this batch
             prd_masks, prd_scores, gt_masks = out[:3]
-            batch_n = torch.tensor(float(gt_masks.shape[0]), device=self.device)
+            local_n = torch.tensor(float(gt_masks.shape[0]), device=self.device)
 
             with self.autocast():
-                losses = self.loss_fn(prd_masks, prd_scores, gt_masks)
-            # convert to sum over instances
-            loss_sum += float(losses["loss_total"].detach().cpu()) * batch_n
-            n_inst += batch_n
+                batch_losses = self.loss_fn(prd_masks, prd_scores, gt_masks)
 
-            # Compute metrics on THIS batch only (keeps memory small & parallel)
-            m = automask_metrics(
-                self.predictor,                 # predictor or predictor.model (your function supports either)
-                batch["images"],                # list[H×W×3] or list[H×W]
-                batch["masks"],                 # list[list[H×W]]
-                top_k=20,
-                device=self.device,
-                autocast_ctx=self.autocast,
-                amg_kwargs=amg_kwargs,
-            )
+            if best_metric == 'ABIoU':
+                m = automask_metrics(
+                    self.predictor,                 # predictor or predictor.model (your function supports either)
+                    batch["images"],                # list[H×W×3] or list[H×W]
+                    batch["masks"],                 # list[list[H×W]]
+                    top_k=20,
+                    device=self.device,
+                    autocast_ctx=self.autocast,
+                    amg_kwargs=self.amg_kwargs,
+                )
+            else:
+                m = sam2_metrics(batch, out, amg)
+
+            # means → sums
+            for k in loss_keys:
+                # detach→cpu→float to avoid graph + dtype issues
+                losses_sum[k] += float(batch_losses[k].detach().cpu()) * local_n
+            n_inst += local_n
 
             # Weight by number of images so we can average correctly later
-            num = float(m["num_images"])
-            abiou_sum += torch.tensor(m["ABIoU"] * num, device=self.device)
-            n_imgs    += torch.tensor(num, device=self.device)
-            num_images += num
-            if num_images >= max_images:
+            img_count = float(m["num_images"])
+            for k in self.metric_keys:
+                metrics_sum[k] += torch.tensor(m[k] * img_count, device=self.device)
+            n_imgs    += torch.tensor(img_count, device=self.device)
+
+            num_images_seen += img_count
+            if num_images_seen >= max_images:
                 break
 
-        # Global reduction (sum across all ranks)
-        if self.use_fabric and reduce_all_ranks:
-            loss_sum  = self.fabric.all_reduce(loss_sum,  reduce_op="sum")
-            abiou_sum = self.fabric.all_reduce(abiou_sum, reduce_op="sum")
-            n_imgs    = self.fabric.all_reduce(n_imgs,    reduce_op="sum")
-            n_inst    = self.fabric.all_reduce(n_inst,    reduce_op="sum")
-        else:
-            abiou_sum = abiou_sum.sum()
-            n_imgs    = n_imgs.sum()
+        # Reduce losses across ranks
+        losses_sum = self._all_reduce_sum(losses_sum)
+        n_inst     = self._all_reduce_sum(n_inst)
+        n_imgs     = self._all_reduce_sum(n_imgs)
+        metrics_sum = self._all_reduce_sum(metrics_sum)
 
         # Avoid divide-by-zero
-        denom = max(n_imgs.item(), 1.0)
-        loss_denom = max(n_inst.item(), 1.0)
-        return {
-            "loss": (loss_sum / loss_denom).item(),
-            "ABIoU": (abiou_sum / denom).item(),
-            "num_images": int(denom),
-        }
+        img_denom = max(n_imgs.item(), 1.0)
+        inst_denom = max(n_inst.item(), 1.0)
 
-    def train(self, num_epochs, best_metric = 'ABIoU', resample_frequency = 10):
+        out = {
+            "loss_total": (losses_sum["loss_total"] / inst_denom).item(),
+            "loss_iou":   (losses_sum["loss_iou"]   / inst_denom).item(),
+            "loss_dice":  (losses_sum["loss_dice"]  / inst_denom).item(),
+            "loss_mask":  (losses_sum["loss_mask"]  / inst_denom).item(),
+            "num_images": int(img_denom),
+        }
+        out.update({k: (metrics_sum[k] / img_denom).item() for k in self.metric_keys})
+
+        return out
+
+    def train(self, num_epochs, best_metric = 'ABIoU', resample_frequency = 100):
         """
         Fine Tune SAM2 on the given data.
         """
 
         # Initialize the loss function
         self.loss_fn = MultiMaskIoULoss(
-            weight_dict={"loss_mask": 1.0, "loss_dice": 1.0, "loss_iou": 0.15},
+            weight_dict={"loss_mask": 10.0, "loss_dice": 1.0, "loss_iou": 1.0},
             focal_alpha=self.focal_alpha,
             focal_gamma=self.focal_gamma,
             supervise_all_iou=self.supervise_all_iou,
             iou_use_l1_loss=self.iou_use_l1_loss
         )
 
+        # Initialize the metric keys
+        if best_metric == 'ABIoU':
+            self.metric_keys = ['ABIoU']
+        else:
+            self.metric_keys = ['prompt_miou', 'cal_mae', 'cal_brier', 'cal_ece', 'cal_tables', 
+                           'AR', 'R@10', 'R@50', 'R@100']
+
         # Cosine scheduler w/Warmup ----
-        warmup_epochs = max(int(0.05 * num_epochs), 1)
-        self.warmup_sched = LinearLR(self.optimizer, start_factor=1e-3, total_iters=warmup_epochs)
+        # warmup_epochs = max(int(0.01 * num_epochs), 1)
+        warmup_epochs = 5
+        self.warmup_sched = LinearLR(self.optimizer, start_factor=0.1, total_iters=warmup_epochs)
         self.cosine_sched = CosineAnnealingLR(self.optimizer, T_max=(num_epochs - warmup_epochs), eta_min=1e-6)
         self.scheduler = SequentialLR(self.optimizer, [self.warmup_sched, self.cosine_sched], milestones=[warmup_epochs])
 
@@ -267,25 +300,33 @@ class SAM2FinetuneTrainer:
         else:
             pbar = None
 
-        best_metric_value = float('-inf')
         self.optimizer.zero_grad()
+        best_metric_value = float('-inf')
+        # Main Loop
         for epoch in range(num_epochs):
             # Train 
-            epoch_loss_train = 0
-            self.predictor.model.train()
+            # at start of each epoch
+            if hasattr(self.train_loader, "sampler") and hasattr(self.train_loader.sampler, "set_epoch"):
+                self.train_loader.sampler.set_epoch(epoch)
+
             if (epoch+1) % resample_frequency == 0:
                 self.train_loader.dataset.resample_epoch()
+
+            self.predictor.model.train()
             for batch in self.train_loader:
                 out = self.forward_step(batch)
                 if out[0] is None:
                     continue
                 prd_masks, prd_scores, gt_masks = out[:3]
                 with self.autocast():
-                    losses = self.loss_fn(prd_masks, prd_scores, gt_masks)
+                    batch_losses = self.loss_fn(prd_masks, prd_scores, gt_masks)
                 if self.use_fabric:
-                    self.fabric.backward(losses['loss_total'])
+                    self.fabric.backward(batch_losses['loss_total'])
                 else:
-                    losses['loss_total'].backward()
+                    batch_losses['loss_total'].backward()
+
+                # number of instances this rank used to compute its per-batch means
+                _local_n = gt_masks.shape[0]                    
 
                 # (optional) gradient clip:
                 if self.use_fabric:
@@ -303,39 +344,85 @@ class SAM2FinetuneTrainer:
 
                 self.optimizer.step()
                 self.optimizer.zero_grad()
-                epoch_loss_train += float(losses["loss_total"].detach().cpu())
+                losses = self._reduce_losses(batch_losses, _local_n)
 
             # Learning Rate Scheduler
             self.scheduler.step()
 
             # Validate
-            if (epoch+1) % 500 == 0:
-                metrics = self.amg_param_tuner()
+            metrics = {}
+            if (epoch+1) % 1e4 == 0:
+                metrics['val'] = self.amg_param_tuner()
             else:  
-                metrics = self.validate_step()
+                metrics['val'] = self.validate_step()
+            metrics['train'] = losses
 
             # Print Only on Rank 0
             if self.is_global_zero:
-                # Print Metrics
-                metrics['train'] = {'loss': epoch_loss_train/len(self.train_loader)}
                 pbar.set_postfix({
-                    "train_loss": f"{metrics['train']['loss']:.4f}",
-                    "val_loss": f"{metrics['loss']:.4f}",
-                    "ABIoU": f"{metrics['ABIoU']:.4f}",
+                    "train_loss": f"{metrics['train']['loss_total']:.4f}",
+                    "val_loss": f"{metrics['val']['loss_total']:.4f}",
+                    f"val_{best_metric}": f"{metrics['val'][best_metric]:.4f}",
                 })
                 pbar.update(1)
 
                 # Save Training Log
                 metrics['epoch'] = epoch
-                metrics['lr'] = self.scheduler.get_last_lr()[0]
-                save_training_log(metrics, self.save_dir)
+                metrics['lr_mask'] = self.scheduler.get_last_lr()[0]
+                metrics['lr_prompt'] = self.scheduler.get_last_lr()[1]
+                save_training_log(metrics, self.save_dir, self.metric_keys)
 
                 # Save Model if best metric is achieved
-                if metrics[best_metric] > best_metric_value:
-                    best_metric_value = metrics[best_metric]
-                    ckpt = {"model": self.predictor.model.state_dict()}
+                ckpt = {"model": self.predictor.model.state_dict()}
+                metric_value = metrics['val'].get(best_metric)
+                if metric_value > best_metric_value:
+                    best_metric_value = metric_value
                     torch.save(ckpt, f"{self.save_dir}/best_model.pth")
                     print(f"Best {best_metric} saved!")
+                else:
+                    torch.save(ckpt, f"{self.save_dir}/bad_model.pth")
+
+    def _reduce_losses(self, losses, num_elems: int = None):
+        """
+        Reduce the losses across ranks.
+        """
+        key_map = {
+            "loss_iou": "loss_iou",
+            "loss_dice": "loss_dice",
+            "loss_mask": "loss_mask",
+            "loss_total": "loss_total",
+        }
+        count = torch.tensor(float(num_elems if num_elems is not None else 1.0), device=self.device)
+        out = {}
+        if self.use_fabric:
+            global_count = self.fabric.all_reduce(count, reduce_op="sum")
+            for long_k, short_k in key_map.items():
+                if long_k not in losses: 
+                    continue
+                num = torch.tensor(float(losses[long_k].detach().item()), device=self.device) * count
+                global_num = self.fabric.all_reduce(num, reduce_op="sum")
+                out[short_k] = (global_num / torch.clamp(global_count, min=1.0)).item()
+        else:
+            for long_k, short_k in key_map.items():
+                if long_k in losses:
+                    out[short_k] = float(losses[long_k].detach().item())
+        return out
+
+    def _all_reduce_sum(self, x):
+        if not self.use_fabric:
+            return x
+        if isinstance(x, torch.Tensor):
+            return self.fabric.all_reduce(x, reduce_op="sum")
+        if isinstance(x, dict):
+            return {k: self.fabric.all_reduce(v, reduce_op="sum") for k, v in x.items()}
+        raise TypeError(f"_all_reduce_sum expects Tensor or dict[str,Tensor], got {type(x)}")
+
+    # def _all_reduce_sum(self, x: torch.Tensor) -> torch.Tensor:
+    #     """
+    #     """
+    #     return self.fabric.all_reduce(x, reduce_op="sum") if self.use_fabric else x
+
+############### Experimental - Automatic Mask Generator Tuning ###############
 
     def amg_param_tuner(self, n_trials=10):
         """

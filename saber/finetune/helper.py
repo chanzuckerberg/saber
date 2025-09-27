@@ -184,22 +184,32 @@ def visualize_item_with_points(image, masks, points, boxes=None,
     ax.axis("off")
     plt.tight_layout()
 
-def save_training_log(results, outdir="results"):
+def save_training_log(results, outdir="results", metric_keys=["ABIoU"]):
 
     # CSV (epoch-aligned, pad with blanks if needed)
     path = os.path.join(outdir, "metrics.csv")
     is_new = not os.path.exists(path)
 
     with open(path, "a", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["epoch", "lr", "train_loss", "val_loss", "ABIoU"])
+        writer = csv.DictWriter(f, 
+            fieldnames=["epoch", "lr_mask", "lr_prompt", "train_loss", "val_loss",
+                         *metric_keys, "train_iou", "train_dice", "train_mask", "val_iou", 
+                        "val_dice", "val_mask"])
         if is_new:
             writer.writeheader()
         writer.writerow({
             "epoch": int(results['epoch']),
-            "lr": f"{results['lr']:.1e}",
-            "train_loss": float(results['train']['loss']),
-            "val_loss": float(results['loss']),
-            "ABIoU": float(results['ABIoU']),
+            "lr_mask": f"{results['lr_mask']:.1e}",
+            "lr_prompt": f"{results['lr_prompt']:.1e}",
+            "train_loss": float(results['train']['loss_total']),
+            "val_loss": float(results['val']['loss_total']),
+            **{k: float(results['val'][k]) for k in metric_keys},
+            "train_iou": float(results['train']['loss_iou']),
+            "train_dice": float(results['train']['loss_dice']),
+            "train_mask": float(results['train']['loss_mask']),
+            "val_iou": float(results['val']['loss_iou']),
+            "val_dice": float(results['val']['loss_dice']),
+            "val_mask": float(results['val']['loss_mask']),
         })
 
 ########################################################################################

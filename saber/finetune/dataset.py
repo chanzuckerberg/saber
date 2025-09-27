@@ -3,15 +3,9 @@ from monai.transforms import Compose, EnsureChannelFirstd
 import saber.finetune.helper as helper
 from saber.utils import preprocessing
 from torch.utils.data import Dataset
+import zarr, torch, random
 from tqdm import tqdm
 import numpy as np
-import zarr, torch
-
-from monai.transforms import (
-    Compose, EnsureChannelFirstd, RandRotate90d, RandFlipd, RandScaleIntensityd, 
-    RandShiftIntensityd, RandAdjustContrastd, RandGaussianNoised, 
-    RandomOrder, RandGaussianSmoothd,
-)
 
 class AutoMaskDataset(Dataset):
     def __init__(self, 
@@ -43,6 +37,7 @@ class AutoMaskDataset(Dataset):
         self.k_min = 50
         self.k_max = 100
         self.transform = transform
+        self.keep_fraction = 0.5
 
         # Check if both data types are available
         if tomogram_zarr_path is None and fib_zarr_path is None:
@@ -88,11 +83,18 @@ class AutoMaskDataset(Dataset):
         self.seed = seed
         self._rng = np.random.RandomState(seed)
 
-        # Resample epoch
-        self.resample_epoch()
 
         # Verbose Flag
         self.verbose = False
+
+        # Samples
+        self.tomogram_samples = []
+        self.fib_samples = []
+        self._prev_tomogram_samples = []
+        self._prev_fib_samples = []
+
+        # First sampling epoch
+        self.resample_epoch()
 
     def _estimate_zrange(self, key, band=(0.3, 0.7), threshold=0):
         """
@@ -113,45 +115,82 @@ class AutoMaskDataset(Dataset):
     
     def resample_epoch(self):
         """ Generate new random samples for this epoch """
-        self.tomogram_samples = []
-        self.fib_samples = []
         
         # Sample random slabs from each tomogram
         if self.has_tomogram:
             print(f"Re-Sampling {self.slabs_per_volume_per_epoch} slabs from {self.n_tomogram_volumes} tomograms")
+            new_tomo_samples = []
             for vol_idx in range(self.n_tomogram_volumes):
 
                 # Sample random z positions from this tomogram volume
                 z_min, z_max = self.tomo_shapes[vol_idx]
-                z_positions = np.random.randint(
+                z_positions = self._rng.randint(
                     z_min, 
                     z_max, 
                     size=self.slabs_per_volume_per_epoch
                 )
                 # Add to samples
                 for z_pos in z_positions:
-                    self.tomogram_samples.append((vol_idx, z_pos))
-            np.random.shuffle(self.tomogram_samples) # Shuffle samples
+                    new_tomo_samples.append((vol_idx, z_pos))
+
+            self.tomogram_samples = self._update_samples(self.tomogram_samples, new_tomo_samples)
+
+            # Shuffle samples
+            self._rng.shuffle(self.tomogram_samples) 
         
         # Sample random slices from each FIB volume
         if self.has_fib:
             print(f"Re-Sampling {self.slices_per_fib_per_epoch} slices from {self.n_fib_volumes} FIB volumes")
+            new_fib_samples = []
             for fib_idx in range(self.n_fib_volumes):
                 fib_shape = self.fib_shapes[fib_idx]
                 # Sample random z positions from this FIB volume
-                z_positions = np.random.randint(
+                z_positions = self._rng.randint(
                     0, 
                     fib_shape[0], 
                     size=self.slices_per_fib_per_epoch
                 )
                 
                 for z_pos in z_positions:
-                    self.fib_samples.append((fib_idx, z_pos))        
-            np.random.shuffle(self.fib_samples) # Shuffle samples
+                    new_fib_samples.append((fib_idx, z_pos))        
+
+            self.fib_samples = self._update_samples(self.fib_samples, new_fib_samples)
+            self._rng.shuffle(self.fib_samples) # Shuffle samples
         
         # Set epoch length
         self.epoch_length = len(self.tomogram_samples) + len(self.fib_samples)
     
+    def _update_samples(self, old, new):
+        """
+        Return a mixed list with size == len(new):
+        - keep = min(round(len(new)*keep_fraction), len(old)) from 'old'
+        - add  = len(new) - keep from 'new'
+        """
+        target = len(new)
+        if target == 0:
+            return []
+
+        # choose keep set from *old* list, new set from *new* list
+        keep = min(int(round(target * self.keep_fraction)), len(old))
+        add  = target - keep
+
+        # keep set from *old* list
+        if keep > 0:
+            keep_idx = self._rng.choice(len(old), size=keep, replace=False)
+            kept = [old[i] for i in keep_idx]
+        else:
+            kept = []
+
+        # add set from *new* list
+        if add > 0:
+            new_idx = self._rng.choice(len(new), size=add, replace=False)
+            added = [new[i] for i in new_idx]
+        else:
+            added = []
+
+        # return mixed list
+        return kept + added
+
     def __len__(self):
         return self.epoch_length
     

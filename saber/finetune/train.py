@@ -34,14 +34,15 @@ def finetune_sam2(
     # Load data loaders
     train_loader = DataLoader( AutoMaskDataset(
                                tomo_train, fib_train, transform=get_finetune_transforms(), 
-                               batch_size=batch_size, shuffle=True,
-                               num_workers=4, pin_memory=True, collate_fn=collate_autoseg ) 
+                               slabs_per_volume_per_epoch=10 ),
+                               batch_size=batch_size, shuffle=True, 
+                               num_workers=4, pin_memory=True, collate_fn=collate_autoseg 
                             )
+
     val_loader = DataLoader( AutoMaskDataset(
-                             tomo_val, fib_val,  
-                             batch_size=batch_size, shuffle=False,
-                            num_workers=4, pin_memory=True, collate_fn=collate_autoseg )
-                            ) if (tomo_val or fib_val) else train_loader
+                             tomo_val, fib_val, slabs_per_volume_per_epoch=10 ),
+                             num_workers=4, pin_memory=True, collate_fn=collate_autoseg,
+                             batch_size=batch_size, shuffle=False ) if (tomo_val or fib_val) else train_loader
 
     # Initialize trainer and train
     trainer = SAM2FinetuneTrainer( predictor, train_loader, val_loader )
@@ -65,10 +66,10 @@ def finetune(sam2_cfg: str, epochs: int, fib_train: str, fib_val: str, tomo_trai
         f"Fine Tuning SAM2 on {fib_train} and {fib_val} and {tomo_train} and {tomo_val} for {epochs} epochs"
     )
     print(f"Using SAM2 Config: {sam2_cfg}")
-    print(f"Using Train Zarr: {tomo_train}")
-    print(f"Using Val Zarr: {tomo_val}")
-    print(f"Using Train Zarr: {fib_train}")
-    print(f"Using Val Zarr: {fib_val}")
+    print(f"Tomo Train Zarr: {tomo_train}")
+    print(f"Tomo Val Zarr: {tomo_val}")
+    print(f"Fib Train Zarr: {fib_train}")
+    print(f"Fib Val Zarr: {fib_val}")
     print(f"Using Number of Epochs: {epochs}")
     print(f"Using Batch Size: {batch_size}")
     print("--------------------------------")
