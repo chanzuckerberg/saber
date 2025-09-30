@@ -34,18 +34,19 @@ def finetune_sam2(
     # Load data loaders
     train_loader = DataLoader( AutoMaskDataset(
                                tomo_train, fib_train, transform=get_finetune_transforms(), 
-                               slabs_per_volume_per_epoch=10 ),
+                               slabs_per_volume_per_epoch=20 ),
                                batch_size=batch_size, shuffle=True, 
                                num_workers=4, pin_memory=True, collate_fn=collate_autoseg 
                             )
 
     val_loader = DataLoader( AutoMaskDataset(
-                             tomo_val, fib_val, slabs_per_volume_per_epoch=10 ),
+                             tomo_val, fib_val, slabs_per_volume_per_epoch=15 ),
                              num_workers=4, pin_memory=True, collate_fn=collate_autoseg,
                              batch_size=batch_size, shuffle=False ) if (tomo_val or fib_val) else train_loader
 
     # Initialize trainer and train
     trainer = SAM2FinetuneTrainer( predictor, train_loader, val_loader )
+    # trainer.train( num_epochs, best_metric='AR' )
     trainer.train( num_epochs )
 
 @click.command()

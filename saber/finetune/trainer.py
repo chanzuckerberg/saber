@@ -372,9 +372,13 @@ class SAM2FinetuneTrainer:
         }
         out.update({k: (metrics_sum[k] / img_denom).item() for k in self.metric_keys})
 
+        if 'cal_tables' in m and self.is_global_zero:
+            # (optional) keep the last batch's cal_tables on rank0 for inspection:
+             out["cal_tables"] = m.get("cal_tables", None)
+
         return out
 
-    def train(self, num_epochs, best_metric = 'ABIoU', resample_frequency = 100):
+    def train(self, num_epochs, best_metric = 'ABIoU', resample_frequency = 1e4):
         """
         Fine Tune SAM2 on the given data.
         """
@@ -394,7 +398,7 @@ class SAM2FinetuneTrainer:
         else:
             self.metric_keys = [
                 'prompt_miou', 'cal_mae', 'cal_brier', 'cal_ece',
-                'cal_tables', 'AR', 'R@10', 'R@50', 'R@100']
+                'AR', 'R@10', 'R@50', 'R@100']
 
         # Cosine scheduler w/Warmup ----
         # warmup_epochs = max(int(0.01 * num_epochs), 1)
@@ -464,7 +468,7 @@ class SAM2FinetuneTrainer:
             if (epoch+1) % 1e4 == 0:
                 metrics['val'] = self.amg_param_tuner()
             else:  
-                metrics['val'] = self.validate_step()
+                metrics['val'] = self.validate_step(best_metric=best_metric)
             metrics['train'] = losses
 
             # Print Only on Rank 0

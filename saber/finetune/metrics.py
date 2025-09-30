@@ -230,7 +230,7 @@ def sam2_metrics(batch: Dict[str, Any], outputs: Tuple[torch.Tensor, torch.Tenso
     all_gt  = batch["masks"]
 
     ar = average_recall_amg(all_amg, all_gt, iou_thresholds=AR_THRESHOLDS, max_proposals=200)
-    # rK = recall_at_k_amg(all_amg, all_gt, ks=(10, 50), iou_thresh=0.5)
+    rK = recall_at_k_amg(all_amg, all_gt, ks=(10, 50, 100), iou_thresh=0.5)
 
     return {
         "prompt_miou": float(pm) if pm == pm else float("nan"),
@@ -240,6 +240,9 @@ def sam2_metrics(batch: Dict[str, Any], outputs: Tuple[torch.Tensor, torch.Tenso
         "cal_tables": cal["table"],             # keep for inspection; don’t reduce across ranks
         "AR": ar["AR"],
         "num_images": len(batch["images"]),
+        "R@10": rK["Recall@K"][10],
+        "R@50": rK["Recall@K"][50],
+        "R@100": rK["Recall@K"][100],
     }
         # # "per_tau_recall": ar["per_tau_recall"], # keep for plotting; don’t reduce as a scalar
         # "R@10": rK["Recall@K"][10],

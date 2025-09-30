@@ -1,5 +1,6 @@
 from scipy.ndimage import binary_erosion, binary_dilation
 from monai.transforms import Compose, EnsureChannelFirstd
+from typing import Optional, Tuple, Union
 import saber.finetune.helper as helper
 from saber.utils import preprocessing
 from torch.utils.data import Dataset
@@ -15,7 +16,8 @@ class AutoMaskDataset(Dataset):
                  slabs_per_volume_per_epoch: int = 10,
                  slices_per_fib_per_epoch: int = 5,
                  slab_thickness: int = 5,
-                 seed: int = 42):
+                 seed: int = 42,
+                 shuffle: bool = True):
         """
         Args:
             tomogram_zarr_path: Path to the tomogram zarr store
@@ -38,6 +40,7 @@ class AutoMaskDataset(Dataset):
         self.k_max = 100
         self.transform = transform
         self.keep_fraction = 0.5
+        self.shuffle = shuffle
 
         # Check if both data types are available
         if tomogram_zarr_path is None and fib_zarr_path is None:
@@ -83,7 +86,6 @@ class AutoMaskDataset(Dataset):
         self.seed = seed
         self._rng = np.random.RandomState(seed)
 
-
         # Verbose Flag
         self.verbose = False
 
@@ -112,6 +114,80 @@ class AutoMaskDataset(Dataset):
         max_val = vals.max() - self.slab_thickness + min_offset
         min_val = vals.min() + self.slab_thickness + min_offset
         return int(min_val), int(max_val)
+
+    def _compute_indices(
+        self,
+        D: int,
+        N: int,
+        z_bounds: Optional[Tuple[Union[int, float], Union[int, float]]] = None,
+    ) -> np.ndarray:
+        """
+        Precompute N slice indices for a volume of depth D.
+
+        Args:
+            D: total #slices (depth).
+            N: total indices to return.
+            center_bias: fraction sampled from a Gaussian; the rest uniform.
+            sigma: std-dev for the Gaussian as a fraction of the (bounded) depth.
+            z_bounds: optional (z_min, z_max). If ints, treated as absolute slice
+                    indices (inclusive). If floats in [0,1], treated as fractions
+                    of D (e.g., (0.1, 0.9)). Indices are clamped into [0, D-1].
+
+        Returns:
+            np.ndarray of shape (N,) with integer slice indices in ascending order.
+        """
+        assert D > 0 and N > 0
+
+        center_bias = 0.9
+        sigma = 0.2
+
+        # --- Resolve bounds ---
+        if z_bounds is None:
+            z0, z1 = 0, D - 1
+        else:
+            a, b = z_bounds
+            if isinstance(a, float) or isinstance(b, float):
+                # treat as fractions in [0,1]
+                a = int(np.floor(np.clip(a, 0.0, 1.0) * (D - 1)))
+                b = int(np.ceil (np.clip(b, 0.0, 1.0) * (D - 1)))
+            z0 = int(max(0, min(a, b)))
+            z1 = int(min(D - 1, max(a, b)))
+        if z1 < z0:
+            # empty window → fall back to full range
+            z0, z1 = 0, D - 1
+
+        # Window length (inclusive)
+        W = (z1 - z0 + 1)
+        if W <= 0:
+            z0, z1 = 0, D - 1
+            W = D
+
+        # --- How many from each sampler ---
+        n_g = int(round(center_bias * N))
+        n_u = N - n_g
+
+        # --- Gaussian over the bounded window ---
+        mu = z0 + 0.5 * (W - 1)
+        s  = sigma * (W - 1)
+        if s <= 0:
+            # degenerate window or sigma=0 → just center
+            g = np.full(n_g, int(round(mu)), dtype=int)
+        else:
+            g = self._rng.normal(mu, s, size=n_g)
+            g = np.clip(np.round(g).astype(int), z0, z1)
+
+        # --- Uniform over the bounded window ---
+        u = self._rng.randint(z0, z1 + 1, size=n_u, dtype=int)
+
+        # --- Merge, unique, and pad if needed ---
+        idx = np.unique(np.concatenate([g, u]))
+        # If de-dup removed too many, top up with uniform draws
+        while idx.size < N:
+            extra = self._rng.randint(z0, z1 + 1, size=N - idx.size, dtype=int)
+            idx = np.unique(np.concatenate([idx, extra]))
+
+        # Return exactly N indices (sorted for reproducibility)
+        return np.sort(idx[:N])
     
     def resample_epoch(self):
         """ Generate new random samples for this epoch """
@@ -122,21 +198,22 @@ class AutoMaskDataset(Dataset):
             new_tomo_samples = []
             for vol_idx in range(self.n_tomogram_volumes):
 
-                # Sample random z positions from this tomogram volume
+                # Sample Indices in [0, D-1], center-biased within the *window*
                 z_min, z_max = self.tomo_shapes[vol_idx]
-                z_positions = self._rng.randint(
-                    z_min, 
-                    z_max, 
-                    size=self.slabs_per_volume_per_epoch
+                z_rel = self._compute_indices(
+                    z_max - z_min, 
+                    self.slabs_per_volume_per_epoch, 
+                    z_bounds=(z_min, z_max)
                 )
-                # Add to samples
+
+                # Shift to absolute z and add to samples
+                z_positions = z_rel + z_min
                 for z_pos in z_positions:
                     new_tomo_samples.append((vol_idx, z_pos))
-
-            self.tomogram_samples = self._update_samples(self.tomogram_samples, new_tomo_samples)
+            self.tomogram_samples = new_tomo_samples
 
             # Shuffle samples
-            self._rng.shuffle(self.tomogram_samples) 
+            if self.shuffle: self._rng.shuffle(self.tomogram_samples) 
         
         # Sample random slices from each FIB volume
         if self.has_fib:
@@ -145,51 +222,20 @@ class AutoMaskDataset(Dataset):
             for fib_idx in range(self.n_fib_volumes):
                 fib_shape = self.fib_shapes[fib_idx]
                 # Sample random z positions from this FIB volume
-                z_positions = self._rng.randint(
-                    0, 
-                    fib_shape[0], 
-                    size=self.slices_per_fib_per_epoch
+                z_positions = self._compute_indices(
+                    fib_shape[0],
+                    self.slices_per_fib_per_epoch,
+                    z_bounds=(0, fib_shape[0])
                 )
                 
                 for z_pos in z_positions:
                     new_fib_samples.append((fib_idx, z_pos))        
 
             self.fib_samples = self._update_samples(self.fib_samples, new_fib_samples)
-            self._rng.shuffle(self.fib_samples) # Shuffle samples
+            if self.shuffle: self._rng.shuffle(self.fib_samples) # Shuffle samples
         
         # Set epoch length
         self.epoch_length = len(self.tomogram_samples) + len(self.fib_samples)
-    
-    def _update_samples(self, old, new):
-        """
-        Return a mixed list with size == len(new):
-        - keep = min(round(len(new)*keep_fraction), len(old)) from 'old'
-        - add  = len(new) - keep from 'new'
-        """
-        target = len(new)
-        if target == 0:
-            return []
-
-        # choose keep set from *old* list, new set from *new* list
-        keep = min(int(round(target * self.keep_fraction)), len(old))
-        add  = target - keep
-
-        # keep set from *old* list
-        if keep > 0:
-            keep_idx = self._rng.choice(len(old), size=keep, replace=False)
-            kept = [old[i] for i in keep_idx]
-        else:
-            kept = []
-
-        # add set from *new* list
-        if add > 0:
-            new_idx = self._rng.choice(len(new), size=add, replace=False)
-            added = [new[i] for i in new_idx]
-        else:
-            added = []
-
-        # return mixed list
-        return kept + added
 
     def __len__(self):
         return self.epoch_length
@@ -405,3 +451,34 @@ class AutoMaskDataset(Dataset):
             "labels": labels_t,   # list[#p] all ones
             "boxes": boxes_t,     # list[4] (x0,y0,x1,y1)
         }
+
+    # def _update_samples(self, old, new):
+    #     """
+    #     Return a mixed list with size == len(new):
+    #     - keep = min(round(len(new)*keep_fraction), len(old)) from 'old'
+    #     - add  = len(new) - keep from 'new'
+    #     """
+    #     target = len(new)
+    #     if target == 0:
+    #         return []
+
+    #     # choose keep set from *old* list, new set from *new* list
+    #     keep = min(int(round(target * self.keep_fraction)), len(old))
+    #     add  = target - keep
+
+    #     # keep set from *old* list
+    #     if keep > 0:
+    #         keep_idx = self._rng.choice(len(old), size=keep, replace=False)
+    #         kept = [old[i] for i in keep_idx]
+    #     else:
+    #         kept = []
+
+    #     # add set from *new* list
+    #     if add > 0:
+    #         new_idx = self._rng.choice(len(new), size=add, replace=False)
+    #         added = [new[i] for i in new_idx]
+    #     else:
+    #         added = []
+
+    #     # return mixed list
+    #     return kept + added
