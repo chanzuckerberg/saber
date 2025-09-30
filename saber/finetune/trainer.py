@@ -4,12 +4,13 @@ from saber.finetune.helper import save_training_log
 from saber.finetune.abiou import automask_metrics
 from saber.finetune.losses import MultiMaskIoULoss
 from saber.finetune.metrics import sam2_metrics
+import torch, os, optuna, random
+import torch.nn.functional as F
 from lightning import fabric
-import torch, os, optuna
 from tqdm import tqdm
 
 class SAM2FinetuneTrainer:
-    def __init__(self, predictor, train_loader, val_loader):
+    def __init__(self, predictor, train_loader, val_loader, seed=42):
 
         # Store the predictor
         self.predictor = predictor
@@ -63,13 +64,14 @@ class SAM2FinetuneTrainer:
             crop_n_layers=0,
             crop_n_points_downscale_factor=2,
             box_nms_thresh=0.6,
-            use_m2m=False,
-            multimask_output=True,
+            use_m2m=True,
+            multimask_output=False,
         )
         self.nAMGtrials = 10
 
         # Initialize the use_boxes flag
-        self.use_boxes = False
+        self.use_boxes = True
+        self._rng = random.Random(seed)
 
         # Initialize the save directory
         self.save_dir = 'results'
@@ -98,18 +100,102 @@ class SAM2FinetuneTrainer:
         hr_feats = [torch.stack([lvl[b] for b in range(B)], dim=0).to(self.device) for lvl in hr]
         return image_embeds, hr_feats
 
+    def _determine_sampling(self, N, p_points=0.5, p_box=0.15, p_mask=0.2, p_mask_box=0.15):
+        """
+        Decide which prompt combo each instance uses.
+        Returns a list[int] of length N with codes:
+        0 = points only
+        1 = box + points
+        2 = mask + points
+        3 = mask + box + points
+        """
+        # normalize to avoid drift if probs don't sum to 1 exactly
+        probs = [p_points, p_box, p_mask, p_mask_box]
+        s = sum(probs); probs = [p / s for p in probs]
+        # cumulative edges for a single uniform draw
+        e0 = probs[0]
+        e1 = e0 + probs[1]
+        e2 = e1 + probs[2]
+
+        combo = []
+        for _ in range(N):
+            r = self._rng.random()
+            if r < e0:      combo.append(0)
+            elif r < e1:    combo.append(1)
+            elif r < e2:    combo.append(2)
+            else:           combo.append(3)
+        return combo
+
+    def _process_inputs(self, N, mask_logits_full, pts_all, lbl_all, boxes_full, combo):
+        """
+        Build per-instance prompts to feed _prep_prompts():
+        - trim points when also using box/mask (keep 1–3 anchors)
+        - pad clicks to (N, P, 2) and (N, P) with labels=-1 for ignored slots
+        - select boxes/mask_logits per instance based on combo
+        """
+        device = self.device
+
+        # Which instances use which prompts
+        use_boxes = torch.tensor([c in (1, 3) for c in combo], device=device)
+        use_masks = torch.tensor([c in (2, 3) for c in combo], device=device)
+
+        # ---- Trim clicks (when box/mask present we keep a few anchors to avoid over-conditioning)
+        pts_trim, lbl_trim = [], []
+        for i, (p, l) in enumerate(zip(pts_all, lbl_all)):
+            if combo[i] in (1, 2, 3) and p.shape[0] > 3:
+                pts_trim.append(p[:3])
+                lbl_trim.append(l[:3])
+            else:
+                pts_trim.append(p)
+                lbl_trim.append(l)
+
+        # ---- Pad to dense tensors; labels=-1 means "ignore" for _prep_prompts
+        max_p = max((p.shape[0] for p in pts_trim), default=0)
+        pts_pad = torch.zeros((N, max_p, 2), device=device, dtype=torch.float32)
+        lbl_pad = torch.full((N, max_p), -1.0, device=device, dtype=torch.float32)
+        for i, (p, l) in enumerate(zip(pts_trim, lbl_trim)):
+            if p.numel():
+                pts_pad[i, :p.shape[0]] = p.to(device, dtype=torch.float32)
+                lbl_pad[i, :l.shape[0]] = l.to(device, dtype=torch.float32)
+
+        # ---- Ensure boxes_full exists & is float32; supply dummy box when unused
+        if boxes_full is None:
+            boxes_full = torch.tensor([[0, 0, 1, 1]], device=device, dtype=torch.float32).expand(N, 4)
+        else:
+            boxes_full = boxes_full.to(device, dtype=torch.float32)
+
+        boxes_sel = torch.where(
+            use_boxes[:, None],
+            boxes_full,
+            torch.tensor([0, 0, 1, 1], device=device, dtype=torch.float32).expand_as(boxes_full)
+        )
+
+        # ---- Gate mask logits per instance (mask prompt when requested; zeros otherwise)
+        mask_logits_sel = torch.where(
+            use_masks[:, None, None],
+            mask_logits_full.to(device, dtype=torch.float32),
+            torch.zeros_like(mask_logits_full, device=device, dtype=torch.float32)
+        )
+
+        return pts_pad, lbl_pad, boxes_sel, mask_logits_sel
+
+
     def forward_step(self, batch):
         """
-        Returns: prd_masks [N,K,H,W] logits, prd_scores [N,K], gt_masks [N,H,W], inst_img_ix [N]
+        Returns:
+        prd_masks: [N, K, H, W]  (logits at image res)
+        prd_scores: [N, K]       (predicted IoU/head)
+        gt_masks: [N, H, W]
+        inst_img_ix: [N]         (which original image each instance came from)
         """
-        images = batch["images"]  # list of HxWx3 uint8 or float; predictor handles them
+        images = batch["images"]                  # list of B images (HxWx3); predictor handles types
         B = len(images)
 
-        # 1) Encode images once
-        self.predictor.set_image_batch(images)  # caches features on predictor
+        # 1) encode once
+        self.predictor.set_image_batch(images)
         image_embeds_B, hr_feats_B = self._stack_image_embeddings_from_predictor()
 
-        # 2) Flatten instances across batch, move tensors to device
+        # 2) flatten instances
         inst_img_ix, gt_all, pts_all, lbl_all, box_all = [], [], [], [], []
         for b in range(B):
             for m, p, l, bx in zip(batch["masks"][b], batch["points"][b], batch["labels"][b], batch["boxes"][b]):
@@ -124,34 +210,59 @@ class SAM2FinetuneTrainer:
             return None, None, None, None
         inst_img_ix = torch.tensor(inst_img_ix, device=self.device, dtype=torch.long)
 
-        # 3) Pad clicks to (N,P,2) and (N,P)
-        P = max(p.shape[0] for p in pts_all)
-        pts_pad = torch.zeros((N, P, 2), device=self.device)
-        lbl_pad = torch.full((N, P), -1.0, device=self.device)  # <- ignore
-        for i,(p,l) in enumerate(zip(pts_all, lbl_all)):
-            pts_pad[i, :p.shape[0]] = p
-            lbl_pad[i, :l.shape[0]] = l
+        # 3) prompt combos
+        combo = self._determine_sampling(N)
 
-        # Optional boxes
-        boxes = torch.stack(box_all, dim=0) if (self.use_boxes and len(box_all) > 0) else None
+        # 4) boxes
+        boxes_full = torch.stack(box_all, dim=0).to(self.device, dtype=torch.float32) if len(box_all) > 0 else None
+        if boxes_full is None:
+            boxes_full = torch.tensor([[0, 0, 1, 1]], device=self.device, dtype=torch.float32).expand(N, 4)
 
-        # 4) Prompt encoding
-        mask_input, unnorm_coords, labels, _ = self.predictor._prep_prompts(
-            pts_pad, lbl_pad, 
-            box=boxes, mask_logits=None, 
+        # 5) mask logits (+/-6)
+        gt_masks_bin = torch.stack([m.to(torch.float32) for m in gt_all], dim=0).to(self.device)
+        mask_logits_full = (gt_masks_bin * 2.0 - 1.0) * 6.0
+
+        # 6) build per-instance prompts
+        pts_pad, lbl_pad, boxes, mask_logits = self._process_inputs(
+            N, mask_logits_full, pts_all, lbl_all, boxes_full, combo
+        )
+        has_any_mask = (mask_logits is not None) and (mask_logits.abs().sum() > 0)
+
+        # 7) prep prompts (prompt-space outputs)
+        mask_input, point_coords, point_labels, boxes_input = self.predictor._prep_prompts(
+            pts_pad, lbl_pad,
+            box=boxes,
+            mask_logits=(mask_logits if has_any_mask else None),
             normalize_coords=True
         )
+
+        # --- shape fix + spatial size for dense mask prompt ---
+        Hf, Wf = image_embeds_B.shape[-2], image_embeds_B.shape[-1]
+        target_mask_h, target_mask_w = Hf * 4, Wf * 4
+
+        if mask_input is not None:
+            mask_input = mask_input.to(self.device, dtype=torch.float32)
+            if mask_input.dim() == 3:
+                mask_input = mask_input.unsqueeze(1)  # [N,1,H,W]
+            elif mask_input.dim() == 4 and mask_input.shape[0] == 1 and mask_input.shape[1] > 1:
+                mask_input = mask_input.permute(1, 0, 2, 3).contiguous()  # [N,1,H,W]
+            if mask_input.shape[1] != 1:
+                mask_input = mask_input[:, :1]
+            if mask_input.shape[-2:] != (target_mask_h, target_mask_w):
+                mask_input = F.interpolate(mask_input, (target_mask_h, target_mask_w), mode="bilinear", align_corners=False)
+
+        # 8) encode prompts (use prompt-space tensors)
         sparse_embeddings, dense_embeddings = self.predictor.model.sam_prompt_encoder(
-            points=(unnorm_coords, labels),
-            boxes=boxes if self.use_boxes else None,
-            masks=None,
+            points=(point_coords, point_labels),
+            boxes=boxes_input,
+            masks=mask_input,
         )
 
-        # 5) Gather per-instance image feats
-        image_embeds = image_embeds_B[inst_img_ix]                   # [N,C,H',W']
-        hr_feats = [lvl[inst_img_ix] for lvl in hr_feats_B]          # list of [N,C,H',W']
+        # 9) gather image feats per instance
+        image_embeds = image_embeds_B[inst_img_ix]
+        hr_feats = [lvl[inst_img_ix] for lvl in hr_feats_B]
 
-        # 6) Decode
+        # 10) decode
         low_res_masks, prd_scores, _, _ = self.predictor.model.sam_mask_decoder(
             image_embeddings=image_embeds,
             image_pe=self.predictor.model.sam_prompt_encoder.get_dense_pe(),
@@ -162,19 +273,17 @@ class SAM2FinetuneTrainer:
             high_res_features=hr_feats,
         )
 
-        # 7) Upscale + stack GT 
-        target_sizes = [self.predictor._orig_hw[int(b)] for b in inst_img_ix]  # list of (H, W), len = N
-        # postprocess per instance (supports single size); do it in a loop then stack
+        # 11) upsample to image res
+        target_sizes = [self.predictor._orig_hw[int(b)] for b in inst_img_ix]
         upsampled = []
-        for i in range(low_res_masks.shape[0]):           # N
+        for i in range(low_res_masks.shape[0]):
             H, W = target_sizes[i]
-            up_i = self.predictor._transforms.postprocess_masks(
-                low_res_masks[i:i+1], (H, W)
-            )  # [1,K,H,W]
+            up_i = self.predictor._transforms.postprocess_masks(low_res_masks[i:i+1], (H, W))
             upsampled.append(up_i)
+        prd_masks = torch.cat(upsampled, dim=0)
 
-        prd_masks = torch.cat(upsampled, dim=0)           # [N,K,H,W]
-        gt_masks  = torch.stack(gt_all, dim=0).float()    # [N,H,W]
+        # 12) stack GT
+        gt_masks = torch.stack(gt_all, dim=0).float()
 
         return prd_masks, prd_scores, gt_masks, inst_img_ix
 
@@ -283,8 +392,9 @@ class SAM2FinetuneTrainer:
         if best_metric == 'ABIoU':
             self.metric_keys = ['ABIoU']
         else:
-            self.metric_keys = ['prompt_miou', 'cal_mae', 'cal_brier', 'cal_ece', 'cal_tables', 
-                           'AR', 'R@10', 'R@50', 'R@100']
+            self.metric_keys = [
+                'prompt_miou', 'cal_mae', 'cal_brier', 'cal_ece',
+                'cal_tables', 'AR', 'R@10', 'R@50', 'R@100']
 
         # Cosine scheduler w/Warmup ----
         # warmup_epochs = max(int(0.01 * num_epochs), 1)

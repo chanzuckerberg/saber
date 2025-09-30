@@ -52,8 +52,6 @@ class MultiMaskIoULoss(nn.Module):
 
         # ---- Compute hard predictions and true IoU per proposal (no grad) ----------
         with torch.no_grad():
-            # probs_k   = prd_masks.sigmoid()                     # [N,K,H,W]
-            # pred_bin  = (probs_k > 0.0).to(gt_masks.dtype)      # [N,K,H,W]
             pred_bin  = (prd_masks > 0.0).to(gt_masks.dtype)      # [N,K,H,W]
             gt_k      = gt_masks[:, None].expand_as(pred_bin)   # [N,K,H,W]
             inter     = (pred_bin * gt_k).sum(dim=(2, 3))       # [N,K]
@@ -71,7 +69,8 @@ class MultiMaskIoULoss(nn.Module):
         ).view(N, K)                                            # [N,K]
 
         seg_loss_per_k = focal_per_k + dice_per_k               # [N,K]
-        best_idx = seg_loss_per_k.argmin(dim=1)                 # [N] choose lowest seg loss
+        # best_idx = seg_loss_per_k.argmin(dim=1)                 # [N] choose lowest seg loss
+        best_idx = true_iou_k.argmax(dim=1)                 # [N] choose highest IoU
 
         row = torch.arange(N, device=device)
         logits_star = prd_masks[row, best_idx]                  # [N,H,W]
