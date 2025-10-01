@@ -17,15 +17,17 @@ class SAM2FinetuneTrainer:
 
         # Two parameter groups for different LRs (optional)
         params = [
-            {"params": [p for p in self.predictor.model.sam_mask_decoder.parameters() if p.requires_grad],
-            "lr": 1e-4},
-            {"params": [p for p in self.predictor.model.sam_prompt_encoder.parameters() if p.requires_grad],
-            "lr": 5e-5},
+            # {"params": [p for p in self.predictor.model.image_encoder.parameters() 
+            #             if p.requires_grad], "lr": 6e-5},
+            {"params": [p for p in self.predictor.model.sam_mask_decoder.parameters() 
+                        if p.requires_grad], "lr": 1e-4}, # 1e-4
+            {"params": [p for p in self.predictor.model.sam_prompt_encoder.parameters() 
+                        if p.requires_grad], "lr": 5e-5}, # 5e-5
         ]
 
         # Initialize the optimizer and dataloaders
         self.num_gpus = torch.cuda.device_count() 
-        optimizer = torch.optim.AdamW(params, weight_decay=1e-5)
+        optimizer = torch.optim.AdamW(params, weight_decay=1e-3)
         if self.num_gpus > 1:
             self.fabric = fabric.Fabric(accelerator="cuda", strategy="ddp", devices=self.num_gpus)
             self.fabric.launch()
@@ -48,7 +50,7 @@ class SAM2FinetuneTrainer:
             self.train_loader, self.val_loader = train_loader, val_loader
 
         # Initialize the loss function
-        self.focal_alpha = 0.25
+        self.focal_alpha = 0.5
         self.focal_gamma = 2.0
         self.supervise_all_iou = True
         self.iou_use_l1_loss = True
@@ -60,7 +62,7 @@ class SAM2FinetuneTrainer:
             points_per_batch=128,
             pred_iou_thresh=0.7,
             stability_score_thresh=0.7,
-            stability_score_offset=0.0,
+            stability_score_offset=0.5,
             crop_n_layers=0,
             crop_n_points_downscale_factor=2,
             box_nms_thresh=0.6,
@@ -329,7 +331,7 @@ class SAM2FinetuneTrainer:
                     self.predictor,                 # predictor or predictor.model (your function supports either)
                     batch["images"],                # list[H×W×3] or list[H×W]
                     batch["masks"],                 # list[list[H×W]]
-                    top_k=20,
+                    top_k=25,
                     device=self.device,
                     autocast_ctx=self.autocast,
                     amg_kwargs=self.amg_kwargs,
@@ -385,7 +387,7 @@ class SAM2FinetuneTrainer:
 
         # Initialize the loss function
         self.loss_fn = MultiMaskIoULoss(
-            weight_dict={"loss_mask": 10.0, "loss_dice": 1.0, "loss_iou": 1.0},
+            weight_dict={"loss_mask": 20.0, "loss_dice": 1.0, "loss_iou": 1.0},
             focal_alpha=self.focal_alpha,
             focal_gamma=self.focal_gamma,
             supervise_all_iou=self.supervise_all_iou,

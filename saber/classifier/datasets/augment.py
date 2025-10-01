@@ -53,6 +53,7 @@ def get_finetune_transforms(target_size=(1024,1024)):
         RandomOrder([
             RandRotate90d(keys=["image", "mask"], prob=0.5, spatial_axes=[0, 1]),
             RandFlipd(keys=["image", "mask"], prob=0.5, spatial_axis=0),
+            RandFlipd(keys=["image", "mask"], prob=0.5, spatial_axis=1),
             RandScaleIntensityd(keys="image", prob=0.5, factors=(0.85, 1.15)),
             RandShiftIntensityd(keys="image", prob=0.5, offsets=(-0.15, 0.15)),
             RandAdjustContrastd(keys="image", prob=0.5, gamma=(0.85, 1.15)),
