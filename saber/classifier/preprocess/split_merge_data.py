@@ -1,8 +1,36 @@
 from sklearn.model_selection import train_test_split
 from typing import List, Tuple, Dict, Optional
+from zarr.convenience import copy as zarr_copy
 from pathlib import Path
 import click, zarr, os
 import numpy as np
+
+def copy_like(src_arr, dst_group, path: str):
+    # Ensure parent groups for nested paths like "labels/0"
+    parent = dst_group
+    parts = path.split('/')
+    for p in parts[:-1]:
+        parent = parent.require_group(p)
+
+    leaf = parts[-1]
+    # Create (or reuse) the dst array with identical metadata
+    dst_arr = parent.require_dataset(
+        leaf,
+        shape=src_arr.shape,
+        dtype=src_arr.dtype,
+        chunks=src_arr.chunks,
+        compressor=src_arr.compressor,
+        filters=src_arr.filters,
+        order=src_arr.order,
+        fill_value=src_arr.fill_value,
+        # Optional (if your sources use it):
+        **({"dimension_separator": getattr(src_arr, "dimension_separator", None)}
+           if hasattr(src_arr, "dimension_separator") else {})
+    )
+    dst_arr[:] = src_arr[:]  # fast data copy
+    # Preserve array attrs
+    if src_arr.attrs:
+        dst_arr.attrs.update(src_arr.attrs)
 
 def split(
     input: str,
@@ -57,19 +85,25 @@ def split(
     items = ['0', 'labels/0', 'labels/rejected']
     print('Copying data to train zarr file...')
     for key in train_keys:
-        train_zarr.create_group(key)  # Explicitly create the group first
-        copy_attributes(zfile[key], train_zarr[key])
+        dst_grp = train_zarr.require_group(key)
+        copy_attributes(zfile[key], dst_grp)
         for item in items:
-            train_zarr[key][item] = zfile[key][item][:]  # [:] ensures a full copy
-        copy_attributes(zfile[key]['labels'], train_zarr[key]['labels'])
+            try:
+                copy_like(zfile[key][item], dst_grp, item)
+                copy_attributes(zfile[key][item], dst_grp[item])
+            except Exception as e:
+                pass
     
     print('Copying data to validation zarr file...')
     for key in val_keys:
-        val_zarr.create_group(key)  # Explicitly create the group first
-        copy_attributes(zfile[key], val_zarr[key])
+        dst_grp = val_zarr.require_group(key)
+        copy_attributes(zfile[key], dst_grp)
         for item in items:
-            val_zarr[key][item] = zfile[key][item][:]  # [:] ensures a full copy
-        copy_attributes(zfile[key]['labels'], val_zarr[key]['labels'])
+            try:
+                copy_like(zfile[key][item], dst_grp, item)
+                copy_attributes(zfile[key][item], dst_grp[item])
+            except Exception as e:
+                pass
     
     # Print summary
     print(f"\nSplit Summary:")
@@ -124,18 +158,16 @@ def merge(inputs: List[str], output: str):
             write_key = session_label + '_' + key
             
             # Create the group and copy its attributes
-            new_group = mergedZarr.create_group(write_key)  # Explicitly create the group first
-            copy_attributes(zfile[key], new_group)  
+            dst_grp = mergedZarr.require_group(write_key)
+            copy_attributes(zfile[key], dst_grp)
 
             # Copy the data arrays
             for item in items:
                 try:
-                    # [:] ensures a full copy
-                    mergedZarr[write_key][item] = zfile[key][item][:] 
+                    copy_like(zfile[key][item], dst_grp, item)
+                    copy_attributes(zfile[key][item], dst_grp[item])
                 except Exception as e:
                     pass
-            # Copy attributes for labels subgroup
-            copy_attributes(zfile[key]['labels'], new_group['labels'])
 
         # Copy all attributes from the last input zarr file
         for attr_name, attr_value in zfile.attrs.items():
@@ -194,8 +226,5 @@ def copy_attributes(source, destination):
     """
     if hasattr(source, 'attrs') and source.attrs:
         destination.attrs.update(source.attrs)
-
-if __name__ == '__main__':
-    cli()
     
 
