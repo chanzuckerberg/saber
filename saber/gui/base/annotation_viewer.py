@@ -1,9 +1,9 @@
 from saber.gui.base.segmentation_picker import SegmentationViewer
-from typing import Dict, List, Optional
 from pyqtgraph.Qt import QtCore
 import pyqtgraph as pg
 import numpy as np
 import cv2
+from typing import Dict, List, Optional
 
 
 class AnnotationSegmentationViewer(SegmentationViewer):
@@ -87,14 +87,14 @@ class AnnotationSegmentationViewer(SegmentationViewer):
     def initialize_overlays(self):
         """Create overlays and boundaries for all masks."""
         for i, mask in enumerate(self.masks):
-            # Create mask overlays
-            left_item = pg.ImageItem(self.create_overlay_rgba(mask, i))
+            # Create EMPTY ImageItems - we'll set images lazily
+            left_item = pg.ImageItem()
             left_item.setOpacity(0.4)
             left_item.setZValue(i + 1)
             self.left_view.addItem(left_item)
             self.left_mask_items.append(left_item)
 
-            right_item = pg.ImageItem(self.create_overlay_rgba(mask, i))
+            right_item = pg.ImageItem()
             right_item.setOpacity(0.4)
             right_item.setZValue(i + 1)
             right_item.setVisible(False)
@@ -102,27 +102,47 @@ class AnnotationSegmentationViewer(SegmentationViewer):
             self.right_mask_items.append(right_item)
             
             # Create boundary items
-            boundary_pts = self._get_boundary_opencv_fast(mask)
-            
-            # Left boundary (initially hidden)
             left_boundary = pg.PlotDataItem(pen=pg.mkPen(color='w', width=2, style=QtCore.Qt.SolidLine))
             left_boundary.setZValue(1000 + i)
             left_boundary.setVisible(False)
             self.left_view.addItem(left_boundary)
             self.left_boundary_items.append(left_boundary)
             
-            # Right boundary (initially hidden)
             right_boundary = pg.PlotDataItem(pen=pg.mkPen(color='w', width=2, style=QtCore.Qt.SolidLine))
             right_boundary.setZValue(1000 + i)
             right_boundary.setVisible(False)
             self.right_view.addItem(right_boundary)
             self.right_boundary_items.append(right_boundary)
-            
-            # Set boundary data if available
-            if boundary_pts is not None and len(boundary_pts) > 0:
-                boundary_pts = np.vstack([boundary_pts, boundary_pts[0:1]])
-                left_boundary.setData(boundary_pts[:, 1], boundary_pts[:, 0])
-                right_boundary.setData(boundary_pts[:, 1], boundary_pts[:, 0])
+        
+        # Now render only the VISIBLE masks in left panel
+        self._render_visible_masks()
+
+    def _render_visible_masks(self):
+        """Render RGBA overlays only for currently visible masks."""
+        if not hasattr(self, '_rgba_cache'):
+            self._rgba_cache = {}
+        
+        # Render left panel masks (initially all visible)
+        for i in range(len(self.masks)):
+            if self.left_mask_items[i].isVisible() and i not in self._rgba_cache:
+                rgba = self.create_overlay_rgba(self.masks[i], i)
+                self._rgba_cache[i] = rgba
+                self.left_mask_items[i].setImage(rgba)
+            elif self.left_mask_items[i].isVisible() and i in self._rgba_cache:
+                self.left_mask_items[i].setImage(self._rgba_cache[i])
+
+    def _ensure_mask_rendered(self, mask_idx, class_name=None):
+        """Ensure a specific mask has its RGBA overlay created."""
+        if not hasattr(self, '_rgba_cache'):
+            self._rgba_cache = {}
+        
+        cache_key = (mask_idx, class_name) if class_name else mask_idx
+        
+        if cache_key not in self._rgba_cache:
+            rgba = self.create_overlay_rgba(self.masks[mask_idx], mask_idx, class_name=class_name)
+            self._rgba_cache[cache_key] = rgba
+        
+        return self._rgba_cache[cache_key]
     
     def load_existing_annotations(self):
         """Load and display any existing annotations for the current run"""
@@ -135,7 +155,7 @@ class AnnotationSegmentationViewer(SegmentationViewer):
             
             # Restore annotations - now using mask values
             for mask_value_str, class_name in run_annotations.items():
-                mask_value = float(mask_value_str)  # Convert back from string
+                mask_value = float(mask_value_str)
                 
                 if class_name in self.class_dict and mask_value in self.value_to_index:
                     mask_idx = self.value_to_index[mask_value]
@@ -147,13 +167,27 @@ class AnnotationSegmentationViewer(SegmentationViewer):
                     self.left_mask_items[mask_idx].setVisible(False)
                     self.right_mask_items[mask_idx].setVisible(True)
                     
-                    # Update color
-                    updated_overlay = self.create_overlay_rgba(self.masks[mask_idx], class_name=class_name)
+                    # Update color - render on demand
+                    updated_overlay = self._ensure_mask_rendered(mask_idx, class_name=class_name)
                     self.right_mask_items[mask_idx].setImage(updated_overlay)
     
+    def _compute_boundary_if_needed(self, mask_idx):
+        """Compute boundary for a mask if not already done"""
+        if not hasattr(self, '_boundary_cache'):
+            self._boundary_cache = {}
+        
+        if mask_idx not in self._boundary_cache:
+            boundary_pts = self._get_boundary_opencv_fast(self.masks[mask_idx])
+            if boundary_pts is not None and len(boundary_pts) > 0:
+                boundary_pts = np.vstack([boundary_pts, boundary_pts[0:1]])
+                self._boundary_cache[mask_idx] = boundary_pts
+            else:
+                self._boundary_cache[mask_idx] = None
+        
+        return self._boundary_cache[mask_idx]
+
     def highlight_mask(self, mask_value):
         """Highlight a specific mask with boundary on the appropriate panel"""
-        # Clear any existing highlight
         self.clear_highlight()
         
         if mask_value not in self.value_to_index:
@@ -162,11 +196,16 @@ class AnnotationSegmentationViewer(SegmentationViewer):
         mask_idx = self.value_to_index[mask_value]
         self.highlighted_mask_value = mask_value
         
-        # Determine which panel to show the boundary on
-        if mask_idx < len(self.right_mask_items) and self.right_mask_items[mask_idx].isVisible():
-            self.right_boundary_items[mask_idx].setVisible(True)
-        elif mask_idx < len(self.left_mask_items) and self.left_mask_items[mask_idx].isVisible():
-            self.left_boundary_items[mask_idx].setVisible(True)
+        # Compute boundary only when highlighting
+        boundary_pts = self._compute_boundary_if_needed(mask_idx)
+        if boundary_pts is not None:
+            # Determine which panel to show the boundary on
+            if mask_idx < len(self.right_mask_items) and self.right_mask_items[mask_idx].isVisible():
+                self.right_boundary_items[mask_idx].setData(boundary_pts[:, 1], boundary_pts[:, 0])
+                self.right_boundary_items[mask_idx].setVisible(True)
+            elif mask_idx < len(self.left_mask_items) and self.left_mask_items[mask_idx].isVisible():
+                self.left_boundary_items[mask_idx].setData(boundary_pts[:, 1], boundary_pts[:, 0])
+                self.left_boundary_items[mask_idx].setVisible(True)
     
     def clear_highlight(self):
         """Clear all boundary highlights"""
@@ -224,8 +263,8 @@ class AnnotationSegmentationViewer(SegmentationViewer):
                 # Add mask VALUE (not index) to class dict
                 self.class_dict[self.selected_class]['masks'].append(mask_value)
                 
-                # Update color with class color
-                updated_overlay = self.create_overlay_rgba(self.masks[i_hit], class_name=self.selected_class)
+                # Update color with class color - render on demand
+                updated_overlay = self._ensure_mask_rendered(i_hit, class_name=self.selected_class)
                 self.right_mask_items[i_hit].setImage(updated_overlay)
                 
                 # Update annotations dictionary with mask VALUE
@@ -331,10 +370,11 @@ class AnnotationSegmentationViewer(SegmentationViewer):
         # Determine mask values for the new data
         if len(masks.shape) == 2:
             self.mask_values = np.unique(masks[masks > 0])
-            self.extracted_masks = []
-            for val in self.mask_values:
-                self.extracted_masks.append((masks == val).astype(np.float32))
-            self.masks = self.extracted_masks
+            # Pre-allocate array for all masks at once
+            self.extracted_masks = np.zeros((len(self.mask_values), *masks.shape), dtype=np.float32)
+            for idx, val in enumerate(self.mask_values):
+                self.extracted_masks[idx] = (masks == val)
+            self.masks = list(self.extracted_masks)  # Convert to list for indexing
         elif len(masks.shape) == 3:
             self.mask_values = []
             for i, mask in enumerate(self.masks):
@@ -371,6 +411,12 @@ class AnnotationSegmentationViewer(SegmentationViewer):
         self.left_boundary_items.clear()
         self.right_boundary_items.clear()
         
+        # Clear caches for new data
+        if hasattr(self, '_boundary_cache'):
+            self._boundary_cache.clear()
+        if hasattr(self, '_rgba_cache'):
+            self._rgba_cache.clear()            
+
         # Reinitialize overlays
         self.initialize_overlays()
         
