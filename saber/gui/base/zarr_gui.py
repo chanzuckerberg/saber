@@ -366,7 +366,7 @@ class MainWindow(QMainWindow):
 
         return base_image, masks
 
-    def _apply_rotations(self, image, mask):
+    def _apply_rotations(self, image, masks):
         if image.ndim == 2:
             # 2D grayscale
             image = np.rot90(image, k=-1)
@@ -390,7 +390,7 @@ class MainWindow(QMainWindow):
             else:
                 masks = np.rot90(masks, k=-1, axes=(-2, -1))
 
-        return image, mask
+        return image, masks
 
     # -------- UI events --------
 
