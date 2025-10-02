@@ -110,14 +110,13 @@ def segment_micrograph_core(
 
     # Produce Initialial Segmentations with SAM2
     segmenter.segment( image, display_image=False, use_sliding_window=use_sliding_window )
-    (image0, masks_list) = (segmenter.image0, segmenter.masks)
 
     # Convert any numpy array/scalar to Python scalar
     if isinstance(pixel_size, np.ndarray):
         pixel_size = pixel_size.item()    
 
     # Convert Masks to Numpy Array
-    masks = mask_filters.masks_to_array(masks_list)
+    masks = mask_filters.masks_to_array(segmenter.masks)
 
     # For now let's assume the pixel size is in nanometers
     if pixel_size is not None:
@@ -125,9 +124,13 @@ def segment_micrograph_core(
     else: 
         pixel_size = 1
 
+    # For now lets assume its always grayscale images
+    if image.ndim == 2:
+        out_image = segmenter.image[:,:,0]
+
     # Write Run to Zarr
     input = os.path.splitext(os.path.basename(input))[0]
     zwriter.write(
-        run_name=input, image=image0, 
+        run_name=input, image=out_image, 
         masks=masks.astype(np.uint8), pixel_size=pixel_size
     )

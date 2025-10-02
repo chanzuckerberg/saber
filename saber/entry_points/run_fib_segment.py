@@ -1,3 +1,4 @@
+from saber.visualization.results import export_movie
 from saber.segmenters.fib import fibSegmenter
 from saber.classifier.models import common
 from saber.utils import slurm_submit
@@ -18,7 +19,9 @@ def fib_options(func):
         click.option("--output", type=str, required=False, default='masks.npy',
                       help="Path to Output Segmentation Masks"),
         click.option("--ini_depth", type=int, required=False, default=10,
-                      help="Initial Depth to Segment"),
+                      help="Spacing between slices to Segment"),
+        click.option("--nframes", type=int, required=False, default=None,
+                      help="Number of frames to propagate in video segmentation"),
     ]
     for option in reversed(options):  # Add options in reverse order to preserve order in CLI
         func = option(func)
@@ -33,6 +36,7 @@ def fib(
     input: str,
     output: str,
     ini_depth: int,
+    nframes: int,
     sam2_cfg: str,
     model_weights: str,
     model_config: str,
@@ -56,7 +60,10 @@ def fib(
     )
 
     # Segment the Volume
-    masks = segmenter.segment(volume, ini_depth)
+    masks = segmenter.segment(volume, ini_depth, nframes)
+
+    # Export the Masks as a Movie
+    export_movie(volume, masks,'segmentation.gif')
 
     # (TODO): Save the Masks
     np.save(output, masks)
@@ -68,6 +75,9 @@ def read_fib_volume(input: str):
 
     if '*' in input:
         files = glob.glob(input)
+        if len(files) == 0:
+            raise ValueError(f"No files found for pattern: {input}")
+        files.sort()  # Ensure files are in order
         for ii in range(len(files)):
             im = sio.imread(files[ii])
             if ii == 0:
