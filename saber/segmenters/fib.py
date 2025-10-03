@@ -120,23 +120,23 @@ class fibSegmenter(generalSegmenter):
             
             # 3D propagation: Call the parent's segment through the wrapper
             masks3d = self.segment_3d(volume, mask_list, ann_frame_idx=ii)
-            
+
+            # Calculate frame range
+            if self.nframes is None:
+                start_frame = 0
+                end_frame = volume.shape[0]
+            else:
+                start_frame = max(0, ii - self.nframes)
+                end_frame = min(volume.shape[0], ii + self.nframes + 1)
+
             # Update with maximum confidence approach
             for idx, (probs, class_id) in enumerate(zip(valid_predictions, valid_classes)):
                 mask_region = (masks3d == (idx + 1))
+
                 if np.any(mask_region):
                     confidence = probs[class_id]
-                    
-                    # Update where this prediction is more confident
-                    if self.nframes is None: # Handle full volume 
-                        update_mask = mask_region & (confidence > max_confidence)
-                        final_masks[update_mask] = class_id
-                        max_confidence[update_mask] = confidence
-                    else: # Handle sub volume
-                        start_frame = np.max([0, ii - self.nframes])
-                        end_frame = np.min([volume.shape[0], ii + self.nframes + 1])
-                        update_mask = mask_region & (confidence > max_confidence[start_frame:end_frame])
-                        final_masks[start_frame:end_frame][update_mask] = class_id
-                        max_confidence[start_frame:end_frame][update_mask] = confidence
+                    update_mask = mask_region & (confidence > max_confidence)
+                    final_masks[update_mask] = class_id
+                    max_confidence[update_mask] = confidence
         
         return final_masks

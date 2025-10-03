@@ -425,8 +425,7 @@ class saber3Dsegmenter(saber2Dsegmenter):
                     filtered_video_segments[frame_idx][mask_idx+1] = np.full(seg_dict[1].shape, False, dtype=bool)
 
         # Convert Video Segments into Mask
-        nFrames = len(video_segments)
-        masks = np.zeros([nFrames, mask_shape[1], mask_shape[2]], dtype=np.uint8)
+        masks = np.zeros([mask_shape[0], mask_shape[1], mask_shape[2]], dtype=np.uint8)
         masks = filters.segments_to_mask(filtered_video_segments, masks, mask_shape, nMasks)
 
         return masks, filtered_video_segments
