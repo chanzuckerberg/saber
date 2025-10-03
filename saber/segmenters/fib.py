@@ -56,6 +56,7 @@ class fibSegmenter(generalSegmenter):
 
             # Set image and segment
             im = volume[ii]
+            im = self._preprocess(im)            
             masks = self.segment_image(im, display_image=False)
             
             if len(masks) == 0:
