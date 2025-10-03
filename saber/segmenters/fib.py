@@ -122,12 +122,6 @@ class fibSegmenter(generalSegmenter):
             masks3d = self.segment_3d(volume, mask_list, ann_frame_idx=ii)
 
             # Calculate frame range
-            if self.nframes is None:
-                start_frame = 0
-                end_frame = volume.shape[0]
-            else:
-                start_frame = max(0, ii - self.nframes)
-                end_frame = min(volume.shape[0], ii + self.nframes + 1)
 
             # Update with maximum confidence approach
             for idx, (probs, class_id) in enumerate(zip(valid_predictions, valid_classes)):
