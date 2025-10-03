@@ -1,4 +1,5 @@
 from saber.segmenters.general import generalSegmenter
+from saber.utils import preprocessing
 from tqdm import tqdm
 import numpy as np
 import torch
@@ -18,24 +19,27 @@ class fibSegmenter(generalSegmenter):
         Initialize the fibSegmenter
         """
         super().__init__(sam2_cfg, deviceID, classifier, target_class, min_mask_area, min_rel_box_size)
+        self.ini_depth = 10 # Default spacing between slices to segment
 
-    def segment(self, volume: np.ndarray, ini_depth: int):
+    def segment(self, volume: np.ndarray, ini_depth: int, nframes: int = None):
         """
         Segment the volume
 
         Args:
             volume: The volume to segment
-            ini_depth: The spacing between slices to segment
         """
+        # Update ini_depth and nframes attributes
+        self.ini_depth = ini_depth
+        self.nframes = nframes
 
         # Segment the Volume
         if self.target_class > 0 or self.classifier is None:
-            return self.single_segment(volume, ini_depth)
+            return self.single_segment(volume)
         else:
-            return self.multiclass_segment(volume, ini_depth)
+            return self.multiclass_segment(volume)
 
     @torch.inference_mode()
-    def single_segment(self, volume: np.ndarray, ini_depth: int):
+    def single_segment(self, volume: np.ndarray):
         """
         Segment the volume with a single class or without the classifier
 
@@ -48,10 +52,11 @@ class fibSegmenter(generalSegmenter):
         final_masks = np.zeros(volume.shape, dtype=np.uint16)
 
         # Main Loop
-        for ii in tqdm(range(ini_depth, volume.shape[0], ini_depth)):
-            
+        for ii in tqdm(range(self.ini_depth, volume.shape[0], self.ini_depth)):
+
             # Set image and segment
             im = volume[ii]
+            im = self._preprocess(im)            
             masks = self.segment_image(im, display_image=False)
             
             if len(masks) == 0:
@@ -73,23 +78,23 @@ class fibSegmenter(generalSegmenter):
         return final_masks
 
     @torch.inference_mode()
-    def multiclass_segment(self, volume: np.ndarray, ini_depth: int):
+    def multiclass_segment(self, volume: np.ndarray):
         """
         Segment the volume with multiple classes using the classifier
 
         Args:
             volume: The volume to segment
-            ini_depth: The spacing between slices to segment
         """
         # Instead of 4D array, use 3D for current best class and confidence
         final_masks = np.zeros(volume.shape, dtype=np.uint16)
         max_confidence = np.zeros(volume.shape, dtype=np.float32)
 
         # Main Loop
-        for ii in tqdm(range(ini_depth, volume.shape[0], ini_depth)):
+        for ii in tqdm(range(self.ini_depth, volume.shape[0], self.ini_depth)):
 
             # Call mask generator directly
             im = volume[ii]
+            im = self._preprocess(im)
             raw_masks = self.mask_generator.generate(im)
             
             # Filter small masks
@@ -116,14 +121,15 @@ class fibSegmenter(generalSegmenter):
             
             # 3D propagation: Call the parent's segment through the wrapper
             masks3d = self.segment_3d(volume, mask_list, ann_frame_idx=ii)
-            
+
+            # Calculate frame range
+
             # Update with maximum confidence approach
             for idx, (probs, class_id) in enumerate(zip(valid_predictions, valid_classes)):
                 mask_region = (masks3d == (idx + 1))
+
                 if np.any(mask_region):
                     confidence = probs[class_id]
-                    
-                    # Update where this prediction is more confident
                     update_mask = mask_region & (confidence > max_confidence)
                     final_masks[update_mask] = class_id
                     max_confidence[update_mask] = confidence

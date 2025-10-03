@@ -239,11 +239,14 @@ class saber3Dsegmenter(saber2Dsegmenter):
 
         # Flag to Plot the Z-Slice Confidence Estimations
         self.confidence_debug = False
+
+        # Default to full volume propagation
+        self.nframes = None 
         
     @torch.inference_mode()
     def propagate_segementation(
         self,
-        mask_shape: Tuple[int, int, int]
+        mask_shape: Tuple[int, int, int],
     ):
         """
         Propagate Segmentation in 3D with Video Predictor
@@ -258,7 +261,8 @@ class saber3Dsegmenter(saber2Dsegmenter):
 
         # run propagation throughout the video and collect the results in a dict
         video_segments1 = {}  # video_segments contains the per-frame segmentation results
-        for out_frame_idx, out_obj_ids, out_mask_logits in self.video_predictor.propagate_in_video(self.inference_state, start_frame_idx= start_frame, reverse=False):
+        for out_frame_idx, out_obj_ids, out_mask_logits in self.video_predictor.propagate_in_video(
+            self.inference_state, start_frame_idx= start_frame, max_frame_num_to_track = self.nframes, reverse=False ):
 
             # Update current frame
             self.current_frame = out_frame_idx
@@ -268,7 +272,8 @@ class saber3Dsegmenter(saber2Dsegmenter):
 
         # run propagation throughout the video and collect the results in a dict
         video_segments2 = {}  # video_segments contains the per-frame segmentation results
-        for out_frame_idx, out_obj_ids, out_mask_logits in self.video_predictor.propagate_in_video(self.inference_state, start_frame_idx= start_frame-1, reverse=True):
+        for out_frame_idx, out_obj_ids, out_mask_logits in self.video_predictor.propagate_in_video(
+            self.inference_state, start_frame_idx= start_frame-1, max_frame_num_to_track = self.nframes, reverse=True ):
 
             # Update current frame
             self.current_frame = out_frame_idx
@@ -420,8 +425,7 @@ class saber3Dsegmenter(saber2Dsegmenter):
                     filtered_video_segments[frame_idx][mask_idx+1] = np.full(seg_dict[1].shape, False, dtype=bool)
 
         # Convert Video Segments into Mask
-        nFrames = len(video_segments)
-        masks = np.zeros([nFrames, mask_shape[1], mask_shape[2]], dtype=np.uint8)
+        masks = np.zeros([mask_shape[0], mask_shape[1], mask_shape[2]], dtype=np.uint8)
         masks = filters.segments_to_mask(filtered_video_segments, masks, mask_shape, nMasks)
 
         return masks, filtered_video_segments

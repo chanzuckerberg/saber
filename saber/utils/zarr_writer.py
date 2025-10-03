@@ -75,9 +75,6 @@ class ParallelZarrWriter:
             # Create group for this run - zarr handles concurrent group creation
             run_group = self.zroot.create_group(run_name)   
             
-            # Add VCP attributes to the run group
-            add_attributes(run_group, pixel_size)
-            
             # Store run metadata
             if metadata:
                 for key, value in metadata.items():
@@ -90,6 +87,8 @@ class ParallelZarrWriter:
                 dtype=image.dtype,
                 compressor=zarr.Blosc(cname='zstd', clevel=2, shuffle=2),
             )
+            # Add VCP attributes to the run group
+            add_attributes(run_group, pixel_size)            
             
             # Write masks dataset
             labels_group = run_group.create_group("labels")
