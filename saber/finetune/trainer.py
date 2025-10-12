@@ -9,6 +9,10 @@ import torch.nn.functional as F
 from lightning import fabric
 from tqdm import tqdm
 
+# Tests: 
+# Weights  - 
+# Soften Mask Prompts Logits - ±3
+
 class SAM2FinetuneTrainer:
     def __init__(self, predictor, train_loader, val_loader, seed=42):
 
@@ -66,7 +70,7 @@ class SAM2FinetuneTrainer:
             crop_n_layers=0,
             crop_n_points_downscale_factor=2,
             box_nms_thresh=0.6,
-            use_m2m=True,
+            use_m2m=False,
             multimask_output=False,
         )
         self.nAMGtrials = 10
@@ -102,7 +106,8 @@ class SAM2FinetuneTrainer:
         hr_feats = [torch.stack([lvl[b] for b in range(B)], dim=0).to(self.device) for lvl in hr]
         return image_embeds, hr_feats
 
-    def _determine_sampling(self, N, p_points=0.5, p_box=0.15, p_mask=0.2, p_mask_box=0.15):
+    # p_points=0.5, p_box=0.15, p_mask=0.2, p_mask_box=0.15
+    def _determine_sampling(self, N, p_points=0.4, p_box=0.15, p_mask=0.25, p_mask_box=0.25):
         """
         Decide which prompt combo each instance uses.
         Returns a list[int] of length N with codes:
@@ -222,7 +227,7 @@ class SAM2FinetuneTrainer:
 
         # 5) mask logits (+/-6)
         gt_masks_bin = torch.stack([m.to(torch.float32) for m in gt_all], dim=0).to(self.device)
-        mask_logits_full = (gt_masks_bin * 2.0 - 1.0) * 6.0
+        mask_logits_full = (gt_masks_bin * 2.0 - 1.0) * 3.0 # Before it was ±6
 
         # 6) build per-instance prompts
         pts_pad, lbl_pad, boxes, mask_logits = self._process_inputs(
@@ -331,7 +336,7 @@ class SAM2FinetuneTrainer:
                     self.predictor,                 # predictor or predictor.model (your function supports either)
                     batch["images"],                # list[H×W×3] or list[H×W]
                     batch["masks"],                 # list[list[H×W]]
-                    top_k=25,
+                    top_k=150,
                     device=self.device,
                     autocast_ctx=self.autocast,
                     amg_kwargs=self.amg_kwargs,

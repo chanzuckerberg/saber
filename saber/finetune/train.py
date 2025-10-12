@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 from sam2.build_sam import build_sam2
 from saber import pretrained_weights
 from saber.utils import io
-import click
+import click, os
 
 def finetune_sam2(
     tomo_train: str = None, 
@@ -33,14 +33,14 @@ def finetune_sam2(
 
     # Load data loaders
     train_loader = DataLoader( AutoMaskDataset(
-                               tomo_train, fib_train, transform=get_finetune_transforms(), 
-                               slabs_per_volume_per_epoch=20 ),
+                               tomo_train, fib_train, 
+                               transform=get_finetune_transforms()),
                                batch_size=batch_size, shuffle=True, 
                                num_workers=4, pin_memory=True, collate_fn=collate_autoseg 
                             )
 
     val_loader = DataLoader( AutoMaskDataset(
-                             tomo_val, fib_val, slabs_per_volume_per_epoch=15 ),
+                             tomo_val, fib_val, shuffle=False ),
                              num_workers=4, pin_memory=True, collate_fn=collate_autoseg,
                              batch_size=batch_size, shuffle=False ) if (tomo_val or fib_val) else train_loader
 
@@ -49,7 +49,7 @@ def finetune_sam2(
     # trainer.train( num_epochs, best_metric='AR' )
     trainer.train( num_epochs )
 
-@click.command()
+@click.command(context_settings={"show_default": True}, name='run')
 @sam2_inputs
 @click.option("--fib-train", type=str, help="Path to train Zarr")
 @click.option("--fib-val", type=str, help="Path to val Zarr")

@@ -19,7 +19,8 @@ def process_run_3d_simple(
     tomo_alg: str,
     organelle_names: List[str],
     min_component_volume: int = 100,
-    user_id: Optional[str] = None
+    user_id: Optional[str] = None,
+    values: Dict[str, int] = {},
 ) -> Tuple[np.ndarray, np.ndarray, Dict[str, str]]:
     """
     Process a single run in full 3D with simple volume-based sorting.
@@ -51,10 +52,17 @@ def process_run_3d_simple(
             click.echo(f"    Processing {organelle_name}...")
             seg = readers.segmentation(run, voxel_spacing, organelle_name, user_id=user_id)
 
-            if seg.shape != volume_3d.shape:
-                temp_seg_3d = np.zeros_like(seg, dtype=np.uint32)
-
-            if seg is not None:
+            if seg is None: 
+                click.echo("      No segmentation found")
+                continue
+            elif seg.shape != volume_3d.shape:
+                print(f"[Warning, {run.name}] Segmentation shape {seg.shape} does not match tomogram shape {volume_3d.shape}")
+                continue
+            elif values:
+                offset = values[organelle_name]
+                temp_seg_3d[seg > 0.5] = offset
+                components.append((organelle_name, offset, np.sum(seg > 0.5)))
+            else:
                 # Convert to binary and separate connected components
                 binary_mask = (seg > 0.5).astype(np.uint8)
                 labeled_mask = label(binary_mask, connectivity=3)
@@ -67,8 +75,6 @@ def process_run_3d_simple(
                         temp_seg_3d[labeled_mask == label_val] = offset
                         components.append((organelle_name, offset, vol))
                         offset += 1
-            else:
-                click.echo("      No segmentation found")
         except Exception as e:
             click.echo(f"      Error processing {organelle_name}: {e}")
 
@@ -78,8 +84,9 @@ def process_run_3d_simple(
     # Create final segmentation with remapped labels and the mapping dictionary
     seg_3d = np.zeros_like(temp_seg_3d, dtype=np.uint16)
     id_to_organelle: Dict[str, str] = {}
-
     for new_label, (organelle_name, old_label, _volume) in enumerate(components, start=1):
+        # Only remap if we have predefined values, else keep sequential values
+        if values: new_label = old_label
         seg_3d[temp_seg_3d == old_label] = new_label
         id_to_organelle[str(new_label)] = organelle_name
 
@@ -92,10 +99,10 @@ def convert_copick_to_3d_zarr(
     output_json_path: Optional[str],
     voxel_spacing: float,
     tomo_alg: str,
-    specific_runs: Optional[List[str]],
+    specific_runs: str,
     min_component_volume: int,
-    compress: bool,
     user_id: Optional[str],
+    keep_labels: bool
 ):
     """
     Convert copick data to 3D zarr format with JSON segmentation mapping.
@@ -111,12 +118,18 @@ def convert_copick_to_3d_zarr(
     organelle_names = [x for x in organelle_names if "membrane" not in x]
     click.echo(f"Found organelles: {organelle_names}")
 
+    # Prepare organelle values if keeping labels
+    if keep_labels:
+        organelle_values = {obj.name: obj.label for obj in root.pickable_objects if not obj.is_particle}
+    else:
+        organelle_values = {}
+
     # Set default JSON output path
     if output_json_path is None:
         output_json_path = output_zarr_path.replace(".zarr", "_mapping.json")
 
     # Initialize zarr store
-    compressor = zarr.Blosc(cname="zstd", clevel=2) if compress else None
+    compressor = zarr.Blosc(cname="zstd", clevel=2)
     store = zarr.DirectoryStore(output_zarr_path)
     zroot = zarr.group(store=store, overwrite=True)
 
@@ -124,7 +137,7 @@ def convert_copick_to_3d_zarr(
     master_mapping: Dict[str, Dict[str, str]] = {}
 
     # Determine which runs to process
-    runs_to_process = specific_runs if specific_runs else [run.name for run in root.runs]
+    runs_to_process = specific_runs.split(",") if specific_runs else [run.name for run in root.runs]
 
     for run_name in tqdm(runs_to_process, desc="Processing runs"):
         click.echo(f"\nProcessing run: {run_name}")
@@ -139,6 +152,7 @@ def convert_copick_to_3d_zarr(
                 organelle_names=organelle_names,
                 min_component_volume=min_component_volume,
                 user_id=user_id,
+                values = organelle_values
             )
 
             # Create zarr group for this run
@@ -176,8 +190,11 @@ def convert_copick_to_3d_zarr(
             continue
 
     # Save master JSON mapping
-    with open(output_json_path, "w") as f:
-        json.dump(master_mapping, f, indent=2)
+    if keep_labels: 
+        zroot.attrs['label_values'] = organelle_values
+    else:
+        with open(output_json_path, "w") as f:
+            json.dump(master_mapping, f, indent=2)
 
     click.echo("\n🎉 Conversion complete!")
     click.echo(f"📁 Zarr output: {output_zarr_path}")
@@ -212,7 +229,7 @@ def load_3d_zarr_data(zarr_path: str, run_name: str) -> Tuple[np.ndarray, np.nda
     return volume, labels, id_to_organelle
 
 
-@click.command(context_settings={"show_default": True})
+@click.command(context_settings={"show_default": True}, name='prep')
 @click.option(
     "--config",
     "config_path",
@@ -248,15 +265,16 @@ def load_3d_zarr_data(zarr_path: str, run_name: str) -> Tuple[np.ndarray, np.nda
     help="Tomogram algorithm to use for processing.",
 )
 @click.option(
-    "--specific-run",
+    "--runIDs",
     "specific_runs",
-    multiple=True,
-    help="Process only specific runs. Repeat this option for multiple runs.",
+    type=str,
+    default=None,
+    help="Process only specific runs. Provide a comma-separated list of runIDs.",
 )
 @click.option(
     "--min-component-volume",
     type=int,
-    default=10000,
+    default=1e3,
     help="Minimum connected-component volume (in voxels).",
 )
 @click.option(
@@ -266,10 +284,10 @@ def load_3d_zarr_data(zarr_path: str, run_name: str) -> Tuple[np.ndarray, np.nda
     help="UserID for accessing segmentation.",
 )
 @click.option(
-    "--no-compress",
-    is_flag=True,
+    "--keep-labels",
+    type=bool,
     default=False,
-    help="Disable compression for zarr storage.",
+    help="Save Segmentations with Values Defined from the Copick Configuration File",
 )
 def main(
     config_path: str,
@@ -277,11 +295,12 @@ def main(
     output_json_path: Optional[str],
     voxel_spacing: float,
     tomo_alg: str,
-    specific_runs: Optional[List[str]],
+    specific_runs: str,
     min_component_volume: int,
     user_id: Optional[str],
-    no_compress: bool,
-):
+    keep_labels: bool,
+    ):
+
     """Convert copick data to 3D zarr format with JSON segmentation mapping."""
     convert_copick_to_3d_zarr(
         config_path=config_path,
@@ -289,10 +308,9 @@ def main(
         output_json_path=output_json_path,
         voxel_spacing=voxel_spacing,
         tomo_alg=tomo_alg,
-        specific_runs=list(specific_runs) if specific_runs else None,
+        specific_runs=specific_runs,
         min_component_volume=min_component_volume,
-        compress=not no_compress,
-        user_id=user_id,
+        keep_labels=keep_labels, user_id=user_id,
     )
 
 

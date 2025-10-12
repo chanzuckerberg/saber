@@ -204,7 +204,7 @@ def automask_metrics(
     gt_masks_per_image: List[List[Union[np.ndarray, torch.Tensor]]],  # per-image list of HxW masks
     *,
     amg_kwargs: Optional[Dict[str, Any]] = None,
-    top_k: Optional[int] = 20,
+    top_k: Optional[int] = 200,
     device: Optional[torch.device] = None,
     autocast_ctx: Optional[Callable[[], Any]] = None,
     downsample_factor: int = 1,

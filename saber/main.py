@@ -1,9 +1,9 @@
 from saber.classifier.cli import classifier_routines as classifier
 from saber.entry_points.run_low_pass_filter import cli as filter3d
 from saber.entry_points.segment_methods import methods as segment
+from saber.finetune.cli import finetune_routines as finetune
 from saber.analysis.analysis_cli import methods as analysis
 from saber.entry_points.run_analysis import cli as save
-from saber.finetune.train import finetune
 import click
 try:
     from saber.gui.base.zarr_gui import gui

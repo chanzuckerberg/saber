@@ -13,8 +13,8 @@ class AutoMaskDataset(Dataset):
                  tomogram_zarr_path: str = None, 
                  fib_zarr_path: str = None,
                  transform = None,
-                 slabs_per_volume_per_epoch: int = 10,
-                 slices_per_fib_per_epoch: int = 5,
+                 num_slabs: int = 50,
+                 num_slices: int = 50,
                  slab_thickness: int = 5,
                  seed: int = 42,
                  shuffle: bool = True):
@@ -23,19 +23,19 @@ class AutoMaskDataset(Dataset):
             tomogram_zarr_path: Path to the tomogram zarr store
             fib_zarr_path: Path to the fib zarr store
             transform: Transform to apply to the data
-            slabs_per_volume_per_epoch: Number of slabs per volume per epoch
-            slices_per_fib_per_epoch: Number of slices per fib per epoch
+            num_slabs: Number of slabs per volume per epoch
+            num_slices: Number of slices per fib per epoch
             slab_thickness: Thickness of the slab
         """
 
         # Slabs per Epoch 
         self.slab_thickness = slab_thickness
-        self.slabs_per_volume_per_epoch = slabs_per_volume_per_epoch
-        self.slices_per_fib_per_epoch = slices_per_fib_per_epoch
+        self.num_slabs = num_slabs
+        self.num_slices = num_slices
         
         # Grid and Positive Points for AutoMaskGenerator
         self.points_per_side = 32
-        self.min_area = 0.001
+        self.min_pixels = 1e3
         self.k_min = 50
         self.k_max = 100
         self.transform = transform
@@ -76,7 +76,13 @@ class AutoMaskDataset(Dataset):
             self.n_fib_volumes = len(self.fib_keys)
             self.fib_shapes = {}
             for i, key in enumerate(self.fib_keys):
-                self.fib_shapes[i] = self.fib_store[key]['0'].shape
+                try:
+                    self.fib_shapes[i] = self._estimate_zrange(key, source='fib')
+                except Exception as e:
+                    print(f"Error estimating zrange for fib {key}: {e}")
+                    # remove key from fib_keys
+                    self.fib_keys.remove(key)
+            self.n_fib_volumes = len(self.fib_keys)
         else:
             self.n_fib_volumes = 0
             self.fib_shapes = {}
@@ -93,12 +99,12 @@ class AutoMaskDataset(Dataset):
         self.tomogram_samples = []
         self.fib_samples = []
         self._prev_tomogram_samples = []
-        self._prev_fib_samples = []
+        self._prev_fib_samples = []  
 
         # First sampling epoch
         self.resample_epoch()
 
-    def _estimate_zrange(self, key, band=(0.3, 0.7), threshold=0):
+    def _estimate_zrange(self, key, band=(0.3, 0.7), source = 'tomo', threshold=0):
         """
         Returns (z_min, z_max) inclusive bounds for valid slab centers
         where there is some foreground in the labels.
@@ -106,9 +112,15 @@ class AutoMaskDataset(Dataset):
         - band: fraction of Z to consider (lo, hi)
         """
 
-        nz = self.tomogram_store[key]['0'].shape[0]
+        if source == 'tomo':
+            nz = self.tomogram_store[key]['0'].shape[0]
+        elif source == 'fib':
+            nz = self.fib_store[key]['0'].shape[0]
         min_offset, max_offset = int(nz * band[0]), int(nz * band[1])
-        mask = self.tomogram_store[key]['labels/0'][min_offset:max_offset,]
+        if source == 'tomo':
+            mask = self.tomogram_store[key]['labels/0'][min_offset:max_offset,]
+        elif source == 'fib':
+            mask = self.fib_store[key]['labels/0'][min_offset:max_offset,]
         vals = mask.sum(axis=(1,2))
         vals = np.nonzero(vals)[0]
         max_val = vals.max() - self.slab_thickness + min_offset
@@ -119,7 +131,6 @@ class AutoMaskDataset(Dataset):
         self,
         D: int,
         N: int,
-        z_bounds: Optional[Tuple[Union[int, float], Union[int, float]]] = None,
     ) -> np.ndarray:
         """
         Precompute N slice indices for a volume of depth D.
@@ -140,18 +151,9 @@ class AutoMaskDataset(Dataset):
 
         center_bias = 0.9
         sigma = 0.2
+        z0, z1 = 0, D - 1
 
         # --- Resolve bounds ---
-        if z_bounds is None:
-            z0, z1 = 0, D - 1
-        else:
-            a, b = z_bounds
-            if isinstance(a, float) or isinstance(b, float):
-                # treat as fractions in [0,1]
-                a = int(np.floor(np.clip(a, 0.0, 1.0) * (D - 1)))
-                b = int(np.ceil (np.clip(b, 0.0, 1.0) * (D - 1)))
-            z0 = int(max(0, min(a, b)))
-            z1 = int(min(D - 1, max(a, b)))
         if z1 < z0:
             # empty window → fall back to full range
             z0, z1 = 0, D - 1
@@ -194,17 +196,14 @@ class AutoMaskDataset(Dataset):
         
         # Sample random slabs from each tomogram
         if self.has_tomogram:
-            print(f"Re-Sampling {self.slabs_per_volume_per_epoch} slabs from {self.n_tomogram_volumes} tomograms")
+            print(f"Re-Sampling {self.num_slabs} slabs from {self.n_tomogram_volumes} tomograms")
             new_tomo_samples = []
-            for vol_idx in range(self.n_tomogram_volumes):
+            for vol_idx in tqdm(range(self.n_tomogram_volumes), desc="Sampling slabs from tomograms"):
 
                 # Sample Indices in [0, D-1], center-biased within the *window*
                 z_min, z_max = self.tomo_shapes[vol_idx]
-                z_rel = self._compute_indices(
-                    z_max - z_min, 
-                    self.slabs_per_volume_per_epoch, 
-                    z_bounds=(z_min, z_max)
-                )
+                D = (z_max - z_min + 1)
+                z_rel = self._compute_indices(D, self.num_slabs)
 
                 # Shift to absolute z and add to samples
                 z_positions = z_rel + z_min
@@ -217,21 +216,20 @@ class AutoMaskDataset(Dataset):
         
         # Sample random slices from each FIB volume
         if self.has_fib:
-            print(f"Re-Sampling {self.slices_per_fib_per_epoch} slices from {self.n_fib_volumes} FIB volumes")
+            print(f"Re-Sampling {self.num_slices} slices from {self.n_fib_volumes} FIB volumes")
             new_fib_samples = []
-            for fib_idx in range(self.n_fib_volumes):
-                fib_shape = self.fib_shapes[fib_idx]
+            for fib_idx in tqdm(range(self.n_fib_volumes), desc="Sampling slices from FIB volumes"):
                 # Sample random z positions from this FIB volume
-                z_positions = self._compute_indices(
-                    fib_shape[0],
-                    self.slices_per_fib_per_epoch,
-                    z_bounds=(0, fib_shape[0])
-                )
-                
+                z_min, z_max = self.fib_shapes[fib_idx]
+                D = (z_max - z_min + 1)
+                z_rel = self._compute_indices(
+                    D, self.num_slices )
+                 # Shift to absolute z and add to samples
+                z_positions = z_rel + z_min
                 for z_pos in z_positions:
-                    new_fib_samples.append((fib_idx, z_pos))        
+                    new_fib_samples.append((fib_idx, z_pos)) 
+            self.fib_samples = new_fib_samples
 
-            self.fib_samples = self._update_samples(self.fib_samples, new_fib_samples)
             if self.shuffle: self._rng.shuffle(self.fib_samples) # Shuffle samples
         
         # Set epoch length
@@ -273,11 +271,9 @@ class AutoMaskDataset(Dataset):
         key = self.fib_keys[fib_idx]
         
         # Load FIB image and segmentation
-        image = self.fib_store[key]['0'][z_pos,].astype(np.float32)
-        image_2d = preprocessing.proprocess(image)
-        seg_2d = self.fib_store[key]['labels/0'][z_pos,]
-        
-        return self._package_image_item(image_2d, seg_2d)
+        image = self.fib_store[key]['0'][z_pos,].astype(np.float32) # HxW
+        seg_2d = self.fib_store[key]['labels/0'][z_pos,] # HxW
+        return self._package_image_item(image, seg_2d)
 
     def _gen_grid_points(self, h: int, w: int) -> np.ndarray:
         """
@@ -402,12 +398,10 @@ class AutoMaskDataset(Dataset):
         # Apply transforms to image and segmentation
         if self.transform:
             sample = self.transform({'image': image_2d, 'mask': segmentation})
-            image_2d, segmentation = sample['image'], sample['mask']      
+            image_2d, segmentation = sample['image'], sample['mask']   
 
         # Get image and segmentation shapes
         h, w = segmentation.shape
-        min_pixels = 0
-        # min_pixels = int(self.min_area * h * w)
 
         # which instances to train on for this image
         grid_points = self._gen_grid_points(h, w)
@@ -415,7 +409,7 @@ class AutoMaskDataset(Dataset):
         masks_t, points_t, labels_t, boxes_t = [], [], [], []
 
         for iid in inst_ids:
-            comps = helper.components_for_id(segmentation, iid, min_pixels)
+            comps = helper.components_for_id(segmentation, iid, self.min_pixels)
             for comp in comps:
                 # box from this component
                 box = helper.mask_to_box(comp)
@@ -451,34 +445,3 @@ class AutoMaskDataset(Dataset):
             "labels": labels_t,   # list[#p] all ones
             "boxes": boxes_t,     # list[4] (x0,y0,x1,y1)
         }
-
-    # def _update_samples(self, old, new):
-    #     """
-    #     Return a mixed list with size == len(new):
-    #     - keep = min(round(len(new)*keep_fraction), len(old)) from 'old'
-    #     - add  = len(new) - keep from 'new'
-    #     """
-    #     target = len(new)
-    #     if target == 0:
-    #         return []
-
-    #     # choose keep set from *old* list, new set from *new* list
-    #     keep = min(int(round(target * self.keep_fraction)), len(old))
-    #     add  = target - keep
-
-    #     # keep set from *old* list
-    #     if keep > 0:
-    #         keep_idx = self._rng.choice(len(old), size=keep, replace=False)
-    #         kept = [old[i] for i in keep_idx]
-    #     else:
-    #         kept = []
-
-    #     # add set from *new* list
-    #     if add > 0:
-    #         new_idx = self._rng.choice(len(new), size=add, replace=False)
-    #         added = [new[i] for i in new_idx]
-    #     else:
-    #         added = []
-
-    #     # return mixed list
-    #     return kept + added
