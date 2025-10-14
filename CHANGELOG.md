@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.8.0](https://github.com/chanzuckerberg/saber/compare/saber-em-v0.7.0...saber-em-v0.8.0) (2025-10-03)
+
+
+### ✨ Features
+
+* 3D annotation gui and tracking of metadata for zarr files ([2253097](https://github.com/chanzuckerberg/saber/commit/2253097524da325a6ee2f8ff189de39e63d258a5))
+* Interactivity improvements for the annotation gui ([966df35](https://github.com/chanzuckerberg/saber/commit/966df354b045d0bac79d1be29954bd6c2fc43a6b))
+* run 2D preprocessing on tif stack ([3c75d77](https://github.com/chanzuckerberg/saber/commit/3c75d7700a7259c851df22cbcf8a7d7597d6d68c))
+* vcp dataio ([6d227b4](https://github.com/chanzuckerberg/saber/commit/6d227b4e59c3212f010be644f94c84876fe6cb2a))
+* workflow for fib segmentation ([d53b297](https://github.com/chanzuckerberg/saber/commit/d53b29726981e2bd0f6c212b531276e8d23dadee))
+
+
+### 🐞 Bug Fixes
+
+* feature improvements to the 3D gui. Ability to rotate volume. Faster reading. Linking of images ([bda2cc1](https://github.com/chanzuckerberg/saber/commit/bda2cc13a25ac492f27e4b2a7f4f598f8ffc5b7a))
+* Gui3d ([0fff24d](https://github.com/chanzuckerberg/saber/commit/0fff24db4aba9ce3c25fbb80768a996797ad871f))
+* improve the speed for fib segmentation, ensure correct format is saved for vcp web gui ([680342a](https://github.com/chanzuckerberg/saber/commit/680342a9dc0ad93a98c348e548a8a2516eaa8d5f))
+* improved workflow for fib segmentation ([e028e62](https://github.com/chanzuckerberg/saber/commit/e028e62ae91e5897ab463eb14a7cc35c0e16554f))
+* speed up the loading time between frames ([3758068](https://github.com/chanzuckerberg/saber/commit/37580687df73495fd052d1a16c803ad9acdc52a8))
+
 ## [0.7.0](https://github.com/chanzuckerberg/saber/compare/saber-em-v0.6.1...saber-em-v0.7.0) (2025-08-19)
 
 
