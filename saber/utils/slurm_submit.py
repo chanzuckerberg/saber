@@ -65,9 +65,9 @@ def copick_commands(func):
 def tomogram_segment_commands(func):
     """Decorator to add common options to a Click command."""
     options = [
-    click.option("--segmentation-name", type=str, required=False, default="organelles", 
+    click.option("--seg-name", type=str, required=False, default="organelles", 
                  help="Name of Segmentation Session"),
-    click.option("--segmentation-session-id", type=str, required=False, default="1", 
+    click.option("--seg-session-id", type=str, required=False, default="1", 
                  help="SessionID to Write for Segmentation Mask"),
     ]
     for option in reversed(options):  # Add options in reverse order to preserve correct order

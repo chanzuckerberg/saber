@@ -40,10 +40,9 @@ class cryoMicroSegmenter(saber2Dsegmenter):
         self.image0 = image0
         (nx, ny) = image0.shape
 
-
         # Check to See if We Might Reach Memory Limits
         if (nx > self.max_pixels or ny > self.max_pixels) and not use_sliding_window:
-            print(f'Image is Larger than {self.max_pixels} pixels in at least one dimension.')
+            print(f'Image is Larger than {self.max_pixels} pixels in at least one dimension.\nCurrent Size: ({nx}, {ny})')
             print('Consider Downsampling or Using Sliding Window Inference.')
 
         # Segment Image

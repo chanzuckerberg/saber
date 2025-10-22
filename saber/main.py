@@ -8,10 +8,8 @@ from saber.utils.importers import cli as importers
 import click
 try:
     from saber.gui.base.zarr_gui import gui
-    from saber.gui.text.zarr_text_gui import text_gui
     gui_available = True
 except Exception as e:
-    print(f"GUI is not available: {e}")
     gui_available = False
 
 @click.group()
@@ -25,7 +23,6 @@ routines.add_command(filter3d)
 routines.add_command(classifier)
 if gui_available: 
     routines.add_command(gui)
-    routines.add_command(text_gui)
 routines.add_command(segment)
 routines.add_command(save)
 

@@ -67,7 +67,7 @@ def fib(
     masks = segmenter.segment(volume, ini_depth, nframes)
 
     # Export the Masks as a Movie
-    export_movie(volaume, masks,'segmentation.gif')
+    export_movie(volume, masks,'segmentation.gif')
 
     # (TODO): Save the Masks
     np.save(output, masks)

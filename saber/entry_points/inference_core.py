@@ -14,7 +14,7 @@ def segment_tomogram_core(
     segmentation_name: str,
     segmentation_session_id: str,
     slab_thickness: int,
-    num_slabs: int,
+    num_slabs: int, delta_z: int,
     display_segmentation: bool,
     segmenter,  # Pre-loaded or newly created segmenter
     gpu_id: int = 0  # Default GPU ID
@@ -42,10 +42,17 @@ def segment_tomogram_core(
     torch.cuda.set_device(gpu_id)
     
     # Segment the Tomogram
-    segment_mask = segmenter.segment(
-        vol, slab_thickness, 
-        save_run=run.name + '-' + segmentation_session_id, 
-        show_segmentations=display_segmentation)
+    save_name_name = run.name + '-' + segmentation_session_id
+    if num_slabs > 1:
+        segment_mask = segmenter.segment(
+            vol, slab_thickness, num_slabs, delta_z,
+            save_name_name, display_segmentation)
+    else:
+        segment_mask = segmenter.segment(
+            vol, slab_thickness,
+            save_run=save_name_name, 
+            show_segmentations=display_segmentation)
+
 
     # Check if the segment_mask is None
     if segment_mask is None:
@@ -71,6 +78,9 @@ def segment_tomogram_core(
             voxel_size=float(voxel_size)
         )
 
+        # Print Success Message
+        print(f'Saved Segmentation for {run.name} as {segmentation_name}')
+
     # Clear GPU memory (but keep models if they're pre-loaded)
     del vol
     del segment_mask
@@ -78,9 +88,8 @@ def segment_tomogram_core(
 
     # Reset the Inference State
     segmenter.inference_state = None
-    
-    return f"Successfully processed {run.name}"
 
+    return
 
 def segment_micrograph_core(
     input:str, output: str,

@@ -126,14 +126,15 @@ def _semantic_segmentation(masks, predictions):
     Merges all masks belonging to each predicted class.
     """
     predicted_classes = np.argmax(predictions, axis=1)
-    max_class = np.max(predicted_classes)
+    max_class = predictions.shape[1]
     
     # Initialize empty masks for each class (excluding class 0)
     output_masks = []
-    for ii in range(1, max_class + 1):  # Start from 1 to skip background class 0
+    for ii in range(1, max_class):  # Start from 1 to skip background class 0
         output_masks.append({
             'segmentation': np.zeros(masks[0]['segmentation'].shape, dtype=np.uint8),
             'area': 0,
+            'label': ii
         })
 
     # Merge masks for each class
@@ -146,7 +147,7 @@ def _semantic_segmentation(masks, predictions):
             output_masks[class_idx]['segmentation'] = np.logical_or(
                 output_masks[class_idx]['segmentation'], 
                 masks[ii]['segmentation']
-            ).astype(np.uint8)
+            ).astype(np.bool)
             
             # Accumulate area
             output_masks[class_idx]['area'] += masks[ii]['area']
@@ -163,11 +164,21 @@ def masks_to_array(mask_list):
 
     # Convert Masks to Numpy Array 
     (nx, ny) = mask_list[0]['segmentation'].shape
-    masks = np.zeros([len(mask_list), nx, ny], dtype=np.uint8)
+
+    # Determine Appropriate Data Type
+    if len(mask_list) == 0:
+        return np.zeros((0, nx, ny), dtype=np.bool)
+    elif len(mask_list) < 256:
+        dtype = np.uint8
+    elif len(mask_list) < 65536:
+        dtype = np.uint16
+    else:
+        dtype = np.uint32
+    masks = np.zeros([len(mask_list), nx, ny], dtype=dtype)
 
     # Populate the numpy array
     for j, mask in enumerate(mask_list):
-        masks[j] = mask['segmentation'].astype(np.uint8) * (j + 1)
+        masks[j] = mask['segmentation'].astype(dtype) * (j + 1)
     
     return masks
 
@@ -191,16 +202,20 @@ def masks_to_list(masks):
     
     return masks_list
 
-def segments_to_mask(video_segments, masks, mask_shape, nMasks):
-
+def segments_to_mask(video_segments, masks, mask_shape):
+    """
+    Convert SAM2 video segments to 3D mask array.
+    """
+    # Iterate through each frame / slice in the volume
     for frame_idx in list(video_segments):
-        for jj in range(nMasks):
+        # Keys in this case indicate value labels for each mask 
+        for jj in video_segments[frame_idx].keys():
             resized_mask = skimage.transform.resize(
-                video_segments[frame_idx][jj+1][0,], 
+                video_segments[frame_idx][jj][0,], 
                 (mask_shape[1], mask_shape[2]), anti_aliasing=False
             )
             mask_update = resized_mask > 0
-            masks[frame_idx,:,:][mask_update] = jj + 1    
+            masks[frame_idx,:,:][mask_update] = jj  
 
     return masks
 
@@ -345,52 +360,3 @@ def _estimate_feature_size_3d(binary_volume, scale=0.075):
     sigma = scale * approx_diameter
     return sigma
 
-# def _semantic_segmentation(masks, predictions):
-#     """
-#     Get array that returns the masks as semantic segmentation.
-#     """
-
-#     # Get predicted class and confidence for each mask
-#     predicted_classes = np.argmax(predictions, axis=1)
-#     confidence_scores = np.max(predictions, axis=1)
-
-#     # Create semantic segmentation
-#     output_masks = np.zeros(masks[0]['segmentation'].shape, dtype=np.uint8)
-#     confidence_map = np.zeros(masks[0]['segmentation'].shape, dtype=np.float32)
-
-#     for ii in range(len(masks)):
-#         if predicted_classes[ii] > 0:
-#             mask = masks[ii]['segmentation']
-#             confidence = confidence_scores[ii]
-            
-#             # Only update pixels where this mask has higher confidence
-#             update_pixels = mask & (confidence > confidence_map)
-            
-#             output_masks[update_pixels] = predicted_classes[ii]
-#             confidence_map[update_pixels] = confidence
-
-#     return output_masks
-
-
-# def overlap(img1, img2):
-#     ints = np.logical_and(img1, img2).sum()
-#     return ints / min(img1.sum(), img2.sum())
-
-# def calculate_iou(mask1, mask2):
-#     intersection = np.logical_and(mask1, mask2).sum()
-#     union = np.logical_or(mask1, mask2).sum()
-#     return intersection / union if union != 0 else 0    
-
-# def convert_mask_array_to_list(mask_array):
-#     """
-#     Convert a 3D mask array to a list of masks.
-#     """
-#     masks = []
-#     nMasks = mask_array.shape[0]
-#     for iMask in range(nMasks):
-#         mask = {
-#             'segmentation': mask_array[iMask],
-#             'area': np.sum(mask_array[iMask]),
-#         }
-#         masks.append(mask)
-#     return masks

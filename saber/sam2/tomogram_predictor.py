@@ -86,15 +86,18 @@ class TomogramPreprocessor:
             if img_std is not None:
                 img_std = img_std.to(compute_device)
 
-        # Apply normalization
+        # Apply normalization - Default normalization to [-1, 1]
         if img_mean is None and img_std is None:
-            # Default normalization to [-1, 1]
             images = 2 * images - 1
         else:
             if img_mean is not None:
                 images -= img_mean
             if img_std is not None:
                 images /= img_std
+
+        # This works for light imaging
+        # images = (images - images.min()) / (images.max() - images.min())  # Normalize to [0, 1]
+        # images *= 255
 
         return images, video_height, video_width
     

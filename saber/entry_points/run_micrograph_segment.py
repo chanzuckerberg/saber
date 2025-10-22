@@ -1,5 +1,6 @@
 from saber.entry_points.inference_core import segment_micrograph_core
 from saber.utils import slurm_submit, parallelization, io
+from saber.segmenters.loaders import micrograph_workflow
 from saber.visualization import galleries 
 import glob, click
 import numpy as np

@@ -143,8 +143,10 @@ def show_anns(anns, borders=True):
         anns (list of dict): List of annotation dictionaries with key 'segmentation' (numpy.ndarray) and 'area'.
         borders (bool, optional): Whether to draw the contours of masks. Defaults to True.
     """
+
     if len(anns) == 0:
         return
+
     sorted_anns = sorted(anns, key=(lambda x: x['area']), reverse=True)
     ax = plt.gca()
     ax.set_autoscale_on(False)
@@ -152,6 +154,7 @@ def show_anns(anns, borders=True):
     img = np.ones((sorted_anns[0]['segmentation'].shape[0], sorted_anns[0]['segmentation'].shape[1], 4))
     img[:,:,3] = 0
     for ann in sorted_anns:
+        print(ann)
         m = ann['segmentation']
         color_mask = np.concatenate([np.random.random(3), [0.5]])
         img[m] = color_mask 
@@ -162,6 +165,7 @@ def show_anns(anns, borders=True):
             cv2.drawContours(img, contours, -1, (0,0,1,0.4), thickness=1) 
 
     ax.imshow(img)
+    plt.show()
 
 def show_tomo_frame(tomo, frame_id, ax):
     frame = torch.tensor(tomo[frame_id], device="cpu")
