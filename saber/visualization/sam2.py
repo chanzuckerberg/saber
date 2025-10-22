@@ -1,60 +1,53 @@
-from matplotlib.widgets import Slider
 import matplotlib.pyplot as plt
 import numpy as np
-import torch
 import cv2
 
-def display_video_segmentation(
-    video_segments,
-    inference_state, 
-    frame_stride: int = 30
-    ):
+def plot_frame_scores(data, func, a_fit, b_fit, c_fit):
 
-    # Create a figure and axis
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 10))
-    plt.subplots_adjust(bottom=0.25)  # Adjust layout to leave space for the slider
+    # Create x values (indices)
+    x = np.arange(len(data))
 
-    # Initial frame to display
-    initial_frame = 0
+    # Calculate R^2 value
+    residuals = data - func(x, a_fit, b_fit, c_fit)
+    ss_res = np.sum(residuals**2)
+    ss_tot = np.sum((data - np.mean(data))**2)
+    r_squared = 1 - (ss_res / ss_tot)
 
-    # Display the first frame
-    show_tomo_frame(inference_state["images"], initial_frame, ax1)
-    show_tomo_frame(inference_state["images"], initial_frame, ax2)
+    # Plot the Fit (Debug)
+    plt.plot(data, label='Original data')
+    # Plot the fitted curve
+    plt.plot(func(x, a_fit, b_fit, c_fit), 'r--', 
+            label=f'Fit: {a_fit:.2e}*(x-{b_fit:.1f})²+{c_fit:.1f}, R²={r_squared:.3f}')
 
-    for out_obj_id, out_mask in video_segments[initial_frame].items():
-        show_mask1(out_mask, ax2, obj_id=out_obj_id)
-    ax2.axis('off')
+    plt.xlim([0, len(data)]); 
+    plt.xlabel('Slice Along Z-axis'); 
+    plt.ylabel('Object Score Logits')
+    plt.grid(True)
+    plt.tick_params(direction='in', top=True, right=True, length=6, width=1)
+    plt.legend()
+    plt.show()
 
-    # Create the slider axes and the slider widget
-    ax_slider = plt.axes([0.2, 0.1, 0.65, 0.03], facecolor='lightgoldenrodyellow')  # [left, bottom, width, height` `]
-    frame_slider = Slider(ax_slider, 'Frame', 0, len(video_segments) - frame_stride, valinit=initial_frame, valstep=frame_stride)
+def plot_fit(data, func, fit_params):
+    """
+    Plot the Regression of Confidence Scores Along Z-Axis
+    """
 
-    # Define the update function to change the frame
-    def update(val):
-        frame_idx = int(frame_slider.val)
+    # Create x values (indices)
+    x = np.arange(len(data))
 
-        # Clear both axes
-        ax1.clear()
-        ax2.clear()
+    # Plot the Original Data
+    plt.plot(data, label='Original data')
 
-        # Update the plot with the new frame
-        ax1.set_title(f"frame {frame_idx}")
-        show_tomo_frame(inference_state["images"], frame_idx, ax1)
-        show_tomo_frame(inference_state["images"], frame_idx, ax2)
+    # Plot the Fitted Curve
+    plt.plot(func(x, *fit_params), 'r--', label='Fitted curve')
 
-        # Overlay the masks
-        for out_obj_id, out_mask in video_segments[frame_idx].items():
-            show_mask1(out_mask, ax2, obj_id=out_obj_id)
-
-        ax2.axis('off')
-        
-        # Redraw the updated plot
-        fig.canvas.draw_idle()
-
-    # Connect the slider to the update function
-    frame_slider.on_changed(update)
-
-    # Display the figure with the slider
+    # Label the Axes
+    plt.xlabel('Slice Along Z-axis')
+    plt.ylabel('Object Score Logits')
+    
+    plt.grid(True)
+    plt.tick_params(direction='in', top=True, right=True, length=6, width=1)
+    plt.legend()
     plt.show()
 
 
@@ -167,16 +160,6 @@ def show_anns(anns, borders=True):
     ax.imshow(img)
     plt.show()
 
-def show_tomo_frame(tomo, frame_id, ax):
-    frame = torch.tensor(tomo[frame_id], device="cpu")
-    frame -= frame.min()
-    frame /= frame.max()
-    if frame.ndim == 3:
-        frame = frame[0]
-
-    ax.imshow(frame, cmap="gray", vmin=0, vmax=1)
-    ax.set_title(f"Frame {frame_id}")
-
 def show_mask2(mask, ax, random_color=False, borders = True):
     if random_color:
         color = np.concatenate([np.random.random(3), np.array([0.6])], axis=0)
@@ -191,51 +174,3 @@ def show_mask2(mask, ax, random_color=False, borders = True):
         contours = [cv2.approxPolyDP(contour, epsilon=0.01, closed=True) for contour in contours]
         mask_image = cv2.drawContours(mask_image, contours, -1, (1, 1, 1, 0.5), thickness=2) 
     ax.imshow(mask_image)
-
-def plot_frame_scores(data, func, a_fit, b_fit, c_fit):
-
-    # Create x values (indices)
-    x = np.arange(len(data))
-
-    # Calculate R^2 value
-    residuals = data - func(x, a_fit, b_fit, c_fit)
-    ss_res = np.sum(residuals**2)
-    ss_tot = np.sum((data - np.mean(data))**2)
-    r_squared = 1 - (ss_res / ss_tot)
-
-    # Plot the Fit (Debug)
-    plt.plot(data, label='Original data')
-    # Plot the fitted curve
-    plt.plot(func(x, a_fit, b_fit, c_fit), 'r--', 
-            label=f'Fit: {a_fit:.2e}*(x-{b_fit:.1f})²+{c_fit:.1f}, R²={r_squared:.3f}')
-
-    plt.xlim([0, len(data)]); 
-    plt.xlabel('Slice Along Z-axis'); 
-    plt.ylabel('Object Score Logits')
-    plt.grid(True)
-    plt.tick_params(direction='in', top=True, right=True, length=6, width=1)
-    plt.legend()
-    plt.show()
-
-def plot_fit(data, func, fit_params):
-    """
-    Plot the Regression of Confidence Scores Along Z-Axis
-    """
-
-    # Create x values (indices)
-    x = np.arange(len(data))
-
-    # Plot the Original Data
-    plt.plot(data, label='Original data')
-
-    # Plot the Fitted Curve
-    plt.plot(func(x, *fit_params), 'r--', label='Fitted curve')
-
-    # Label the Axes
-    plt.xlabel('Slice Along Z-axis')
-    plt.ylabel('Object Score Logits')
-    
-    plt.grid(True)
-    plt.tick_params(direction='in', top=True, right=True, length=6, width=1)
-    plt.legend()
-    plt.show()

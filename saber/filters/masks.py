@@ -219,66 +219,6 @@ def segments_to_mask(video_segments, masks, mask_shape):
 
     return masks
 
-def merge_segmentation_masks(segmentation, min_volume_threshold=100):
-    """
-    Process a 3D segmentation array where different segments have unique labels.
-    Merge overlapping regions using OR operation, filter small objects, and relabel consecutively.
-    
-    Args:
-        segmentation: 3D numpy array where different segments have unique label values
-        min_volume_threshold: Minimum volume (in voxels) for an object to be kept
-        
-    Returns:
-        Filtered segmentation mask with consecutive labels, where overlapping regions are merged
-    """
-    if segmentation is None:
-        return None
-    
-    # Get unique labels, excluding background (0)
-    unique_labels = np.unique(segmentation)
-    if 0 in unique_labels:
-        unique_labels = unique_labels[1:]
-    
-    # Create a binary mask for all objects
-    combined_binary = np.zeros_like(segmentation, dtype=bool)
-    for label in unique_labels:
-        combined_binary = np.logical_or(combined_binary, segmentation == label)
-    
-    # Label the connected components in the combined binary mask
-    labeled_mask, num_features = ndimage.label(combined_binary)
-    
-    # Filter objects by volume and keep track of properties
-    region_properties = []
-    for label in range(1, num_features + 1):
-        # Create a binary mask for this label
-        mask = (labeled_mask == label)
-        
-        # Calculate volume (number of voxels)
-        volume = np.sum(mask)
-        
-        # Skip objects smaller than minimum volume threshold
-        if volume < min_volume_threshold:
-            continue
-        
-        # Store properties
-        region_properties.append({
-            'label': label,
-            'volume': volume
-        })
-    
-    # Sort regions by volume (largest first)
-    region_properties.sort(key=lambda x: x['volume'], reverse=True)
-    
-    # Create new segmentation with consecutively labeled objects
-    new_segmentation = np.zeros_like(segmentation)
-    
-    # Assign new consecutive labels
-    for new_label, prop in enumerate(region_properties, 1):
-        old_label = prop['label']
-        new_segmentation[labeled_mask == old_label] = new_label
-    
-    return new_segmentation
-
 def fast_3d_gaussian_smoothing(volume, scale=0.075, deviceID = None):
     """
     Apply fast 3D Gaussian smoothing to a volume.
@@ -360,3 +300,63 @@ def _estimate_feature_size_3d(binary_volume, scale=0.075):
     sigma = scale * approx_diameter
     return sigma
 
+
+# def merge_segmentation_masks(segmentation, min_volume_threshold=100):
+#     """
+#     Process a 3D segmentation array where different segments have unique labels.
+#     Merge overlapping regions using OR operation, filter small objects, and relabel consecutively.
+    
+#     Args:
+#         segmentation: 3D numpy array where different segments have unique label values
+#         min_volume_threshold: Minimum volume (in voxels) for an object to be kept
+        
+#     Returns:
+#         Filtered segmentation mask with consecutive labels, where overlapping regions are merged
+#     """
+#     if segmentation is None:
+#         return None
+    
+#     # Get unique labels, excluding background (0)
+#     unique_labels = np.unique(segmentation)
+#     if 0 in unique_labels:
+#         unique_labels = unique_labels[1:]
+    
+#     # Create a binary mask for all objects
+#     combined_binary = np.zeros_like(segmentation, dtype=bool)
+#     for label in unique_labels:
+#         combined_binary = np.logical_or(combined_binary, segmentation == label)
+    
+#     # Label the connected components in the combined binary mask
+#     labeled_mask, num_features = ndimage.label(combined_binary)
+    
+#     # Filter objects by volume and keep track of properties
+#     region_properties = []
+#     for label in range(1, num_features + 1):
+#         # Create a binary mask for this label
+#         mask = (labeled_mask == label)
+        
+#         # Calculate volume (number of voxels)
+#         volume = np.sum(mask)
+        
+#         # Skip objects smaller than minimum volume threshold
+#         if volume < min_volume_threshold:
+#             continue
+        
+#         # Store properties
+#         region_properties.append({
+#             'label': label,
+#             'volume': volume
+#         })
+    
+#     # Sort regions by volume (largest first)
+#     region_properties.sort(key=lambda x: x['volume'], reverse=True)
+    
+#     # Create new segmentation with consecutively labeled objects
+#     new_segmentation = np.zeros_like(segmentation)
+    
+#     # Assign new consecutive labels
+#     for new_label, prop in enumerate(region_properties, 1):
+#         old_label = prop['label']
+#         new_segmentation[labeled_mask == old_label] = new_label
+    
+#     return new_segmentation

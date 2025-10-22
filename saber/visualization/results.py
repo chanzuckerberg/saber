@@ -1,11 +1,56 @@
-from saber.visualization import classifier, sam2 
+from saber.visualization.classifier import get_colors
+from saber.visualization import classifier 
 from matplotlib.colors import ListedColormap
+from matplotlib.widgets import Slider
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import imageio, os
 import numpy as np
 
-def save_slab_segmentation(
+def view_3d_seg(vol, seg, frame_stride: int = 30):
+    """
+    Display 3D grayscale volume and segmentation overlay with a single slider.
+
+    Args:
+        vol (np.ndarray): 3D array (Z, H, W)
+        seg (np.ndarray): 3D array (Z, H, W) with integer labels
+        frame_stride (int): step size for the slider
+    """
+    colors = get_colors()
+    cmap_colors = [(1, 1, 1, 0)] + colors[: int(seg.max())]
+    cmap = ListedColormap(cmap_colors)
+
+    # Figure and axes
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8))
+    plt.subplots_adjust(bottom=0.25)
+
+    initial_frame = 0
+    img1 = ax1.imshow(vol[initial_frame], cmap="gray")
+    img2 = ax2.imshow(vol[initial_frame], cmap="gray")
+    seg_overlay = ax2.imshow(seg[initial_frame], cmap=cmap, alpha=0.6, vmin=0, vmax=seg.max())
+
+    ax1.set_title("Raw Volume")
+    ax2.set_title(f"Segmentation Overlay (frame {initial_frame})")
+    ax1.axis("off")
+    ax2.axis("off")
+
+    # Slider
+    ax_slider = plt.axes([0.2, 0.1, 0.6, 0.03])
+    slider = Slider(ax_slider, "Slice", 0, len(vol) - 1, valinit=initial_frame, valstep=frame_stride)
+
+    # Update function
+    def update(val):
+        frame_idx = int(slider.val)
+        img1.set_data(vol[frame_idx])
+        img2.set_data(vol[frame_idx])
+        seg_overlay.set_data(seg[frame_idx])
+        ax2.set_title(f"Segmentation Overlay (frame {frame_idx})")
+        fig.canvas.draw_idle()
+
+    slider.on_changed(update)
+    plt.show()
+
+def save_slab_seg(
     current_run,
     image, masks,
     show_plot: bool = False

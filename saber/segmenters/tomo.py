@@ -1,7 +1,6 @@
 from saber.utils import preprocessing as preprocess
 from saber.segmenters.base import saber3Dsegmenter
 from saber.filters import masks as mask_filters
-import saber.visualization.classifier as vidviz
 import saber.visualization.results as cryoviz
 import saber.filters.gaussian as gauss
 from tqdm import tqdm
@@ -97,7 +96,7 @@ class cryoTomoSegmenter(saber3Dsegmenter):
 
         # Optional: Save Save Segmentation to PNG or Plot Segmentation with Matplotlib
         if save_mask and save_run is not None:
-            cryoviz.save_slab_segmentation(save_run, self.image, self.masks)        
+            cryoviz.save_slab_seg(save_run, self.image, self.masks)        
             
         # Check to Make Sure Masks are Found
         if len(self.masks) == 0:
@@ -137,7 +136,7 @@ class cryoTomoSegmenter(saber3Dsegmenter):
         
         # Display if requested
         if show_segmentations:
-            vidviz.display_volume_segmentation(self.vol, vol_masks)
+            cryoviz.view_3d_seg(self.vol, vol_masks)
             
         return vol_masks
 
@@ -244,7 +243,7 @@ class multiDepthTomoSegmenter(cryoTomoSegmenter):
 
         # Display the Segmentation if Requested
         if self.show_segments:
-            vidviz.display_volume_segmentation(vol, combined_mask)
+            cryoviz.view_3d_seg(vol, combined_mask)
 
         return combined_mask
 
