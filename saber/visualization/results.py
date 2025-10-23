@@ -1,11 +1,56 @@
-from saber.visualization import classifier, sam2 
+from saber.visualization.classifier import get_colors
+from saber.visualization import classifier 
 from matplotlib.colors import ListedColormap
+from matplotlib.widgets import Slider
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import imageio, os
 import numpy as np
 
-def save_slab_segmentation(
+def view_3d_seg(vol, seg, frame_stride: int = 30):
+    """
+    Display 3D grayscale volume and segmentation overlay with a single slider.
+
+    Args:
+        vol (np.ndarray): 3D array (Z, H, W)
+        seg (np.ndarray): 3D array (Z, H, W) with integer labels
+        frame_stride (int): step size for the slider
+    """
+    colors = get_colors()
+    cmap_colors = [(1, 1, 1, 0)] + colors[: int(seg.max())]
+    cmap = ListedColormap(cmap_colors)
+
+    # Figure and axes
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8))
+    plt.subplots_adjust(bottom=0.25)
+
+    initial_frame = 0
+    img1 = ax1.imshow(vol[initial_frame], cmap="gray")
+    img2 = ax2.imshow(vol[initial_frame], cmap="gray")
+    seg_overlay = ax2.imshow(seg[initial_frame], cmap=cmap, alpha=0.6, vmin=0, vmax=seg.max())
+
+    ax1.set_title("Raw Volume")
+    ax2.set_title(f"Segmentation Overlay (frame {initial_frame})")
+    ax1.axis("off")
+    ax2.axis("off")
+
+    # Slider
+    ax_slider = plt.axes([0.2, 0.1, 0.6, 0.03])
+    slider = Slider(ax_slider, "Slice", 0, len(vol) - 1, valinit=initial_frame, valstep=frame_stride)
+
+    # Update function
+    def update(val):
+        frame_idx = int(slider.val)
+        img1.set_data(vol[frame_idx])
+        img2.set_data(vol[frame_idx])
+        seg_overlay.set_data(seg[frame_idx])
+        ax2.set_title(f"Segmentation Overlay (frame {frame_idx})")
+        fig.canvas.draw_idle()
+
+    slider.on_changed(update)
+    plt.show()
+
+def save_slab_seg(
     current_run,
     image, masks,
     show_plot: bool = False
@@ -14,7 +59,7 @@ def save_slab_segmentation(
     # Show 2D Annotations
     plt.imshow(image, cmap='gray'); plt.axis('off')
     if len(masks) > 0: # I Should Update this Function as Well...
-        sam2.show_anns(masks) 
+         classifier.display_mask_list(image, masks)
     plt.axis('off')
 
     # Save the Figure
@@ -85,115 +130,10 @@ def export_movie(vol, vol_masks, output_path='segmentation_movie.gif', fps=5):
     print(f"Saving {len(frames)} frames to {output_path}...")
 
     if output_path.endswith('.gif'):
-        imageio.mimsave(output_path, frames, fps=fps)
+        imageio.mimsave(output_path, frames, fps=fps, loop=0)
     else:  # MP4 or other video format
         imageio.mimsave(output_path, frames, fps=fps, codec='libx264')
 
     print("Movie saved successfully!")
     return frames
 
-# def record_video_segmentation(video_segments, 
-#                               inference_state, 
-#                               frame_stride: int = 5, 
-#                               output_file="segmentation_output.mp4", 
-#                               fps=10):
-#     from IPython.display import Video
-#     dpi = 300
-
-#     # Normalize the images to be between 0 and 1
-#     inference_state['images'] = inference_state['images'] - inference_state['images'].min()
-#     inference_state['images'] = inference_state['images'] / inference_state['images'].max()
-
-#     # Video settings
-#     _, frame_height, frame_width = inference_state["images"][0].shape  # Ensure RGB images (height, width, channels)
-#     fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Codec for mp4
-#     out_video = cv2.VideoWriter(output_file, fourcc, fps, (frame_width * 2, frame_height))  # *2 because of 2 side-by-side frames
-
-#     # Process each frame with the given frame_stride
-#     for frame_idx in range(0, len(video_segments), frame_stride):
-
-#         frame_image = create_segmentation_frame(
-#                         frame_idx,
-#                         frame_width,
-#                         frame_height,
-#                         dpi,
-#                         inference_state, 
-#                         video_segments )
-
-#         # Write the combined frame to the video file - Convert RGB to BGR for OpenCV
-#         out_video.write(cv2.cvtColor(frame_image, cv2.COLOR_RGB2BGR))  
-
-#     # Process each frame with the given frame_stride - Reverse Order Now
-#     for frame_idx in range(len(video_segments) - 1, -1, -frame_stride):
-
-#         frame_image = create_segmentation_frame(
-#                         frame_idx,
-#                         frame_width,
-#                         frame_height,
-#                         dpi,
-#                         inference_state, 
-#                         video_segments )
-
-#         # Write the combined frame to the video file - Convert RGB to BGR for OpenCV
-#         out_video.write(cv2.cvtColor(frame_image, cv2.COLOR_RGB2BGR))          
-
-#     # Release the video writer object
-#     out_video.release()
-
-#     print(f"Video saved as {output_file}")
-
-#     # Display the video in Jupyter Notebook
-#     return Video(output_file, embed=True)
-
-# def create_segmentation_frame(
-#     frame_idx,
-#     frame_width,
-#     frame_height,
-#     dpi,
-#     inference_state, 
-#     video_segments,
-#     ):
-
-#     # Recreate figure and axes for each frame (fixing the size)
-#     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(frame_width * 2 / dpi, frame_height / dpi), dpi=dpi)
-
-#     # Display the original frame on ax1
-#     viz.show_tomo_frame(inference_state["images"], frame_idx, ax1)
-#     ax1.set_title(f"Frame {frame_idx}")
-#     ax1.axis('off')
-
-#     # Display the frame with segmentation masks on ax2
-#     viz.show_tomo_frame(inference_state["images"], frame_idx, ax2)
-#     for out_obj_id, out_mask in video_segments[frame_idx].items():
-#         viz.show_mask1(out_mask, ax2, obj_id=out_obj_id)
-#     ax2.set_title(f"Frame {frame_idx} with Segmentation")
-#     ax2.axis('off')
-
-#     # Convert the figure to an image array
-#     fig.canvas.draw()  # Ensure the canvas is drawn
-
-#     # Get the canvas width and height
-#     width, height = fig.canvas.get_width_height()
-#     # print("Canvas size:", width, height)
-
-#     # # Convert the canvas to a NumPy array and reshape it to (height, width, 3)
-#     # frame_image = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-#     # if frame_image.size != height * width * 3:
-#     #     raise ValueError(f"Unexpected frame size: expected {height * width * 3}, got {frame_image.size}")
-#     # frame_image = frame_image.reshape((height, width, 3))
-
-#     # Get ARGB buffer
-#     buffer = fig.canvas.tostring_argb()
-#     # Convert to a NumPy array and reshape it to (height, width, 4)
-#     frame_image = np.frombuffer(buffer, dtype=np.uint8).reshape((height, width, 4))
-#     # Convert from ARGB to RGB by dropping the alpha channel
-#     frame_image = frame_image[..., 1:]
-
-#     # Close the figure to free up memory
-#     plt.close(fig)
-
-#     # Ensure that frame_image and combined_frame are the same size before assignment
-#     if frame_image.shape[0] != frame_height or frame_image.shape[1] != frame_width * 2:
-#         raise ValueError(f"Frame size mismatch: expected ({frame_height}, {frame_width * 2}), but got {frame_image.shape[:2]}")
-
-#     return frame_image

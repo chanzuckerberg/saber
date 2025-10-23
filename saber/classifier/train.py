@@ -36,12 +36,11 @@ def run(
     
     # Load model weights if Fine-Tuning
     if model_weights:
+        # Freeze all parameters except classifier
         model.load_state_dict(torch.load(model_weights, weights_only=True))
-
-        # # Freeze all parameters except classifier
-        #     for name, param in model.named_parameters():
-        #         if 'classifier' not in name:
-        #             param.requires_grad = False
+        for name, param in model.named_parameters():
+            if 'classifier' not in name:
+                param.requires_grad = False
 
         optimizer = AdamW(model.parameters(), lr=1e-5, weight_decay=0.01)
     else: # Start with Higher Learning Rate if not Fine-Tuning
@@ -72,21 +71,26 @@ def run(
     # Save Model Config
     model_config = {
         'model': {
-            'backbone': backbone,
             'model_size': model_size,
             'num_classes': num_classes,
+            'classes': get_class_names(train_path),
             'weights': os.path.abspath(os.path.join(trainer.results_path, 'best_model.pth')),
-            'classes': get_class_names(train_path)            
         },
+        # 'labels': {
+            # TODO: Save Labels and Values as Separate Key
+        # }
+        'data': {
+            'train': train_path,
+            'validate': validate_path
+        },
+        # 'amg': {
+        #     # TODO: Log the AMG Parameters from the Training Zarr File
+        # },
         'optimizer': {
             'optimizer': optimizer.__class__.__name__,
             'scheduler': scheduler.__class__.__name__,
             'loss_fn': loss_fn.__class__.__name__
         },
-        'data': {
-            'train': train_path,
-            'validate': validate_path
-        }
     }
 
     with open(f'{trainer.results_path}/model_config.yaml', 'w') as f:
@@ -129,7 +133,7 @@ def train_commands(func):
         click.option("--num-classes", type=click.IntRange(min=2), default=2, 
                     help="Number of classes to train for - background + Nclasses\n(2 is binary classification)."),
         click.option("--backbone", default="SAM2",
-                    type=click.Choice(['ConvNeXt', 'SwinTransformer', 'SAM2', 'cryoDinoV2'], case_sensitive=False),
+                    type=click.Choice(['ConvNeXt', 'SwinTransformer', 'SAM2'], case_sensitive=False),
                     help="Backbone to use for training."),
         click.option("--model-size", default="large",
                     type=click.Choice(['tiny', 'small', 'base', 'large'], case_sensitive=False),

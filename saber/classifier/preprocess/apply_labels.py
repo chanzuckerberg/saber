@@ -197,13 +197,14 @@ class SABERLabelConverter:
                 )
         
         # Save metadata at root level
-        root.attrs['label_mapping'] = label_mapping
-        
-        # Save class names in order by index
-        class_names = [''] * len(label_mapping)
-        for label, idx in label_mapping.items():
-            class_names[idx] = label
-        root.attrs['class_names'] = class_names
+        root.attrs['labels'] = label_mapping
+
+        # This Attributes is redundants with 'labels' above        
+        # # Save class names in order by index
+        # class_names = [''] * len(label_mapping)
+        # for label, idx in label_mapping.items():
+        #     class_names[idx] = label
+        # root.attrs['class_names'] = class_names
     
     def print_label_summary(self, label_mapping: Dict[str, int]):
         """
