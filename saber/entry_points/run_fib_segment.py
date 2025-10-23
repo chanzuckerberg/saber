@@ -23,7 +23,7 @@ def fib_options(func):
                       help="Spacing between slices to Segment"),
         click.option("--nframes", type=int, required=False, default=None,
                       help="Number of frames to propagate in video segmentation"),
-        click.option('--scale-factor', type=float, required=False, default=None,
+        click.option('--scale-factor', type=float, required=False, default=1,
                       help='Scale Factor to Downsample Images. If not provided, no downsampling will be performed.'),
     ]
     for option in reversed(options):  # Add options in reverse order to preserve order in CLI
@@ -49,6 +49,10 @@ def fib(
     """
     Segment a Fib Volume
     """
+
+    print(f'\nStarting Fib Segmentation for the following input: {input}')
+    print(f'Segmentations will be performed every {ini_depth} slices for ±{nframes} frames')
+    print(f'Output Masks will be saved to: {output}')
 
     # Read the Fib Volume
     volume = read_fib_volume(input, scale_factor)

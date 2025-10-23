@@ -34,8 +34,6 @@ class generalSegmenter(saber3Dsegmenter):
         if self.inference_state is None:
             self.inference_state = self.video_predictor.create_inference_state_from_tomogram(vol)
 
-        import pdb; pdb.set_trace()
-
         # Set Masks - Right now this is external
         self.masks = masks
 
@@ -61,7 +59,6 @@ class generalSegmenter(saber3Dsegmenter):
         vol_masks, video_segments = self._propagate_and_filter(
             vol, self.masks, captured_scores, mask_shape,
             filter_segmentation=self.bound_segmentation,
-            show_segmentations=show_segmentations
         )
 
         # Remove hook and Reset Inference State
