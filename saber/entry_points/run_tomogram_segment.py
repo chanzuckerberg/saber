@@ -154,7 +154,7 @@ def tomograms(
     # Prepare tasks (same format as your existing code)
     tasks = [
         (root.get_run(id), voxel_size, tomo_alg, seg_name,
-         seg_session_id, slab_thickness, num_slabs,
+         seg_session_id, slab_thickness, num_slabs, delta_z,
          display_segmentation)
         for id in run_ids
     ]
@@ -175,7 +175,7 @@ def tomograms(
 
     # Create a gallery of the tomograms
     galleries.create_png_gallery(
-        f'gallery_sessionID_{seg_session_id}/frames',
+        f'{seg_name}_gallery/frames',
     )
 
 # Segment a Single Tomogram
@@ -247,6 +247,7 @@ def segment_tomogram_parallel(
     segmentation_session_id: str,
     slab_thickness: int,
     num_slabs: int,
+    delta_z: int,
     display_segmentation: bool,
     gpu_id,     # Added by GPUPool
     models      # Added by GPUPool
@@ -266,7 +267,7 @@ def segment_tomogram_parallel(
         segmentation_name=segmentation_name,
         segmentation_session_id=segmentation_session_id,
         slab_thickness=slab_thickness,
-        num_slabs=num_slabs,
+        num_slabs=num_slabs, delta_z=delta_z,
         display_segmentation=display_segmentation,
         segmenter=segmenter,
         gpu_id=gpu_id

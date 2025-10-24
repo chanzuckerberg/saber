@@ -38,11 +38,12 @@ def extract_sam2_candidates(
     models      # Added by GPUPool
     ):
 
-    # Get the Global Zarr Writer
-    zwriter = zarr_writer.get_zarr_writer(output)
-
     # Use pre-loaded segmenter
     segmenter = models['segmenter']
+
+    # Get the Global Zarr Writer
+    zwriter = zarr_writer.get_zarr_writer(output)
+    zwriter.set_dict_attr('amg', segmenter.amg_params)
 
     # Get Tomogram
     vol = readers.tomogram(run, voxel_size, tomogram_algorithm)
@@ -85,8 +86,8 @@ def extract_sam2_candidates(
 @click.command(context_settings={"show_default": True}, name='prep3d')
 @slurm_submit.copick_commands
 @slurm_submit.sam2_inputs
-@click.option('--output', type=str, required=False, help="Path to the output Zarr file.", 
-              default = 'training_data.zarr')
+@click.option("-o", "--output", type=str, required=False, help="Path to the output Zarr file.", 
+              default = 'training.zarr')
 @click.option('--num-slabs', type=int, default=1, callback=validate_odd, 
               help="Number of slabs to segment per tomogram.")
 def prepare_tomogram_training(

@@ -1,16 +1,4 @@
-from saber.classifier.datasets import singleZarrDataset, multiZarrDataset, augment
-from saber.classifier.trainer import ClassifierTrainer
-from saber.classifier.models import common
-from saber.utils import io, slurm_submit
-
-from torch.optim.lr_scheduler import CosineAnnealingLR
-import torch, click, yaml, os, zarr, json
-from torch.utils.data import DataLoader
-from monai.losses import FocalLoss
-from monai.transforms import Compose
-from torch.optim import AdamW
-from tqdm import tqdm
-import torch.nn as nn
+import click
 
 @click.group()
 @click.pass_context
@@ -23,10 +11,21 @@ def run(
     num_epochs: int,
     batch_size: int,
     num_classes: int,
-    backbone: str,
-    model_size: str,
     model_weights: str,
     ):
+    from saber.classifier.datasets import singleZarrDataset, multiZarrDataset, augment
+    from saber.classifier.trainer import ClassifierTrainer
+    from saber.classifier.models import common
+    from saber.utils import io, slurm_submit
+
+    from torch.optim.lr_scheduler import CosineAnnealingLR
+    import torch, click, yaml, os, zarr, json
+    from torch.utils.data import DataLoader
+    from monai.losses import FocalLoss
+    from monai.transforms import Compose
+    from torch.optim import AdamW
+    from tqdm import tqdm
+    import torch.nn as nn
 
     # Set device
     device = io.get_available_devices()
@@ -73,12 +72,9 @@ def run(
         'model': {
             'model_size': model_size,
             'num_classes': num_classes,
-            'classes': get_class_names(train_path),
             'weights': os.path.abspath(os.path.join(trainer.results_path, 'best_model.pth')),
         },
-        # 'labels': {
-            # TODO: Save Labels and Values as Separate Key
-        # }
+        'labels': get_class_names(train_path),
         'data': {
             'train': train_path,
             'validate': validate_path
@@ -132,12 +128,6 @@ def train_commands(func):
                     help="Number of epochs to train for."),
         click.option("--num-classes", type=click.IntRange(min=2), default=2, 
                     help="Number of classes to train for - background + Nclasses\n(2 is binary classification)."),
-        click.option("--backbone", default="SAM2",
-                    type=click.Choice(['ConvNeXt', 'SwinTransformer', 'SAM2'], case_sensitive=False),
-                    help="Backbone to use for training."),
-        click.option("--model-size", default="large",
-                    type=click.Choice(['tiny', 'small', 'base', 'large'], case_sensitive=False),
-                    help="Model size to use for training."),
         click.option("--batch-size", type=int, default=32, 
                     help="Batch size for training."),
         click.option("--model-weights", type=str, default=None,
@@ -155,15 +145,12 @@ def train(
     num_epochs: int,
     num_classes: int,
     batch_size: int,
-    backbone: str,
-    model_size: str,
     model_weights: str,
     ):
     """
     Train a Classifier.
     """
-
-    run(train, validate, num_epochs, batch_size, num_classes, backbone, model_size, model_weights)
+    run(train, validate, num_epochs, batch_size, num_classes, model_weights)
 
 @click.command(context_settings={"show_default": True})
 @train_commands
@@ -173,8 +160,6 @@ def train_slurm(
     num_epochs: int,
     num_classes: int,
     batch_size: int,
-    backbone: str,
-    model_size: str,
     model_weights: str,
     ):
     """
@@ -187,9 +172,7 @@ def train_slurm(
         --validate {validate} \\
         --num-epochs {num_epochs} \\
         --num-classes {num_classes} \\
-        --batch-size {batch_size} \\
-        --backbone {backbone} \\
-        --model-size {model_size}"""
+        --batch-size {batch_size} """
 
     if model_weights:
         command += f" --model-weights {model_weights}"
@@ -204,6 +187,7 @@ def train_slurm(
 
 
 def get_class_names(zarr_path: str):
+    import zarr
     """
     Get the class names from the Zarr file.
     The class names are stored as a string in the Zarr file.
@@ -214,7 +198,7 @@ def get_class_names(zarr_path: str):
     zfile = zarr.open(zarr_path, mode='r')
 
     # Get the class names
-    class_names = zfile.attrs['class_names']
+    class_names = zfile.attrs['labels']
     
     # convert to dict
     return {i: name for i, name in enumerate(class_names)}

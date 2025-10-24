@@ -1,6 +1,6 @@
+from saber.sam2 import tomogram_predictor, automask_parameters as amg
 import saber.filters.estimate_thickness as estimate_thickness
 from saber.visualization import classifier as viz
-from saber.sam2 import tomogram_predictor
 from saber.utils import preprocessing
 import saber.filters.masks as filters
 from saber import pretrained_weights
@@ -59,19 +59,21 @@ class saber2Dsegmenter:
         self.sam2.eval()
 
         # Build Mask Generator
+        self.amg_params = amg.get_default()        
         self.mask_generator = SAM2AutomaticMaskGenerator(
             model=self.sam2,
-            points_per_side=32,        
-            points_per_batch=64,            
-            pred_iou_thresh=0.7,
-            stability_score_thresh=0.92,
-            stability_score_offset=0.7,
-            crop_n_layers=2,                # 1
-            box_nms_thresh=0.7,
-            crop_n_points_downscale_factor=2,
-            use_m2m=True,
-            multimask_output=True,
+            points_per_side=self.amg_params['npoints'],        
+            points_per_batch=self.amg_params['points_per_batch'],            
+            pred_iou_thresh=self.amg_params['pred_iou_thresh'],
+            stability_score_thresh=self.amg_params['stability_score_thresh'],
+            stability_score_offset=self.amg_params['stability_score_offset'],
+            crop_n_layers=self.amg_params['crop_n_layers'],                # 1
+            box_nms_thresh=self.amg_params['box_nms_thresh'],
+            crop_n_points_downscale_factor=self.amg_params['crop_n_points_downscale_factor'],
+            use_m2m=self.amg_params['use_m2m'],
+            multimask_output=self.amg_params['multimask_output'],
         )  
+        self.amg_params['sam2_cfg'] = sam2_cfg
 
         # Add Mask Filtering to Generator
         self.mask_generator = fmask.FilteredSAM2MaskGenerator(

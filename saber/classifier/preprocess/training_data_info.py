@@ -2,7 +2,7 @@ import click, zarr, json
 
 
 @click.command(context_settings={"show_default": True})
-@click.option("--input", type=str, required=True, 
+@click.option("-i", "--input", type=str, required=True, 
               help="Path to the Zarr file.")
 def class_info(input):
     """
