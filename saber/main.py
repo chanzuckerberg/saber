@@ -3,8 +3,7 @@ from saber.classifier.cli import classifier_routines as classifier
 from saber.entry_points.run_low_pass_filter import cli as filter3d
 from saber.analysis.analysis_cli import methods as analysis
 from saber.entry_points.run_analysis import cli as save
-from saber.pretrained_weights import cli as download
-from saber.utils.importers import cli as importers
+from saber import cli_context
 import click
 try:
     from saber.gui.base.zarr_gui import gui
@@ -12,7 +11,7 @@ try:
 except Exception as e:
     gui_available = False
 
-@click.group()
+@click.group(context_settings=cli_context)
 def routines():
     """SABER ⚔️ -- Segment Anything Based Electron tomography Recognition."""
     pass
@@ -27,7 +26,7 @@ routines.add_command(segment)
 routines.add_command(save)
 
 ## TODO: Add Routines for Slurm CLI. 
-@click.group()
+@click.group(context_settings=cli_context)
 def slurm_routines():
     """Slurm CLI for SABER⚔️."""
     pass

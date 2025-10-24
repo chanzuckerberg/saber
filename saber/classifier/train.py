@@ -13,25 +13,23 @@ def run(
     num_classes: int,
     model_weights: str,
     ):
-    from saber.classifier.datasets import singleZarrDataset, multiZarrDataset, augment
     from saber.classifier.trainer import ClassifierTrainer
     from saber.classifier.models import common
-    from saber.utils import io, slurm_submit
 
     from torch.optim.lr_scheduler import CosineAnnealingLR
-    import torch, click, yaml, os, zarr, json
-    from torch.utils.data import DataLoader
     from monai.losses import FocalLoss
-    from monai.transforms import Compose
     from torch.optim import AdamW
-    from tqdm import tqdm
-    import torch.nn as nn
+    from saber.utils import io
+    import torch, yaml, os
 
     # Set device
     device = io.get_available_devices()
 
+    # Get the Model Size from the Train Zarr File
+    # TODO: Implement this
+
     # Initialize model
-    model = common.get_classifier_model(backbone, num_classes, model_size)
+    model = common.get_classifier_model('SAM2', num_classes, model_size)
     
     # Load model weights if Fine-Tuning
     if model_weights:
@@ -93,6 +91,9 @@ def run(
         yaml.dump(model_config, f, default_flow_style=False, sort_keys=False, indent=2)
 
 def get_dataloaders(zarr_path: str, mode: str, batch_size: int):
+    from saber.classifier.datasets import singleZarrDataset, multiZarrDataset, augment
+    from torch.utils.data import DataLoader
+    from monai.transforms import Compose
 
     # Select appropriate transforms
     if mode == 'train':
@@ -162,6 +163,7 @@ def train_slurm(
     batch_size: int,
     model_weights: str,
     ):
+    from saber.utils import slurm_submit
     """
     Train a Classifier.
     """
