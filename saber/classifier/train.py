@@ -10,7 +10,6 @@ def run(
     validate_path: str,
     num_epochs: int,
     batch_size: int,
-    num_classes: int,
     model_weights: str,
     ):
     from saber.classifier.trainer import ClassifierTrainer
@@ -25,11 +24,10 @@ def run(
     # Set device
     device = io.get_available_devices()
 
-    # Get the Model Size from the Train Zarr File
-    # TODO: Implement this
-
-    # Initialize model
-    model = common.get_classifier_model('SAM2', num_classes, model_size)
+    # Get the Model Size from the Train Zarr File and Initialize 
+    (labels, amg_params) = get_metadata(train_path)
+    num_classes = len(labels)
+    model = common.get_classifier_model('SAM2', num_classes, amg_params['sam2_cfg'])
     
     # Load model weights if Fine-Tuning
     if model_weights:
@@ -62,32 +60,31 @@ def run(
     trainer.results_path = 'results'
     trainer.train(train_loader, val_loader, num_epochs)
 
-    # # Save results to Zarr
+    # Save results to Zarr
     trainer.save_results(train_path, validate_path)
 
     # Save Model Config
     model_config = {
         'model': {
-            'model_size': model_size,
             'num_classes': num_classes,
             'weights': os.path.abspath(os.path.join(trainer.results_path, 'best_model.pth')),
         },
-        'labels': get_class_names(train_path),
+        'labels': labels,
         'data': {
             'train': train_path,
             'validate': validate_path
         },
-        # 'amg': {
-        #     # TODO: Log the AMG Parameters from the Training Zarr File
-        # },
+        'amg_params': amg_params,
         'optimizer': {
             'optimizer': optimizer.__class__.__name__,
             'scheduler': scheduler.__class__.__name__,
-            'loss_fn': loss_fn.__class__.__name__
+            'loss_fn': loss_fn.__class__.__name__, 
+            'num_epochs': num_epochs,
+            'batch_size': batch_size
         },
     }
 
-    with open(f'{trainer.results_path}/model_config.yaml', 'w') as f:
+    with open(f'results/model_config.yaml', 'w') as f:
         yaml.dump(model_config, f, default_flow_style=False, sort_keys=False, indent=2)
 
 def get_dataloaders(zarr_path: str, mode: str, batch_size: int):
@@ -118,6 +115,8 @@ def get_dataloaders(zarr_path: str, mode: str, batch_size: int):
 
     return loader, dataset
 
+#################################### CLI Commands ####################################
+
 def train_commands(func):
     """Decorator to add common options to a Click command."""
     options = [
@@ -127,12 +126,10 @@ def train_commands(func):
                     help="Path to the Zarr(s) file. In the format 'file.zarr' or 'file1.zarr,file2.zarr'."),
         click.option("--num-epochs", type=int, default=10, 
                     help="Number of epochs to train for."),
-        click.option("--num-classes", type=click.IntRange(min=2), default=2, 
-                    help="Number of classes to train for - background + Nclasses\n(2 is binary classification)."),
         click.option("--batch-size", type=int, default=32, 
                     help="Batch size for training."),
         click.option("--model-weights", type=str, default=None,
-                    help="Path to the model weights to use for training.")
+                    help="Model weights used for fine-tuning.")
     ]
     for option in reversed(options):  # Add options in reverse order to preserve correct order
         func = option(func)
@@ -144,14 +141,13 @@ def train(
     train: str,
     validate: str,
     num_epochs: int,
-    num_classes: int,
     batch_size: int,
     model_weights: str,
     ):
     """
     Train a Classifier.
     """
-    run(train, validate, num_epochs, batch_size, num_classes, model_weights)
+    run(train, validate, num_epochs, batch_size, model_weights)
 
 @click.command(context_settings={"show_default": True})
 @train_commands
@@ -159,7 +155,6 @@ def train_slurm(
     train: str,
     validate: str,
     num_epochs: int,
-    num_classes: int,
     batch_size: int,
     model_weights: str,
     ):
@@ -173,7 +168,6 @@ def train_slurm(
         --train {train} \\
         --validate {validate} \\
         --num-epochs {num_epochs} \\
-        --num-classes {num_classes} \\
         --batch-size {batch_size} """
 
     if model_weights:
@@ -188,7 +182,7 @@ def train_slurm(
     )
 
 
-def get_class_names(zarr_path: str):
+def get_metadata(zarr_path: str):
     import zarr
     """
     Get the class names from the Zarr file.
@@ -201,6 +195,7 @@ def get_class_names(zarr_path: str):
 
     # Get the class names
     class_names = zfile.attrs['labels']
-    
+    labels = {i: name for i, name in enumerate(class_names)}
+    amp_params = zfile.attrs['amg']
     # convert to dict
-    return {i: name for i, name in enumerate(class_names)}
+    return labels, amp_params

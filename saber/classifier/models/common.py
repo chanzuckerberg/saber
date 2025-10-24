@@ -12,9 +12,7 @@ def get_classifier_model(backbone, num_classes, model_size, deviceID=0, **kwargs
         raise ValueError(f"Unsupported backbone type: {backbone}")
     
     # cryoDinoV2 has a fixed backbone, so omit model_size
-    if backbone == 'cryoDinoV2':
-        return  model_map[backbone](num_classes=num_classes, **kwargs)
-    elif backbone == 'SAM2': # We Need to Pass the Device ID to SAM2 Image Encoder
+    if backbone == 'SAM2': # We Need to Pass the Device ID to SAM2 Image Encoder
         kwargs['deviceID'] = deviceID
         return  model_map[backbone](num_classes=num_classes, **kwargs)
     else:
