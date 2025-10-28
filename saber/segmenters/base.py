@@ -1,5 +1,5 @@
-from saber.sam2 import tomogram_predictor, automask_parameters as amg
 import saber.filters.estimate_thickness as estimate_thickness
+from saber.sam2 import tomogram_predictor, automask as amg
 from saber.visualization import classifier as viz
 from saber.utils import preprocessing
 import saber.filters.masks as filters
@@ -12,19 +12,8 @@ from tqdm import tqdm
 import numpy as np
 import torch
 
-# Suppress Warning for Post Processing from SAM2 - 
-# Explained Here: https://github.com/facebookresearch/sam2/blob/main/INSTALL.md
-import warnings
-warnings.filterwarnings("ignore", category=UserWarning)
-from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
-from saber.sam2 import filtered_automatic_mask_generator as fmask
-from sam2.build_sam import build_sam2
-
-# Silence SAM2 loggers
-import logging
-logging.getLogger("sam2").setLevel(logging.ERROR)  # Only show errors
-
 # Suppress SAM2 Logger 
+import logging
 logger = logging.getLogger()
 logger.disabled = True
 
@@ -53,34 +42,6 @@ class saber2Dsegmenter:
         self.device = io.get_available_devices(deviceID)
         self.deviceID = deviceID
 
-        # Build SAM2 model
-        (cfg, checkpoint) = pretrained_weights.get_sam2_checkpoint(sam2_cfg)
-        self.sam2 = build_sam2(cfg, checkpoint, device=self.device, apply_postprocessing = True)
-        self.sam2.eval()
-
-        # Build Mask Generator
-        self.amg_params = amg.get_default()        
-        self.mask_generator = SAM2AutomaticMaskGenerator(
-            model=self.sam2,
-            points_per_side=self.amg_params['npoints'],        
-            points_per_batch=self.amg_params['points_per_batch'],            
-            pred_iou_thresh=self.amg_params['pred_iou_thresh'],
-            stability_score_thresh=self.amg_params['stability_score_thresh'],
-            stability_score_offset=self.amg_params['stability_score_offset'],
-            crop_n_layers=self.amg_params['crop_n_layers'],                # 1
-            box_nms_thresh=self.amg_params['box_nms_thresh'],
-            crop_n_points_downscale_factor=self.amg_params['crop_n_points_downscale_factor'],
-            use_m2m=self.amg_params['use_m2m'],
-            multimask_output=self.amg_params['multimask_output'],
-        )  
-        self.amg_params['sam2_cfg'] = sam2_cfg
-
-        # Add Mask Filtering to Generator
-        self.mask_generator = fmask.FilteredSAM2MaskGenerator(
-            base_generator=self.mask_generator,
-            min_area_filter=self.min_mask_area,
-        )
-
         # Initialize Domain Expert Classifier for Filtering False Positives
         if classifier:
             self.classifier = classifier
@@ -89,10 +50,22 @@ class saber2Dsegmenter:
             # Also set classifier to eval mode
             if hasattr(self.classifier, 'eval'):
                 self.classifier.eval()
+
+            # Get AMG Config from Classifier 
+            cfg = self.classifier.config['amg_params']
         else:
             self.classifier = None
             self.target_class = None
             self.batchsize = None
+
+            # Use Default AMG Config
+            cfg = amg.get_default()
+            cfg['cfg'] = sam2_cfg
+
+        # Build SAM2 Automatic Mask Generator
+        self.mask_generator = amg.build_amg(
+            cfg, self.min_mask_area, device=self.device
+        )
 
         # Initialize Image and Masks
         self.image = None

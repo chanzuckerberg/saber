@@ -67,7 +67,8 @@ def slab(
 @click.option("--run-ids", type=str, required=False, default=None,
               help="(Optional) RunIDs to Process. If more than one is provided, results will be displayed immediately. If None, all runs in the copick project will be processed.")
 @slurm_submit.classifier_inputs
-@click.option('--multi-slab', type=str, default=1, help="Number of slabs and spacing for multi-slab segmentation provided as thickness or thickness,spacing. Default spacing is 30 if ignored.")
+@click.option('--multi-slab', type=str, default=1, 
+              help="Number of slabs and spacing for multi-slab segmentation provided as thickness or thickness,spacing. (Default spacing is 30 if ignored)")
 @slurm_submit.sam2_inputs
 def tomograms(
     config: str,

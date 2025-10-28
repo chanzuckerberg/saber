@@ -1,10 +1,5 @@
-from saber.visualization import galleries, classifier as classviz
-from saber.classifier.models.predictor import Predictor
-from saber.filters import masks as mask_filters
-from saber.utils import slurm_submit
-import zarr, click, torch, os
-from tqdm import tqdm
-import numpy as np
+from saber import cli_context
+import click
 
 def predict_commands(func):
     """Decorator to add common options to a Click command."""
@@ -13,16 +8,16 @@ def predict_commands(func):
                     help="Path to the model weights file."),
         click.option("--model-config", type=str, required=True, 
                     help="Path to the model config file."),
-        click.option("--input", type=str, required=True, 
+        click.option("-i", "--input", type=str, required=True, 
                     help="Path to the Zarr file."),
-        click.option("--output", type=str, required=True, 
+        click.option("-o", "--output", type=str, required=True, 
                     help="Path to the output Zarr file."),                 
     ]
     for option in reversed(options):  # Add options in reverse order to preserve correct order
         func = option(func)
     return func
 
-@click.command(context_settings={"show_default": True})
+@click.command(context_settings=cli_context)
 @predict_commands
 def predict(model_weights, model_config, input, output):
     """
@@ -32,7 +27,16 @@ def predict(model_weights, model_config, input, output):
 
 # Run the prediction
 def run_predict(model_weights, model_config, input, output, save_results = False):
-        # Load model    
+
+    from saber.visualization import galleries, classifier as classviz
+    from saber.classifier.models.predictor import Predictor
+    from saber.filters import masks as mask_filters
+    from saber.utils import slurm_submit
+    import zarr, torch, os
+    from tqdm import tqdm
+    import numpy as np
+
+    # Load model    
     if os.path.exists(model_weights) and os.path.exists(model_config):
         predictor = Predictor(model_config, model_weights)
         num_classes = predictor.config['model']['num_classes']
@@ -103,7 +107,10 @@ def masks3d_to_list(masks):
     ]
     return masks_list
 
-@click.command(context_settings={"show_default": True})
+
+### SLURM Submission Command
+
+@click.command(context_settings=cli_context)
 @predict_commands
 def predict_slurm(
     model_weights, 
