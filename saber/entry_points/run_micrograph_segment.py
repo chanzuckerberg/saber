@@ -14,7 +14,7 @@ def micrograph_options(func):
     """Decorator to add shared options for micrograph commands."""
     options = [
         click.option("-i", "--input", type=str, required=True,
-                      help="Path to Micrograph or Project, in the case of project provide the file extention (e.g. 'path/*.mrc')"),
+                      help="Path to Micrograph or Project, in the case of project provide the file extension (e.g. 'path/*.mrc')"),
         click.option("-o", "--output", type=str, required=False, default='segmentations.zarr',
                       help="Path to the output Zarr file (if input points to a folder)."),
         click.option("-tr", "--target-resolution", type=float, required=False, default=None, 
