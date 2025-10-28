@@ -52,19 +52,19 @@ class saber2Dsegmenter:
                 self.classifier.eval()
 
             # Get AMG Config from Classifier 
-            cfg = self.classifier.config['amg_params']
+            self.cfg = self.classifier.config['amg_params']
         else:
             self.classifier = None
             self.target_class = None
             self.batchsize = None
 
             # Use Default AMG Config
-            cfg = amg.get_default()
-            cfg['cfg'] = sam2_cfg
+            self.cfg = amg.get_default()
+            self.cfg['cfg'] = sam2_cfg
 
         # Build SAM2 Automatic Mask Generator
         self.mask_generator = amg.build_amg(
-            cfg, self.min_mask_area, device=self.device
+            self.cfg, self.min_mask_area, device=self.device
         )
 
         # Initialize Image and Masks

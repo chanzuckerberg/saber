@@ -276,10 +276,10 @@ class multiDepthTomoSegmenter(cryoTomoSegmenter):
         labels_sub, _ = ndi.label(sub, structure=structure)  # 0..N, 0 is bg
 
         # optional: remove small components (labels >=1 only)
-        min_area = int(getattr(self, "min_mask_area", 0) or 0) * 10 
-        if min_area > 1:
+        min_vol = int(getattr(self, "min_mask_area", 0) or 0) * 10 # scale up for 3D
+        if min_vol > 1:
             counts = np.bincount(labels_sub.ravel())
-            small = np.flatnonzero((counts < min_area) & (np.arange(counts.size) != 0))
+            small = np.flatnonzero((counts < min_vol) & (np.arange(counts.size) != 0))
             if small.size:
                 labels_sub[np.isin(labels_sub, small)] = 0
                 counts = np.bincount(labels_sub.ravel())  # recompute after zeroing
