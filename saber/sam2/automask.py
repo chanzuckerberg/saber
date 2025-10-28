@@ -39,7 +39,7 @@ def get_default() -> Dict[str, Any]:
 def build_amg(amg_params: str, min_mask_area: int, device: Optional[str] = 'cpu'):
 
     # Build SAM2 model
-    (cfg, checkpoint) = pretrained_weights.get_sam2_checkpoint(amg_params['cfg'])
+    (cfg, checkpoint) = pretrained_weights.get_sam2_checkpoint(amg_params['sam2_cfg'])
     sam2 = build_sam2(cfg, checkpoint, device=device, apply_postprocessing = True)
     sam2.eval()
 
