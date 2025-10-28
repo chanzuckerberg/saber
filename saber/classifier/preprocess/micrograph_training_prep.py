@@ -14,13 +14,13 @@ def cli(ctx):
 def micrograph_options(func):
     """Decorator to add common options to a Click command."""
     options = [
-        click.option("--input", type=str, required=True,
-                      help="Path to Micrograph or Project, in the case of project provide the file extention (e.g. 'path/*.mrc')"),
-        click.option("--output", type=str, required=False, default='training.zarr',
+        click.option("-i", "--input", type=str, required=True,
+                      help="Path to Micrograph or Project, in the case of project provide the file extension (e.g. 'path/*.mrc')"),
+        click.option("-o", "--output", type=str, required=False, default='training.zarr',
                       help="Path to the output Zarr file (if input points to a folder)."),
-        click.option("--scale-factor", type=float, required=False, default=None, 
+        click.option("-sf", "--scale-factor", type=float, required=False, default=None,
                       help="Scale Factor to Downsample Images. If not provided, no downsampling will be performed."),
-        click.option("--target-resolution", type=float, required=False, default=None, 
+        click.option("-tr", "--target-resolution", type=float, required=False, default=None,
                       help="Desired Resolution to Segment Images [Angstroms]. If not provided, no downsampling will be performed."),
     ]
     for option in reversed(options):  # Add options in reverse order to preserve correct order

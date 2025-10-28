@@ -97,11 +97,12 @@ def segment_micrograph_core(
     display_image: bool, use_sliding_window: bool,
     gpu_id, models):
 
-    # Get the Global Zarr Writer
-    zwriter = zarr_writer.get_zarr_writer(output)
-
     # Use pre-loaded segmenter
-    segmenter = models['segmenter']        
+    segmenter = models['segmenter']
+
+    # Get the Global Zarr Writer
+    zwriter = zarr_writer.get_zarr_writer(output) 
+    zwriter.set_dict_attr('amg', segmenter.amg_params)
 
     # Ensure we're on the correct GPU
     torch.cuda.set_device(gpu_id)

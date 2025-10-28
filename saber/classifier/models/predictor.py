@@ -38,9 +38,9 @@ class Predictor:
         
         # Load the model architecture with the specified number of classes
         self.model = common.get_classifier_model(
-            self.config['model']['backbone'], 
+            'SAM2', 
             self.config['model']['num_classes'], 
-            self.config['model']['model_size'],
+            self.config['amg_params']['sam2_cfg'],
             deviceID=deviceID   )
 
         # Load the model weights

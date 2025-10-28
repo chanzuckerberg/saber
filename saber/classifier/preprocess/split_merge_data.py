@@ -83,7 +83,7 @@ def split(
     return str(train_path), str(val_path)
 
 @click.command(context_settings={"show_default": True})
-@click.option("--input", type=str, required=True, 
+@click.option("-i", "--input", type=str, required=True, 
               help="Path to the Zarr file.")
 @click.option("--ratio", type=float, required=False, default=0.8, 
               help="Fraction of data to use for training.")
@@ -93,6 +93,9 @@ def split_data(input, ratio, random_seed):
     """
     Split data from a Zarr file into training and validation sets using random split.
     Creates two new zarr files for training and validation data.
+
+    Example:
+        saber classifier split-data --i data.zarr --ratio 0.8 
     """
 
     # Call the split function
@@ -145,13 +148,16 @@ def merge(inputs: List[str], output: str):
     print("Merge complete!")
 
 @click.command(context_settings={"show_default": True})
-@click.option("--inputs", type=str, required=True, multiple=True,
+@click.option("-i", "--inputs", type=str, required=True, multiple=True,
               help="Path to the Zarr file with an associated session label provided as <session_label>,<path_to_zarr_file>.")
-@click.option("--output", type=str, required=False, default='labeled.zarr',
+@click.option("-o", "--output", type=str, required=False, default='labeled.zarr',
               help="Path to the output Zarr file.")
 def merge_data(inputs: List[str], output: str):
     """
     Merge multiple Zarr files into a single Zarr file.
+
+    Example:
+        saber classifier merge-data --inputs session1,/path/to/session1.zarr --inputs session2,/path/to/session2.zarr --output merged.zarr
     """
 
     # Check if the inputs are valid
