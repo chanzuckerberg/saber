@@ -103,7 +103,7 @@ def prepare_tomogram_training(
     num_slabs: int,
     ):
     """
-    Prepare Training Data from Tomograms for a Classifier using GPUPool.
+    Prepare Training Data from Tomograms for a Classifier.
     """    
 
     print(f'\nRunning SAM2 Training Data Preparation')
