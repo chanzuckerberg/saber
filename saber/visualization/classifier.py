@@ -111,8 +111,11 @@ def _masks_to_array(masks):
     # Return a (Nx, Ny) matrix where each pixel is labeled with the mask ID
     label_matrix = np.zeros(masks[0]['segmentation'].shape, dtype=np.uint16)
     for idx, mask in enumerate(masks, start=1):
-        label_matrix[mask['segmentation'] > 0] = idx
-    
+        try:
+            label_matrix[mask['segmentation'] > 0] = mask['label']
+        except:
+            label_matrix[mask['segmentation'] > 0] = idx
+
     return label_matrix
 
 def masks_to_3d_array(masks):

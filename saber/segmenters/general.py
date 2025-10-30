@@ -59,7 +59,6 @@ class generalSegmenter(saber3Dsegmenter):
         vol_masks, video_segments = self._propagate_and_filter(
             vol, self.masks, captured_scores, mask_shape,
             filter_segmentation=self.bound_segmentation,
-            show_segmentations=show_segmentations
         )
 
         # Remove hook and Reset Inference State

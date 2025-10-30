@@ -1,6 +1,23 @@
-from typing import Dict, Any, Optional
-import zarr, threading
+from typing import Dict, Any, Optional, Mapping
+import zarr, threading, json
 import numpy as np
+
+# -----------------------------
+# JSON-safe conversion
+# -----------------------------
+def _to_jsonable(obj):
+    if isinstance(obj, np.generic):
+        return obj.item()
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    if isinstance(obj, (list, tuple)):
+        return [_to_jsonable(x) for x in obj]
+    if isinstance(obj, Mapping):
+        return {str(k): _to_jsonable(v) for k, v in obj.items()}
+    if isinstance(obj, (bool, int, float, str)) or obj is None:
+        return obj
+    # Fallback: store string repr to avoid serialization errors
+    return str(obj)
 
 # Global zarr writer instance (initialized once)
 _zarr_writer = None
@@ -35,13 +52,48 @@ class ParallelZarrWriter:
         
         # Thread-safe counter for run indexing
         self._run_counter = 0
-        self._counter_lock = threading.Lock()
+        self._lock = threading.Lock()
         
         print(f"Initialized zarr store at: {zarr_path}")
+
+    # -----------------------------
+    # Attr helpers
+    # -----------------------------
+    def set_dict_attr(
+        self,
+        key: str,
+        data: Mapping[str, Any],
+        *,
+        merge_missing: bool = False
+    ) -> None:
+        """
+        Write a dictionary to root attributes under `key`.
+
+        - If merge_missing=False: overwrite entirely.
+        - If merge_missing=True: only fill in keys that are absent.
+
+        Ensures values are JSON-serializable (numpy -> Python types).
+        """
+        safe = _to_jsonable(dict(data))
+        with self._lock:
+            if merge_missing:
+                existing = self.zroot.attrs.get(key)
+                if isinstance(existing, dict):
+                    merged = dict(existing)
+                    changed = False
+                    for k, v in safe.items():
+                        if k not in merged:
+                            merged[k] = v
+                            changed = True
+                    if changed:
+                        self.zroot.attrs[key] = merged
+                    return
+            # default: overwrite
+            self.zroot.attrs[key] = safe        
     
     def get_next_run_index(self) -> int:
         """Get the next available run index in a thread-safe manner."""
-        with self._counter_lock:
+        with self._lock:
             run_index = self._run_counter
             self._run_counter += 1
             return run_index
@@ -75,9 +127,6 @@ class ParallelZarrWriter:
             # Create group for this run - zarr handles concurrent group creation
             run_group = self.zroot.create_group(run_name)   
             
-            # Add VCP attributes to the run group
-            add_attributes(run_group, pixel_size)
-            
             # Store run metadata
             if metadata:
                 for key, value in metadata.items():
@@ -90,6 +139,8 @@ class ParallelZarrWriter:
                 dtype=image.dtype,
                 compressor=zarr.Blosc(cname='zstd', clevel=2, shuffle=2),
             )
+            # Add VCP attributes to the run group
+            add_attributes(run_group, pixel_size)            
             
             # Write masks dataset
             labels_group = run_group.create_group("labels")

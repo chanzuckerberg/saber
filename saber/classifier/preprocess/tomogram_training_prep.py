@@ -1,12 +1,13 @@
-from saber.utils import zarr_writer, parallelization, slurm_submit, io
+from saber import cli_context
+import click
+
+from saber.utils import parallelization, slurm_submit
 from saber.segmenters.loaders import base_tomosegmenter
 from saber.filters import masks as mask_filters
 from saber.classifier import validate_odd
 from saber.visualization import galleries
-from copick_utils.io import readers
-from saber.utils import io
-import copick, click
 import numpy as np
+import copick
 
 @click.group()
 @click.pass_context
@@ -37,12 +38,15 @@ def extract_sam2_candidates(
     gpu_id,     # Added by GPUPool
     models      # Added by GPUPool
     ):
-
-    # Get the Global Zarr Writer
-    zwriter = zarr_writer.get_zarr_writer(output)
+    from saber.utils import zarr_writer
+    from copick_utils.io import readers
 
     # Use pre-loaded segmenter
     segmenter = models['segmenter']
+
+    # Get the Global Zarr Writer
+    zwriter = zarr_writer.get_zarr_writer(output)
+    zwriter.set_dict_attr('amg', segmenter.amg_params)
 
     # Get Tomogram
     vol = readers.tomogram(run, voxel_size, tomogram_algorithm)
@@ -82,11 +86,11 @@ def extract_sam2_candidates(
             run_name=run.name, image=image_seg, 
             masks=masks.astype(np.uint8), pixel_size=voxel_size)
 
-@click.command(context_settings={"show_default": True}, name='prep3d')
+@click.command(context_settings=cli_context, name='prep3d')
 @slurm_submit.copick_commands
 @slurm_submit.sam2_inputs
-@click.option('--output', type=str, required=False, help="Path to the output Zarr file.", 
-              default = 'training_data.zarr')
+@click.option("-o", "--output", type=str, required=False, help="Path to the output Zarr file.", 
+              default = 'training.zarr')
 @click.option('--num-slabs', type=int, default=1, callback=validate_odd, 
               help="Number of slabs to segment per tomogram.")
 def prepare_tomogram_training(
@@ -99,7 +103,7 @@ def prepare_tomogram_training(
     num_slabs: int,
     ):
     """
-    Prepare Training Data from Tomograms for a Classifier using GPUPool.
+    Prepare Training Data from Tomograms for a Classifier.
     """    
 
     print(f'\nRunning SAM2 Training Data Preparation')

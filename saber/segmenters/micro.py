@@ -40,12 +40,11 @@ class cryoMicroSegmenter(saber2Dsegmenter):
         self.image0 = image0
         (nx, ny) = image0.shape
 
-        # (Optional)Fourier Crop the Image to the Desired Resolution
-        if not use_sliding_window and (nx > self.max_pixels or ny > self.max_pixels):
-            scale_factor =  max(nx, ny) / self.max_pixels
-            self.image0 = FourierRescale2D.run(self.image0, scale_factor)
-            (nx, ny) = self.image0.shape
-            
+        # Check to See if We Might Reach Memory Limits
+        if (nx > self.max_pixels or ny > self.max_pixels) and not use_sliding_window:
+            print(f'Image is Larger than {self.max_pixels} pixels in at least one dimension.\nCurrent Size: ({nx}, {ny})')
+            print('Consider Downsampling or Using Sliding Window Inference.')
+
         # Segment Image
         self.segment_image(
             self.image0,

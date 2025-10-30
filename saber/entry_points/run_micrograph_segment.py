@@ -1,5 +1,6 @@
 from saber.entry_points.inference_core import segment_micrograph_core
 from saber.utils import slurm_submit, parallelization, io
+from saber.segmenters.loaders import micrograph_workflow
 from saber.visualization import galleries 
 import glob, click
 import numpy as np
@@ -12,15 +13,15 @@ def cli(ctx):
 def micrograph_options(func):
     """Decorator to add shared options for micrograph commands."""
     options = [
-        click.option("--input", type=str, required=True,
-                      help="Path to Micrograph or Project, in the case of project provide the file extention (e.g. 'path/*.mrc')"),
-        click.option("--output", type=str, required=False, default='segmentations.zarr',
+        click.option("-i", "--input", type=str, required=True,
+                      help="Path to Micrograph or Project, in the case of project provide the file extension (e.g. 'path/*.mrc')"),
+        click.option("-o", "--output", type=str, required=False, default='segmentations.zarr',
                       help="Path to the output Zarr file (if input points to a folder)."),
-        click.option("--target-resolution", type=float, required=False, default=None, 
+        click.option("-tr", "--target-resolution", type=float, required=False, default=None, 
               help="Desired Resolution to Segment Images [Angstroms]. If not provided, no downsampling will be performed."),
-        click.option("--scale-factor", type=float, required=False, default=None, 
+        click.option("-sf", "--scale-factor", type=float, required=False, default=None, 
               help="Scale Factor to Downsample Images. If not provided, no downsampling will be performed."),
-        click.option("--sliding-window", type=bool, required=False, default=False,
+        click.option("-sw", "--sliding-window", type=bool, required=False, default=False,
               help="Use Sliding Window for Segmentation"),
     ]
     for option in reversed(options):  # Add options in reverse order to preserve order in CLI

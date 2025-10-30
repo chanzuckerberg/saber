@@ -1,21 +1,22 @@
-#!/usr/bin/env python3
+from __future__ import annotations
+
 """
 SABER Label Converter - Convert JSON annotations to SABER zarr format
 """
-
-from saber.utils.zarr_writer import add_attributes
 from typing import Dict, List, Optional, Set
-import json, click, zarr, sys
+from saber import cli_context
 from pathlib import Path
 from tqdm import tqdm
-import numpy as np
+import click
 
 class SABERLabelConverter:
+
     def __init__(self):
         self.label_to_index = {}
         self.discovered_labels = set()
     
     def discover_labels(self, json_path: Path) -> Set[str]:
+        import json
         """
         Discover all unique labels from JSON file.
         """
@@ -39,6 +40,7 @@ class SABERLabelConverter:
             labels: Set of discovered labels
             custom_order: Optional list specifying custom order (if provided, only these labels are included)
         """
+
         mapping = {'background': 0}  # Background is always 0
         
         if custom_order:
@@ -66,6 +68,8 @@ class SABERLabelConverter:
         For 3D mask arrays, tries to determine the unique value for each mask.
         Returns a dict mapping mask_value -> mask_array
         """
+        import numpy as np
+
         mask_dict = {}
         
         for i, mask in enumerate(masks_3d):
@@ -91,6 +95,10 @@ class SABERLabelConverter:
         """
         Convert JSON annotations to labeled zarr format compatible with SABER dataloader.
         """
+        from saber.utils.zarr_writer import add_attributes
+        import numpy as np
+        import json, zarr
+
         # Load JSON annotations
         with open(json_path, 'r') as f:
             frame_labels = json.load(f)
@@ -102,6 +110,10 @@ class SABERLabelConverter:
         # Create output zarr
         store = zarr.DirectoryStore(str(output_path))
         root = zarr.group(store=store, overwrite=True)
+
+        # Copy over AMG metadata if present
+        if 'amg' in sam2_data.attrs:
+            root.attrs['amg'] = dict(sam2_data.attrs['amg'])
         
         # Process each run_id
         for run_id in tqdm(frame_labels.keys()):
@@ -197,13 +209,7 @@ class SABERLabelConverter:
                 )
         
         # Save metadata at root level
-        root.attrs['label_mapping'] = label_mapping
-        
-        # Save class names in order by index
-        class_names = [''] * len(label_mapping)
-        for label, idx in label_mapping.items():
-            class_names[idx] = label
-        root.attrs['class_names'] = class_names
+        root.attrs['labels'] = label_mapping
     
     def print_label_summary(self, label_mapping: Dict[str, int]):
         """
@@ -219,7 +225,7 @@ class SABERLabelConverter:
         click.echo("="*50)
 
 
-@click.command()
+@click.command(context_settings=cli_context)
 @click.option('--input', '-i', required=True, type=click.Path(exists=True, path_type=Path),
               help='SAM2 zarr file with masks')
 @click.option('--labels', '-l', default='labels.json', type=click.Path(exists=True, path_type=Path),
@@ -241,6 +247,14 @@ def labeler(input, labels, output, classes):
         saber_label_converter.py -i sam2_masks.zarr --classes lysosomes,npc,edge
     """
     
+    run_labeler(input, labels, output, classes)
+
+def run_labeler(input, labels, output, classes):
+    """
+    Run the labeler.
+    """
+    import sys
+
     # Initialize converter
     converter = SABERLabelConverter()
     
@@ -279,7 +293,6 @@ def labeler(input, labels, output, classes):
     except Exception as e:
         click.echo(f"❌ Error: {e}", err=True)
         sys.exit(1)
-
 
 if __name__ == "__main__":
     labeler()

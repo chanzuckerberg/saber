@@ -9,7 +9,7 @@ from tqdm import tqdm
 @click.group(name="save")
 @click.pass_context
 def cli(ctx):
-    """Command-line interface for organelle processing and analysis."""
+    """Save organelle coordinates and statistics (size-distribution) from segmentations."""
     pass
 
 def common_options(func):

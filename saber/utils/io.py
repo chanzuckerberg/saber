@@ -1,4 +1,4 @@
-import mrcfile, skimage, torch
+import mrcfile, skimage, torch, yaml, os, copick
 from skimage import io as skio
 import numpy as np
 
@@ -123,3 +123,27 @@ def mask3D_to_tiff(mask3D, output_path: str):
     Convert a 3D mask to a TIFF file.
     """
     skio.imsave(output_path, mask3D)
+
+# Create a custom dumper that uses flow style for lists only.
+class InlineListDumper(yaml.SafeDumper):
+    def represent_list(self, data):
+        node = super().represent_list(data)
+        node.flow_style = True  # Use inline style for lists
+        return node
+
+def save_copick_metadata(config, metadict: dict, output_path: str):
+    """
+    Save CoPick inference metadata to a text file.
+    """
+
+    root = copick.from_file(config)
+    overlay_root = root.config.overlay_root
+    if overlay_root[:8] == 'local://': overlay_root = overlay_root[8:]
+    basepath = os.path.join(overlay_root, 'logs')
+    os.makedirs(basepath, exist_ok=True)
+
+    fname_path = os.path.join(basepath, output_path)
+
+    InlineListDumper.add_representer(list, InlineListDumper.represent_list)
+    with open(fname_path, 'w') as f:
+        yaml.dump(metadict, f, Dumper=InlineListDumper, default_flow_style=False, sort_keys=False)

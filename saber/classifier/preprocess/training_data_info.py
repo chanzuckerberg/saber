@@ -1,13 +1,17 @@
-import click, zarr, json
+from saber import cli_context
+import click
 
-
-@click.command(context_settings={"show_default": True})
-@click.option("--input", type=str, required=True, 
+@click.command(context_settings=cli_context)
+@click.option("-i", "--input", type=str, required=True, 
               help="Path to the Zarr file.")
 def class_info(input):
     """
     Print information about the classes in a readable format.
     """
+    print_class_info(input)
+
+def print_class_info(input):
+    import zarr, json
 
     # Load the Zarr file
     zarr_root = zarr.open(input, mode='r')
