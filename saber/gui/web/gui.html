@@ -29,6 +29,8 @@
                 </div>
             </div>
             <div class="controls">
+                <button class="button secondary" id="rotateBtn" onclick="toggleRotation()">Rotate: OFF</button>
+                <span style="width: 20px;"></span>
                 <button class="button secondary" onclick="importAnnotations()">Import JSON</button>
                 <button class="button" onclick="exportAnnotations()">Export JSON</button>
                 <span style="flex: 1;"></span>
@@ -68,6 +70,14 @@
             <tr><td>H</td><td>Toggle help</td></tr>
             <tr><td>Click mask</td><td>Accept (left) / Select (right)</td></tr>
         </table>
+        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd;">
+            <h4 style="margin-bottom: 10px;">Features</h4>
+            <ul style="font-size: 14px; line-height: 1.6;">
+                <li><strong>Rotation Button:</strong> Toggle 90° rotation for all images</li>
+                <li><strong>Remove Class:</strong> Removes class and all annotations across all runs</li>
+                <li><strong>Press 'R':</strong> Remove highlighted mask from assigned class</li>
+            </ul>
+        </div>
         <button class="button" style="margin-top: 15px; width: 100%;" onclick="toggleHelp()">Close</button>
     </div>
 

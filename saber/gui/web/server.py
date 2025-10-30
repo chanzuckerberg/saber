@@ -47,16 +47,20 @@ def create_app(data_path: str, output_path: str = None):
 
 
 def extract_mask_values(masks: np.ndarray) -> tuple:
-    """Extract mask values from 2D or 3D mask array"""
+    """Extract mask values from 2D or 3D mask array - vectorized for speed"""
     mask_values = []
     extracted_masks = []
     
     if len(masks.shape) == 2:
-        # 2D label map - extract individual masks
+        # 2D label map - extract individual masks using vectorized operations
         unique_values = np.unique(masks[masks > 0])
-        for val in unique_values:
-            mask_values.append(float(val))
-            extracted_masks.append((masks == val).astype(np.float32))
+        num_masks = len(unique_values)
+        
+        # Vectorized mask extraction
+        masks_3d = masks[np.newaxis, :, :] == unique_values[:, np.newaxis, np.newaxis]
+        extracted_masks = [masks_3d[i].astype(np.float32) for i in range(num_masks)]
+        mask_values = unique_values.tolist()
+        
     elif len(masks.shape) == 3:
         # Stack of masks - extract values
         for i, mask in enumerate(masks):
@@ -68,6 +72,34 @@ def extract_mask_values(masks: np.ndarray) -> tuple:
             extracted_masks.append(mask.astype(np.float32))
     
     return mask_values, extracted_masks
+
+
+def apply_rotation(image: np.ndarray, masks: np.ndarray) -> tuple:
+    """Apply 90-degree rotation to image and masks"""
+    if image.ndim == 2:
+        # 2D grayscale
+        image = np.rot90(image, k=-1)
+        if masks.ndim == 2:
+            masks = np.rot90(masks, k=-1)
+        else:
+            masks = np.rot90(masks, k=-1, axes=(1, 2))
+    elif image.ndim == 3 and image.shape[0] == 3:
+        # 2D RGB
+        image = np.rot90(image, k=-1, axes=(1, 2))
+        if masks.ndim == 2:
+            masks = np.rot90(masks, k=-1)
+        else:
+            masks = np.rot90(masks, k=-1, axes=(1, 2))
+    elif image.ndim == 3:
+        # 3D volume
+        image = np.rot90(image, k=-1, axes=(1, 2))
+        if isinstance(masks, list):
+            masks = [np.rot90(m, k=-1, axes=(1, 2)) if m.ndim == 3 
+                    else np.rot90(m, k=-1) for m in masks]
+        else:
+            masks = np.rot90(masks, k=-1, axes=(-2, -1))
+    
+    return image, masks
 
 
 def run_server(data_path: str, 
@@ -116,6 +148,9 @@ def run_server(data_path: str,
             return jsonify({'error': 'Run not found'}), 404
         
         try:
+            # Check if rotation requested
+            apply_rotate = request.args.get('rotate', 'false').lower() == 'true'
+            
             # Read data
             image = app.zarr_root[run_id][0][:]
             try:
@@ -123,31 +158,27 @@ def run_server(data_path: str,
             except:
                 masks = app.zarr_root[run_id]['masks'][:]
             
-            # Handle 2D/3D cases
+            # Apply rotation if requested
+            if apply_rotate:
+                image, masks = apply_rotation(image, masks)
+            
+            # Handle different image dimensions
             if image.ndim == 2:
-                nx, ny = image.shape
-                if nx < ny:
-                    image = image.T
-                    masks = np.swapaxes(masks, -2, -1)
+                # 2D grayscale - ensure proper orientation
+                pass
             elif image.ndim == 3 and image.shape[0] == 3:
-                # RGB image
-                _, nx, ny = image.shape
-                if nx < ny:
-                    image = np.transpose(image, (0, 2, 1))
-                    masks = np.swapaxes(masks, -2, -1)
-                # Convert to grayscale for simplicity
+                # RGB image - convert to grayscale for web display
                 image = np.mean(image, axis=0)
             elif image.ndim == 3:
-                # 3D volume - take middle slice for 2D view
-                nz, nx, ny = image.shape
-                if nx < ny:
-                    image = np.swapaxes(image, 1, 2)
-                    masks = np.swapaxes(masks, -2, -1)
-                # Take middle slice
+                # 3D volume - take middle slice for 2D web view
+                nz = image.shape[0]
                 mid_z = nz // 2
                 image = image[mid_z]
                 if len(masks.shape) == 4:
                     masks = masks[:, mid_z, :, :]
+                elif len(masks.shape) == 3 and masks.shape[0] > 1:
+                    # Assume first dim is Z
+                    masks = masks[mid_z, :, :]
             
             # Extract mask values
             mask_values, extracted_masks = extract_mask_values(masks)

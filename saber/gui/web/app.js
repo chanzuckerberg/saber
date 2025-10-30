@@ -30,7 +30,9 @@ let state = {
     leftMaskVisibility: {},
     rightMaskVisibility: {},
     lastClickPos: null,
-    currentMaskIndex: 0
+    currentMaskIndex: 0,
+    applyRotation: false,
+    boundaryCache: {}
 };
 
 // Initialize the application
@@ -86,7 +88,8 @@ async function selectRun(index) {
     
     // Load run data
     try {
-        const response = await fetch(`/api/runs/${state.currentRunId}`);
+        const url = `/api/runs/${state.currentRunId}${state.applyRotation ? '?rotate=true' : ''}`;
+        const response = await fetch(url);
         const data = await response.json();
         state.currentData = data;
         
@@ -95,6 +98,9 @@ async function selectRun(index) {
         
         // Initialize mask visibility
         initializeMaskVisibility();
+        
+        // Clear caches
+        state.boundaryCache = {};
         
         // Load existing annotations for this run
         loadExistingAnnotations();
@@ -163,6 +169,33 @@ function loadExistingAnnotations() {
 function renderCanvases() {
     renderCanvas('leftCanvas', true);
     renderCanvas('rightCanvas', false);
+}
+
+// Get boundary points for mask (with caching)
+function getBoundaryPoints(mask, width, height, maskValue) {
+    if (state.boundaryCache[maskValue]) {
+        return state.boundaryCache[maskValue];
+    }
+    
+    const points = [];
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            if (mask[y][x] > 0.5) {
+                const isBoundary = 
+                    (x === 0 || mask[y][x-1] <= 0.5) ||
+                    (x === width-1 || mask[y][x+1] <= 0.5) ||
+                    (y === 0 || mask[y-1][x] <= 0.5) ||
+                    (y === height-1 || mask[y+1][x] <= 0.5);
+                
+                if (isBoundary) {
+                    points.push({x, y});
+                }
+            }
+        }
+    }
+    
+    state.boundaryCache[maskValue] = points;
+    return points;
 }
 
 // Render a single canvas
@@ -250,35 +283,16 @@ function renderCanvas(canvasId, isLeft) {
         
         // Draw boundary if this mask is highlighted
         if (maskValue === state.highlightedMaskValue && visibility[maskValue]) {
-            drawMaskBoundary(ctx, mask, width, height);
+            const boundaryPoints = getBoundaryPoints(mask, width, height, maskValue);
+            ctx.fillStyle = 'white';
+            const thickness = 3; 
+            boundaryPoints.forEach(point => {
+                ctx.fillRect(point.x - Math.floor(thickness/2), 
+                           point.y - Math.floor(thickness/2), 
+                           thickness, thickness);
+            });
         }
     });
-}
-
-// Draw mask boundary
-function drawMaskBoundary(ctx, mask, width, height) {
-    ctx.strokeStyle = 'white';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    
-    // Simple boundary detection
-    for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-            if (mask[y][x] > 0.5) {
-                // Check if it's a boundary pixel
-                const isBoundary = 
-                    (x === 0 || mask[y][x-1] <= 0.5) ||
-                    (x === width-1 || mask[y][x+1] <= 0.5) ||
-                    (y === 0 || mask[y-1][x] <= 0.5) ||
-                    (y === height-1 || mask[y+1][x] <= 0.5);
-                
-                if (isBoundary) {
-                    ctx.fillStyle = 'white';
-                    ctx.fillRect(x, y, 1, 1);
-                }
-            }
-        }
-    }
 }
 
 // Class management functions
@@ -332,14 +346,19 @@ function removeClass() {
     // Free up color index
     state.usedColorIndices.delete(colorIndex);
     
-    // Remove all annotations for this class
+    // Remove all annotations for this class across all runs
     Object.keys(state.annotations).forEach(runId => {
         const runAnnotations = state.annotations[runId];
-        Object.keys(runAnnotations).forEach(maskValue => {
-            if (runAnnotations[maskValue] === className) {
-                delete runAnnotations[maskValue];
-                
-                // Move mask back to left panel
+        const toRemove = [];
+        Object.entries(runAnnotations).forEach(([maskValue, cls]) => {
+            if (cls === className) {
+                toRemove.push(maskValue);
+            }
+        });
+        toRemove.forEach(maskValue => {
+            delete runAnnotations[maskValue];
+            // Move mask back to left panel if current run
+            if (runId === state.currentRunId) {
                 const maskVal = parseFloat(maskValue);
                 state.leftMaskVisibility[maskVal] = true;
                 state.rightMaskVisibility[maskVal] = false;
@@ -394,6 +413,24 @@ function renderClassList() {
     // Update remove button state
     const removeBtn = document.getElementById('removeClassBtn');
     removeBtn.disabled = !state.selectedClass;
+}
+
+// Toggle rotation
+async function toggleRotation() {
+    state.applyRotation = !state.applyRotation;
+    
+    const rotateBtn = document.getElementById('rotateBtn');
+    rotateBtn.textContent = state.applyRotation ? 'Rotate: ON' : 'Rotate: OFF';
+    rotateBtn.classList.toggle('active', state.applyRotation);
+    
+    // Clear cache and reload current run
+    state.boundaryCache = {};
+    
+    if (state.currentRunId) {
+        await selectRun(state.currentRunIndex);
+    }
+    
+    updateStatus(`Rotation ${state.applyRotation ? 'enabled' : 'disabled'}`);
 }
 
 // Canvas interaction
@@ -533,7 +570,6 @@ function removeHighlightedMask() {
     }
     
     const maskValue = state.highlightedMaskValue;
-    const maskIndex = state.maskValueToIndex[maskValue];
     
     // Check if mask is on right panel
     if (!state.rightMaskVisibility[maskValue]) {
@@ -565,7 +601,7 @@ function removeHighlightedMask() {
     state.highlightedMaskValue = null;
     
     renderCanvases();
-    updateStatus(`Removed mask ${maskValue} from ${className}`);
+    updateStatus(`Removed mask ${maskValue} from ${className || 'unknown class'}`);
 }
 
 // Import/Export functions
@@ -596,10 +632,6 @@ async function importAnnotations() {
             const text = await file.text();
             const loadedAnnotations = JSON.parse(text);
             
-            console.log('Loaded annotations:', loadedAnnotations);
-            console.log('Current run:', state.currentRunId);
-            console.log('Available mask values:', Object.keys(state.maskValueToIndex));
-            
             // Update annotations
             Object.assign(state.annotations, loadedAnnotations);
             
@@ -613,9 +645,6 @@ async function importAnnotations() {
                 });
             });
             
-            console.log('Found classes:', Array.from(allClasses));
-            console.log('Total annotations:', annotationCount);
-            
             // Add any missing classes
             allClasses.forEach(className => {
                 if (!state.classes[className]) {
@@ -626,32 +655,28 @@ async function importAnnotations() {
                         colorIndex: colorIndex,
                         masks: []
                     };
-                    console.log(`Created class: ${className} with color index ${colorIndex}`);
                 }
             });
             
             renderClassList();
             
-            // If we have annotations for the current run, load them
+            // Reload current run or switch to first annotated run
             if (loadedAnnotations[state.currentRunId]) {
-                console.log('Loading annotations for current run:', loadedAnnotations[state.currentRunId]);
                 loadExistingAnnotations();
                 renderCanvases();
-                updateStatus(`Imported ${annotationCount} annotations for ${Object.keys(loadedAnnotations).length} runs`);
+                updateStatus(`Imported ${annotationCount} annotations`);
             } else {
-                // Find first run with annotations and switch to it
                 const firstRunWithAnnotations = Object.keys(loadedAnnotations)[0];
                 if (firstRunWithAnnotations) {
                     const runIndex = state.runs.indexOf(firstRunWithAnnotations);
                     if (runIndex >= 0) {
-                        console.log('Switching to run with annotations:', firstRunWithAnnotations);
                         await selectRun(runIndex);
                         updateStatus(`Imported annotations and switched to ${firstRunWithAnnotations}`);
                         return;
                     }
                 }
                 renderCanvases();
-                updateStatus(`Imported ${annotationCount} annotations (current run has no annotations)`);
+                updateStatus(`Imported ${annotationCount} annotations`);
             }
         } catch (error) {
             console.error('Failed to import annotations:', error);
