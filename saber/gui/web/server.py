@@ -194,7 +194,8 @@ def run_server(data_path: str,
             return jsonify(response_data)
             
         except Exception as e:
-            logger.error(f"Error loading run {run_id}: {e}")
+            sanitized_run_id = run_id.replace('\r', '').replace('\n', '')
+            logger.error(f"Error loading run {sanitized_run_id}: {e}")
             logger.error(traceback.format_exc())
             return jsonify({'error': str(e)}), 500
     
