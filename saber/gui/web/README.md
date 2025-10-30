@@ -17,7 +17,7 @@ A web-based annotation GUI for SAM2 segmentations with Dask integration for dist
 
 ```bash
 # Start the server with local data
-annotation-gui --data /path/to/zarr/data --port 8080
+saber web --data /path/to/zarr/data
 ```
 
 ### Remote Access
@@ -27,16 +27,16 @@ annotation-gui --data /path/to/zarr/data --port 8080
 ssh -L 9090:localhost:9090 user@remote-server
 
 # On remote server
-annotation-gui --data /data/zarr --port 9090
+saber web --data /data/zarr
 
 # Access at http://localhost:9090
 ```
 
 ## Command-Line Options
 
-- `--data, -d`: Path to local data directory (required)
+- `--input, -i`: Path to local data directory (required)
 - `--output, -o`: Output path for saved annotations
-- `--port, -p`: Port to run the server on (default: 8080)
+- `--port`: Port to run the server on (default: 9090)
 - `--host, -h`: Host to bind to (default: 0.0.0.0)
 - `--dask-scheduler`: Dask scheduler address
 - `--workers, -w`: Number of Dask workers (default: 4)
