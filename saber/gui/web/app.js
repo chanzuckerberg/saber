@@ -32,7 +32,9 @@ let state = {
     lastClickPos: null,
     currentMaskIndex: 0,
     applyRotation: false,
-    boundaryCache: {}
+    boundaryCache: {},
+    dataCache: {},  // Cache loaded run data
+    prefetchPromise: null  // Track prefetch operations
 };
 
 // Initialize the application
@@ -285,7 +287,7 @@ function renderCanvas(canvasId, isLeft) {
         if (maskValue === state.highlightedMaskValue && visibility[maskValue]) {
             const boundaryPoints = getBoundaryPoints(mask, width, height, maskValue);
             ctx.fillStyle = 'white';
-            const thickness = 3; 
+            const thickness = 2; // Increase this value for thicker outline
             boundaryPoints.forEach(point => {
                 ctx.fillRect(point.x - Math.floor(thickness/2), 
                            point.y - Math.floor(thickness/2), 

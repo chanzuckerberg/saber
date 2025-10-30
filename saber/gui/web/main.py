@@ -12,10 +12,10 @@ logger = logging.getLogger(__name__)
 
 
 @click.command(context_settings={"show_default": True},name='web')
-@click.option('--data', '-d', type=click.Path(exists=True), required=True,
-              help='Path to local data directory containing Zarr files')
+@click.option('--input', '-i', type=click.Path(exists=True), required=True,
+              help='Path to local input directory containing Zarr files')
 @click.option('--output', '-o', type=click.Path(), default=None,
-              help='Output path for saved annotations')
+              help='Path to local output directory for saved annotations')
 @click.option('--port', '-p', type=int, default=9090,
               help='Port to run the web server on')
 @click.option('--host', '-h', type=str, default='localhost',
@@ -26,19 +26,19 @@ logger = logging.getLogger(__name__)
               help='Number of Dask workers to spawn (if no scheduler provided)')
 @click.option('--debug/--no-debug', default=False,
               help='Run in debug mode')
-def main(data, output, port, host, dask_scheduler, workers, debug):
+def main(input, output, port, host, dask_scheduler, workers, debug):
     """
     SABER Annotation GUI Web Server
     
     Examples:
         # Basic usage
-        python main.py --data /path/to/zarr/files --port 8080
+        python main.py --input /path/to/zarr/files --port 8080
         
         # With output directory
-        python main.py --data /data --output /annotations
+        python main.py --input /data --output /annotations
         
         # With external Dask cluster
-        python main.py --data /data --dask-scheduler tcp://scheduler:8786
+        python main.py --input /data --dask-scheduler tcp://scheduler:8786
         
         # Remote access via SSH tunnel
         ssh -L 8080:localhost:8080 user@remote-server
@@ -46,7 +46,7 @@ def main(data, output, port, host, dask_scheduler, workers, debug):
     """
     
     logger.info(f"Starting SABER Annotation GUI Server...")
-    logger.info(f"Data directory: {data}")
+    logger.info(f"Data directory: {input}")
     logger.info(f"Output directory: {output or 'Current directory'}")
     logger.info(f"Server: http://{host}:{port}")
     
@@ -57,7 +57,7 @@ def main(data, output, port, host, dask_scheduler, workers, debug):
     
     # Run the server
     run_server(
-        data_path=data,
+        data_path=input,
         output_path=output,
         host=host,
         port=port,
