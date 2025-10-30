@@ -12,7 +12,6 @@ from flask import Flask, render_template, jsonify, request, send_from_directory
 from flask_cors import CORS
 import zarr
 import numpy as np
-import cv2
 from typing import Dict, List, Optional, Any
 
 logger = logging.getLogger(__name__)
@@ -243,12 +242,3 @@ def run_server(data_path: str,
     # Run the server
     logger.info(f"Starting server at http://{host}:{port}")
     app.run(host=host, port=port, debug=debug)
-
-
-if __name__ == '__main__':
-    # For testing
-    import sys
-    if len(sys.argv) > 1:
-        run_server(sys.argv[1], port=8080, debug=True)
-    else:
-        print("Usage: python server.py /path/to/data")

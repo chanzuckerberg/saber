@@ -2,16 +2,15 @@
 Command-line entry point for the SABER Annotation GUI Web Server
 """
 
-import click
-import logging
-from pathlib import Path
 from saber.gui.web.server import run_server
+from saber import cli_context
+import click, logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-@click.command(context_settings={"show_default": True},name='web')
+@click.command(context_settings=cli_context,name='web')
 @click.option('--input', '-i', type=click.Path(exists=True), required=True,
               help='Path to local input directory containing Zarr files')
 @click.option('--output', '-o', type=click.Path(), default=None,

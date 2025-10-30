@@ -41,6 +41,9 @@ dependencies = [
     "umap-learn",
     "torch-ema",
     "copick-utils",
+    "flask",
+    "flask-cors",
+    "dask[distributed]"    
 ]
 
 [project.optional-dependencies]
@@ -50,12 +53,6 @@ gui = [
 ]
 materials = [
     "hyperspy"
-]
-web = [
-    "flask",
-    "flask-cors",
-    "Pillow",
-    "dask[distributed]"
 ]
 
 [tool.hatch.metadata]
