@@ -51,7 +51,7 @@ def micrographs(
     if target_resolution is not None and scale_factor is not None:
         raise ValueError("Please provide either target_resolution OR scale_factor input, not both.")
 
-    # Get All Files in the Directory
+    # Get All Files in the Directoryclear
     files = glob.glob(input)
     if len(files) == 0:
         raise ValueError(f"No files found in {input}")
