@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SABER Annotation GUI</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>SABER Annotation GUI</h1>
+        <button class="button" onclick="toggleHelp()">Help (H)</button>
+    </div>
+
+    <div class="container">
+        <div class="panel left-panel">
+            <div class="run-list" id="runList"></div>
+        </div>
+
+        <div class="middle-panel">
+            <div class="canvas-container">
+                <div class="canvas-wrapper">
+                    <div class="canvas-label">Unprocessed Masks</div>
+                    <canvas id="leftCanvas"></canvas>
+                </div>
+                <div class="canvas-wrapper">
+                    <div class="canvas-label">Accepted Masks</div>
+                    <canvas id="rightCanvas"></canvas>
+                </div>
+            </div>
+            <div class="controls">
+                <button class="button secondary" id="rotateBtn" onclick="toggleRotation()">Rotate: OFF</button>
+                <span style="width: 20px;"></span>
+                <button class="button secondary" onclick="importAnnotations()">Import JSON</button>
+                <button class="button" onclick="exportAnnotations()">Export JSON</button>
+                <span style="flex: 1;"></span>
+                <span id="maskInfo" style="font-size: 14px; color: #666;"></span>
+            </div>
+        </div>
+
+        <div class="panel right-panel">
+            <div class="class-manager">
+                <h3>Segmentation Classes</h3>
+                <div class="add-class-form">
+                    <input type="text" id="classNameInput" placeholder="Enter class name...">
+                    <button onclick="addClass()">Add</button>
+                </div>
+                <div class="class-list" id="classList"></div>
+                <button class="remove-class-btn" id="removeClassBtn" onclick="removeClass()" disabled>
+                    Remove Selected Class
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="status-bar">
+        <span id="statusLeft">Ready</span>
+        <span id="statusRight">Use A/D to navigate runs, W/S to switch classes</span>
+    </div>
+
+    <div class="overlay" id="overlay" onclick="toggleHelp()"></div>
+    <div class="shortcuts-help" id="shortcutsHelp">
+        <h3>Keyboard Shortcuts</h3>
+        <table>
+            <tr><td>A / ←</td><td>Previous run</td></tr>
+            <tr><td>D / →</td><td>Next run</td></tr>
+            <tr><td>W / ↑</td><td>Previous class</td></tr>
+            <tr><td>S / ↓</td><td>Next class</td></tr>
+            <tr><td>R</td><td>Remove selected mask</td></tr>
+            <tr><td>H</td><td>Toggle help</td></tr>
+            <tr><td>Click mask</td><td>Accept (left) / Select (right)</td></tr>
+        </table>
+        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd;">
+            <h4 style="margin-bottom: 10px;">Features</h4>
+            <ul style="font-size: 14px; line-height: 1.6;">
+                <li><strong>Rotation Button:</strong> Toggle 90° rotation for all images</li>
+                <li><strong>Remove Class:</strong> Removes class and all annotations across all runs</li>
+                <li><strong>Press 'R':</strong> Remove highlighted mask from assigned class</li>
+            </ul>
+        </div>
+        <button class="button" style="margin-top: 15px; width: 100%;" onclick="toggleHelp()">Close</button>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

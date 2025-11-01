@@ -41,6 +41,9 @@ dependencies = [
     "umap-learn",
     "torch-ema",
     "copick-utils",
+    "flask",
+    "flask-cors",
+    "dask[distributed]"    
 ]
 
 [project.optional-dependencies]
