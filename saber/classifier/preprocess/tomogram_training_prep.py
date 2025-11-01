@@ -46,7 +46,7 @@ def extract_sam2_candidates(
 
     # Get the Global Zarr Writer
     zwriter = zarr_writer.get_zarr_writer(output)
-    zwriter.set_dict_attr('amg', segmenter.amg_params)
+    zwriter.set_dict_attr('amg', segmenter.cfg)
 
     # Get Tomogram
     vol = readers.tomogram(run, voxel_size, tomogram_algorithm)
@@ -55,6 +55,7 @@ def extract_sam2_candidates(
         return
     
     # Hard coded conversion from Angstroms to nanometers
+    # Copick tomograms are typically stored in Angstroms
     voxel_size /= 10
     
     # Process Multiple Slabs or Single Slab at the Center of the Volume

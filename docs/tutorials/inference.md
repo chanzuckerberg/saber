@@ -74,11 +74,11 @@ saber segment tomograms \
     --config copick_config.json \
     --model-config results/model_config.yaml \
     --model-weights results/best_model.pth \
-    --segmentation-name organelles \
+    --seg-name organelles \
     --target-class 2 
 ```
 
-When no `--run-ids` are provided, SABER will segment the entire project and save the results under provided `--segmentation-name` and `--segmentation-session-id` flags (by default, the `user-id` will always be saber. )
+When no `--run-ids` are provided, SABER will segment the entire project and save the results under provided `--seg-name` and `--seg-session-id` flags (by default, the `user-id` will always be saber. )
 
 **Parameters**:
 
@@ -88,8 +88,8 @@ When no `--run-ids` are provided, SABER will segment the entire project and save
 | `--voxel-size` | Resolution of tomograms to process | `10` |
 | `--tomo-alg` | Reconstruction algorithm to query | `denoised` |
 | `--slab-thickness` | Thickness of slab for initial segmentation | `10` |
-| `--segmentation-name` | Name of segmentation session | `organelles` |
-| `--segmentation-session-id` | Session ID for segmentation mask | `1` |
+| `--seg-name` | Name of segmentated object | `organelles` |
+| `--seg-session-id` | Session ID for segmentation mask | `1` |
 | `--model-config` | Path to classifier model config | `results/model_config.yaml` |
 | `--model-weights` | Path to trained classifier weights | `results/best_model.pth` |
 | `--target-class` | Target class (-1 for semantic, N>0 for instance) | `2` |

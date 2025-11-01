@@ -60,7 +60,7 @@ class saber2Dsegmenter:
 
             # Use Default AMG Config
             self.cfg = amg.get_default()
-            self.cfg['cfg'] = sam2_cfg
+            self.cfg['sam2_cfg'] = sam2_cfg
 
         # Build SAM2 Automatic Mask Generator
         self.mask_generator = amg.build_amg(
@@ -238,9 +238,9 @@ class saber3Dsegmenter(saber2Dsegmenter):
         super().__init__(sam2_cfg, deviceID, classifier, target_class, min_mask_area, min_rel_box_size)
 
         # Build Tomogram Predictor (VOS Optimized)
-        (cfg, checkpoint) = pretrained_weights.get_sam2_checkpoint(sam2_cfg)
+        (cfg, checkpoint) = pretrained_weights.get_sam2_checkpoint(self.cfg['sam2_cfg'])
         self.video_predictor = tomogram_predictor.TomogramSAM2Adapter(cfg, checkpoint, self.device)  
-
+        
         # Initialize Inference State
         self.inference_state = None
 
