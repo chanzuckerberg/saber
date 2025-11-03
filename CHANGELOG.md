@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.9.0](https://github.com/chanzuckerberg/saber/compare/saber-em-v0.8.0...saber-em-v0.9.0) (2025-11-01)
+
+
+### ✨ Features
+
+* Add a web gui ([b3bdd7a](https://github.com/chanzuckerberg/saber/commit/b3bdd7a9c02b3eb413074a5c83893d9d1c9e84e3))
+* instance multi-slab 3D seg, storage of AMG parameters ([9fa4ff6](https://github.com/chanzuckerberg/saber/commit/9fa4ff6bb067d2f69e7ea762c696cb3e80438f7f))
+* major restructure to 3D segmentation workflow ([66957ea](https://github.com/chanzuckerberg/saber/commit/66957ea15e66916ca87d919681518e95bc047450))
+
+
+### 🐞 Bug Fixes
+
+* make sure amg cfg is properly allocated during inference ([9af571c](https://github.com/chanzuckerberg/saber/commit/9af571c67282f95e5d79fd62b4383902d1f76679))
+* make sure amg cfg is properly allocated during inference ([25d3eac](https://github.com/chanzuckerberg/saber/commit/25d3eaccd6690e0796d8fa3f57cca72a1bed3165))
+* Make sure AMG Parameters are properly read for Tomography Workflow ([d167af2](https://github.com/chanzuckerberg/saber/commit/d167af243e0f1e7c72dc439dbfc435c5248429db))
+* make sure amg parameters are properly referenced for tomo workflow ([bc8a1b6](https://github.com/chanzuckerberg/saber/commit/bc8a1b6a06fd3746474883b4ecd604688bad62cc))
+
 ## [0.8.0](https://github.com/chanzuckerberg/saber/compare/saber-em-v0.7.0...saber-em-v0.8.0) (2025-10-03)
 
 
