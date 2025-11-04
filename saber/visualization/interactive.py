@@ -1,10 +1,52 @@
 from IPython.display import display, Javascript
-from saber.visualization import embeddings
 from matplotlib.colors import ListedColormap
+from saber.visualization import embeddings
 import matplotlib.pyplot as plt
 import ipywidgets as widgets
 import numpy as np
 import torch
+
+def view_3d_seg(vol, mask3d):
+    """
+    Create an interactive widget to slice through tomogram and segmentation.
+    
+    Args:
+        vol: 3D tomogram array (z, y, x)
+        mask3d: 3D segmentation mask array (z, y, x)
+    """
+    
+    def view_slice(slice_idx):
+        fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+        
+        # Display tomogram slice
+        axes[0].imshow(vol[slice_idx], cmap='gray')
+        axes[0].set_title(f'Tomogram - Slice {slice_idx}')
+        axes[0].axis('off')
+        
+        # Display mask overlay
+        axes[1].imshow(vol[slice_idx], cmap='gray')
+        axes[1].imshow(mask3d[slice_idx], alpha=0.5, cmap='jet')
+        axes[1].set_title(f'Overlay - Slice {slice_idx}')
+        axes[1].axis('off')
+        
+        plt.tight_layout()
+        plt.show()
+    
+    # Create slider widget
+    slider = widgets.IntSlider(
+        value=vol.shape[0] // 2,  # Start at middle slice
+        min=0,
+        max=vol.shape[0] - 1,
+        step=1,
+        description='Slice:',
+        continuous_update=False,  # Only update when slider is released
+        orientation='horizontal',
+        readout=True,
+        readout_format='d'
+    )
+    
+    # Link slider to view function
+    widgets.interact(view_slice, slice_idx=slider)
 
 # Function to handle keyboard events (left/right arrow keys)
 def on_key_event(event):
