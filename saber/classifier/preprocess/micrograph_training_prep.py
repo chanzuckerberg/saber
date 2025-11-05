@@ -1,10 +1,6 @@
-from saber.entry_points.inference_core import segment_micrograph_core
-from saber.utils import parallelization, slurm_submit, io
-from saber.segmenters.loaders import base_microsegmenter
-from saber.visualization import galleries
-import click, glob, os, shutil
-from skimage import io as sio
-from tqdm import tqdm
+from saber.utils import slurm_submit
+from saber import cli_context
+import click
 
 @click.group()
 @click.pass_context
@@ -27,7 +23,7 @@ def micrograph_options(func):
         func = option(func)
     return func
 
-@click.command(context_settings={"show_default": True}, name='prep2d')
+@click.command(context_settings=cli_context, name='prep2d')
 @micrograph_options
 @slurm_submit.sam2_inputs
 def prepare_micrograph_training(
@@ -39,7 +35,21 @@ def prepare_micrograph_training(
     ):
     """
     Prepare Training Data from Micrographs for a Classifier.
-    """    
+    """ 
+
+    prep2d(input, output, target_resolution, scale_factor, sam2_cfg)
+
+def prep2d(input, output, target_resolution, scale_factor, sam2_cfg):
+    """
+    Prepare Training Data from Micrographs for a Classifier.
+    """
+    from saber.entry_points.inference_core import segment_micrograph_core
+    from saber.segmenters.loaders import base_microsegmenter
+    from saber.utils import parallelization, io
+    from saber.visualization import galleries
+    from skimage import io as sio
+    import glob, os, shutil
+
 
     # Check to Make Sure Only One of the Inputs is Provided
     if target_resolution is not None and scale_factor is not None:

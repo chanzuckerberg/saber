@@ -1,21 +1,22 @@
-from saber.classifier.datasets import singleZarrDataset, augment
-from saber.classifier.trainer import ClassifierTrainer
-from saber.classifier.models import common
-from torch.utils.data import DataLoader
-from monai.transforms import Compose
-import torch, click, yaml, os, csv
-import torch.nn.functional as F
-from saber.utils import io
-from tqdm import tqdm
-import numpy as np
+from __future__ import annotations
 
-@click.group()
-@click.pass_context
-def cli(ctx):
-    pass
+from saber.classifier.trainer import ClassifierTrainer
+from saber import cli_context
+import click
 
 class ClassifierEvaluator(ClassifierTrainer):
+    """
+    Classifier Evaluator class for evaluating a classifier model on a test set.
+    """
+    
     def __init__(self, dataset, model, device, beta=1.0, include_background=False):
+        """
+        Initialize the Classifier Evaluator.
+        """
+        from saber.classifier.datasets import singleZarrDataset, augment
+        from torch.utils.data import DataLoader
+        from monai.transforms import Compose
+        import torch
         
         dummy_loss_fn = lambda x, y: torch.tensor(0.0)
         
@@ -49,6 +50,9 @@ class ClassifierEvaluator(ClassifierTrainer):
         Returns:
             dict: Dictionary with evaluation metrics
         """        
+        from tqdm import tqdm
+        import torch, os, csv
+        
         self.model.eval()
         all_preds = []
         all_labels = []
@@ -98,7 +102,7 @@ class ClassifierEvaluator(ClassifierTrainer):
 
         return results
 
-@click.command(context_settings={"show_default": True})
+@click.command(context_settings=cli_context)
 @click.option('--test', type=str, required=True, help='Path to the Test Zarr File')
 @click.option('--model-config', type=str, required=True, help='Path to the Model Config')
 @click.option('--model-weights', type=str, required=True, help='Path to the Model Weights')
@@ -108,6 +112,19 @@ def evaluate(test, model_config, model_weights, beta, output):
     """
     Evaluate a classifier model on a test set.
     """
+
+    run_evaluate(test, model_config, model_weights, beta, output)
+
+def run_evaluate(test, model_config, model_weights, beta, output):
+    """
+    Run Evaluation on an a Test Zarr file with a trained classifier.
+    
+    Args:
+    """
+    from saber.classifier.models import common
+    from saber.utils import io
+    import yaml, os, torch
+
 
     # Check if test file exists
     if not os.path.exists(test):

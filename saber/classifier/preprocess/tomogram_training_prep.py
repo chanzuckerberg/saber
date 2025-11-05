@@ -1,13 +1,7 @@
+from saber.classifier import validate_odd
+from saber.utils import slurm_submit
 from saber import cli_context
 import click
-
-from saber.utils import parallelization, slurm_submit
-from saber.segmenters.loaders import base_tomosegmenter
-from saber.filters import masks as mask_filters
-from saber.classifier import validate_odd
-from saber.visualization import galleries
-import numpy as np
-import copick
 
 @click.group()
 @click.pass_context
@@ -16,7 +10,8 @@ def cli(ctx):
 
 # Base segmentation function that processes a given slab using the segmenter.
 def segment(segmenter, vol, slab_thickness, zSlice):
-    
+    from saber.filters import masks as mask_filters
+
     # Produce Initialial Segmentations with SAM2
     segmenter.segment_slab(
         vol, slab_thickness, display_image=False, zSlice=zSlice)
@@ -40,6 +35,7 @@ def extract_sam2_candidates(
     ):
     from saber.utils import zarr_writer
     from copick_utils.io import readers
+    import numpy as np
 
     # Use pre-loaded segmenter
     segmenter = models['segmenter']
@@ -105,7 +101,21 @@ def prepare_tomogram_training(
     ):
     """
     Prepare Training Data from Tomograms for a Classifier.
-    """    
+    """
+
+    prep3d(config, voxel_size, tomo_alg, slab_thickness, output, sam2_cfg, num_slabs)
+
+
+def prep3d(config, voxel_size, tomo_alg, slab_thickness, output, sam2_cfg, num_slabs):
+    """
+    Prepare Training Data from Tomograms for a Classifier.
+    """ 
+
+    from saber.segmenters.loaders import base_tomosegmenter
+    from saber.visualization import galleries
+    from saber.utils import parallelization
+    import copick
+
 
     print(f'\nRunning SAM2 Training Data Preparation')
     print(f'Algorithm: {tomo_alg}, Voxel-Size: {voxel_size} Å')
