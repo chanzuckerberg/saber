@@ -1,14 +1,18 @@
-from saber.segmenters.tomo import cryoTomoSegmenter, multiDepthTomoSegmenter
-from saber.entry_points.inference_core import segment_tomogram_core
-from saber.segmenters.loaders import tomogram_workflow
 import saber.utils.slurm_submit as slurm_submit
-import copick, click, torch, os, matplotlib
-from saber.utils import parallelization, io
-from saber.classifier.models import common
-from saber.visualization import galleries 
-from copick_utils.io import readers
 from saber import cli_context
-import os
+import click
+
+#     from saber.segmenters.tomo import cryoTomoSegmenter, multiDepthTomoSegmenter
+# from saber.entry_points.inference_core import segment_tomogram_core
+# from saber.segmenters.loaders import tomogram_workflow
+# import saber.utils.slurm_submit as slurm_submit
+# import copick, click, torch, os, matplotlib
+# from saber.utils import parallelization, io
+# from saber.classifier.models import common
+# from saber.visualization import galleries 
+# from copick_utils.io import readers
+# from saber import cli_context
+# import os
 
 # Segment a Single Tomogram
 def segment_tomogram_interactive(
@@ -30,6 +34,11 @@ def segment_tomogram_interactive(
     """
     Interactive version - loads models fresh and can display results
     """
+
+    from saber.segmenters.tomo import cryoTomoSegmenter, multiDepthTomoSegmenter
+    from saber.entry_points.inference_core import segment_tomogram_core
+    from saber.classifier.models import common
+    import torch
     
     print(f"Processing {run.name} on GPU {gpu_id}")
     
@@ -87,6 +96,7 @@ def segment_tomogram_parallel(
     """
     Parallel version - uses pre-loaded models from GPUPool
     """
+    from saber.entry_points.inference_core import segment_tomogram_core
     
     # Use pre-loaded segmenter
     segmenter = models['segmenter']
@@ -120,6 +130,9 @@ def run_slab_seg(
     Segment a single slab of a tomogram.
     """
     from saber.segmenters.tomo import cryoTomoSegmenter
+    from saber.classifier.models import common
+    from copick_utils.io import readers
+    import copick
     
     # Initialize the Domain Expert Classifier   
     predictor = common.get_predictor(model_weights, model_config)
@@ -147,45 +160,7 @@ def run_slab_seg(
     # For 2D segmentation, call segment_image
     segmenter.segment_slab(vol, slab_thickness, display_image=True)
 
-##########################################################
-# CLI Commands
-##########################################################
-
-@click.command(context_settings=cli_context)
-@slurm_submit.copick_commands
-@click.option("--run-id", type=str, required=True, 
-              help="Path to Copick Config for Processing Data")            
-@slurm_submit.classifier_inputs
-@slurm_submit.sam2_inputs
-def slab(
-    config: str,
-    run_id: str, 
-    voxel_size: int, 
-    tomo_alg: str,
-    slab_thickness: int,
-    model_weights: str,
-    model_config: str,
-    target_class: int, 
-    sam2_cfg: str
-    ):
-    """
-    Segment a single slab of a tomogram.
-    """
-
-    run_slab_seg(
-        config, run_id, voxel_size, tomo_alg, slab_thickness, model_weights, model_config, target_class, sam2_cfg
-    )
-
-@click.command(context_settings=cli_context)
-@slurm_submit.copick_commands
-@slurm_submit.tomogram_segment_commands
-@click.option("--run-ids", type=str, required=False, default=None,
-              help="(Optional) RunIDs to Process. If more than one is provided, results will be displayed immediately. If None, all runs in the copick project will be processed.")
-@slurm_submit.classifier_inputs
-@click.option('--multi-slab', type=str, default=1, 
-              help="Number of slabs and spacing for multi-slab segmentation provided as thickness or thickness,spacing. (Default spacing is 30 if ignored)")
-@slurm_submit.sam2_inputs
-def tomograms(
+def run_tomo_seg(   # run_tomograms
     config: str,
     run_ids: str,
     voxel_size: float, 
@@ -200,8 +175,12 @@ def tomograms(
     sam2_cfg: str
     ):
     """
-    Generate a 3D Segmentation of a tomogram.
+    Segment a tomogram or multiple tomograms.
     """
+    from saber.utils import parallelization, io
+    from saber.segmenters.loaders import tomogram_workflow
+    from saber.visualization import galleries 
+    import copick, os, matplotlib
 
     print(f'\nRunning SAM2 Organelle Segmentations for the Following Tomograms:\n Algorithm: {tomo_alg}, Voxel-Size: {voxel_size} Å')
 
@@ -292,4 +271,64 @@ def tomograms(
     # Create a gallery of the tomograms
     galleries.create_png_gallery(
         f'{seg_name}_gallery/frames',
+    )
+
+##########################################################
+# CLI Commands
+##########################################################
+
+@click.command(context_settings=cli_context)
+@slurm_submit.copick_commands
+@click.option("--run-id", type=str, required=True, 
+              help="Path to Copick Config for Processing Data")            
+@slurm_submit.classifier_inputs
+@slurm_submit.sam2_inputs
+def slab(
+    config: str,
+    run_id: str, 
+    voxel_size: int, 
+    tomo_alg: str,
+    slab_thickness: int,
+    model_weights: str,
+    model_config: str,
+    target_class: int, 
+    sam2_cfg: str
+    ):
+    """
+    Segment a single slab of a tomogram.
+    """
+
+    run_slab_seg(
+        config, run_id, voxel_size, tomo_alg, slab_thickness, model_weights, model_config, target_class, sam2_cfg
+    )
+
+@click.command(context_settings=cli_context)
+@slurm_submit.copick_commands
+@slurm_submit.tomogram_segment_commands
+@click.option("--run-ids", type=str, required=False, default=None,
+              help="(Optional) RunIDs to Process. If more than one is provided, results will be displayed immediately. If None, all runs in the copick project will be processed.")
+@slurm_submit.classifier_inputs
+@click.option('--multi-slab', type=str, default=1, 
+              help="Number of slabs and spacing for multi-slab segmentation provided as thickness or thickness,spacing. (Default spacing is 30 if ignored)")
+@slurm_submit.sam2_inputs
+def tomograms(
+    config: str,
+    run_ids: str,
+    voxel_size: float, 
+    tomo_alg: str,
+    seg_name: str,
+    seg_session_id: str,
+    slab_thickness: int,
+    model_config: str,
+    model_weights: str,
+    target_class: int,
+    multi_slab: str,
+    sam2_cfg: str
+    ):
+    """
+    Generate a 3D Segmentation of a tomogram.
+    """
+
+    run_tomo_seg(
+        config, run_id, voxel_size, tomo_alg, slab_thickness, model_weights, model_config, target_class, sam2_cfg
     )

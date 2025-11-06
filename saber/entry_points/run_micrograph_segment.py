@@ -1,9 +1,6 @@
-from saber.entry_points.inference_core import segment_micrograph_core
-from saber.utils import slurm_submit, parallelization, io
-from saber.segmenters.loaders import micrograph_workflow
-from saber.visualization import galleries 
-import glob, click
-import numpy as np
+import saber.utils.slurm_submit as slurm_submit
+from saber import cli_context
+import click
 
 @click.group()
 @click.pass_context
@@ -27,8 +24,58 @@ def micrograph_options(func):
     for option in reversed(options):  # Add options in reverse order to preserve order in CLI
         func = option(func)
     return func
+    
+def interactive_segment_micrograph(
+    input: str,
+    sam2_cfg: str='large',
+    model_weights: str = None,
+    model_config: str = None,
+    target_class: int = -1,
+    target_resolution: float = None,
+    scale_factor: float = None,
+    display_image: bool = False,
+    use_sliding_window: bool = False,
+    ):
+    from saber.segmenters.micro import cryoMicroSegmenter
+    from saber.filters.downsample import FourierRescale2D
+    from saber.classifier.models import common
+    import saber.utils.io as io
+    import numpy as np
+    """
+    Segment a single micrograph using SABER.
+    """
 
-@cli.command(context_settings={"show_default": True})
+    # Initialize the Domain Expert Classifier   
+    predictor = common.get_predictor(model_weights, model_config)
+
+    segmenter = cryoMicroSegmenter(
+            sam2_cfg=sam2_cfg,
+            classifier=predictor,         # if you have a classifier; otherwise, leave as None
+            target_class=target_class )   # desired target class if using a classifier
+
+    # Let Users Save Segmentations when interactively segmenting
+    if display_image:
+        segmenter.save_button = True
+
+    # Read the Micrograph
+    image, pixel_size = io.read_micrograph(input)
+    image = image.astype(np.float32)
+
+    # Downsample if desired resolution is larger than current resolution
+    if target_resolution is not None and target_resolution > pixel_size:
+        scale = target_resolution / pixel_size
+        image = FourierRescale2D.run(image, scale)
+    elif scale_factor is not None:
+        image = FourierRescale2D.run(image, scale_factor)   
+
+    # Produce Initialial Segmentations with SAM2
+    segmenter.segment( image, display_image=True, use_sliding_window=use_sliding_window )
+
+########################################################
+# CLI Commands
+########################################################
+
+@click.command(context_settings=cli_context)
 @micrograph_options
 @slurm_submit.sam2_inputs
 @slurm_submit.classifier_inputs
@@ -46,6 +93,30 @@ def micrographs(
     """
     Segment a single micrograph or all micrographs in a folder.
     """
+    run_micrograph_segment(
+        input, output, sam2_cfg, model_weights, model_config, 
+        target_class, sliding_window, target_resolution, scale_factor
+    )
+
+def run_micrograph_segment(
+    input: str,
+    output: str,
+    sam2_cfg: str,
+    model_weights: str,
+    model_config: str,
+    target_class: int,
+    sliding_window: bool,
+    target_resolution: float,
+    scale_factor: float,
+    ):
+    """
+    Segment a single micrograph or all micrographs in a folder.
+    """
+    from saber.entry_points.inference_core import segment_micrograph_core
+    from saber.segmenters.loaders import micrograph_workflow
+    from saber.visualization import galleries 
+    from saber.utils import parallelization
+    import glob
 
     # Check to Make Sure Only One of the Inputs is Provided
     if target_resolution is not None and scale_factor is not None:
@@ -98,47 +169,3 @@ def micrographs(
     # Create a Gallery of the Training Data
     galleries.convert_zarr_to_gallery(output)
     
-def interactive_segment_micrograph(
-    input: str,
-    sam2_cfg: str='large',
-    model_weights: str = None,
-    model_config: str = None,
-    target_class: int = -1,
-    target_resolution: float = None,
-    scale_factor: float = None,
-    display_image: bool = False,
-    use_sliding_window: bool = False,
-    ):
-    from saber.segmenters.micro import cryoMicroSegmenter
-    from saber.filters.downsample import FourierRescale2D
-    from saber.classifier.models import common
-    import saber.utils.io as io
-    """
-    Segment a single micrograph using SABER.
-    """
-
-    # Initialize the Domain Expert Classifier   
-    predictor = common.get_predictor(model_weights, model_config)
-
-    segmenter = cryoMicroSegmenter(
-            sam2_cfg=sam2_cfg,
-            classifier=predictor,         # if you have a classifier; otherwise, leave as None
-            target_class=target_class )   # desired target class if using a classifier
-
-    # Let Users Save Segmentations when interactively segmenting
-    if display_image:
-        segmenter.save_button = True
-
-    # Read the Micrograph
-    image, pixel_size = io.read_micrograph(input)
-    image = image.astype(np.float32)
-
-    # Downsample if desired resolution is larger than current resolution
-    if target_resolution is not None and target_resolution > pixel_size:
-        scale = target_resolution / pixel_size
-        image = FourierRescale2D.run(image, scale)
-    elif scale_factor is not None:
-        image = FourierRescale2D.run(image, scale_factor)   
-
-    # Produce Initialial Segmentations with SAM2
-    segmenter.segment( image, display_image=True, use_sliding_window=use_sliding_window )
