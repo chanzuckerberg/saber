@@ -510,11 +510,7 @@ class MainWindow(QMainWindow):
         msg_box.setText(message)
         msg_box.exec_()
 
-
-@click.command(context_settings={"show_default": True})
-@click.option('--input', type=str, required=True, 
-              help="Path to the input Zarr file.")
-def gui(input: str):
+def launch_gui(input: str):
     """
     Saber GUI for annotating SAM2 segmentations with custom classes.
     """
@@ -522,7 +518,3 @@ def gui(input: str):
     main_window = MainWindow(input)
     main_window.show()
     sys.exit(app.exec_())
-
-
-if __name__ == "__main__":
-    gui()

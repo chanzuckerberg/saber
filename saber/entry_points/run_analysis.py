@@ -1,10 +1,6 @@
-from saber.analysis.organelle_statistics import extract_organelle_statistics
-from saber.utils import slurm_submit
-from copick_utils.io import readers
-from typing import List, Optional
-import copick, click, zarr, csv
-import multiprocess as mp
-from tqdm import tqdm
+from saber import cli_context
+from typing import Optional
+import click
 
 @click.group(name="save")
 @click.pass_context
@@ -46,6 +42,10 @@ def process_organelles(
     save_statistics: bool = True,
     ):
     """Core processing function that can be used by different commands."""
+    import multiprocess as mp
+    from tqdm import tqdm
+    import copick, csv
+    
     mp.set_start_method("spawn", force=True)
 
     # Report Input Commands
@@ -119,6 +119,8 @@ def process_organelles(
 
 def process_single_run(args):
     """Process a single run to extract organelle statistics and/or coordinates."""
+    from saber.analysis.organelle_statistics import extract_organelle_statistics
+    from copick_utils.io import readers
     
     (run, organelle_name, session_id, user_id, 
      voxel_size, save_copick, save_statistics) = args
@@ -149,7 +151,48 @@ def process_single_run(args):
 
     return csv_rows if save_statistics and csv_rows else []
 
-@cli.command(context_settings={"show_default": True})
+
+def report_input_commands(
+    config, voxel_size, 
+    organelle_name, session_id, 
+    user_id, run_ids,
+    save_copick=True,
+    save_statistics=True
+    ):
+    """Print a summary of all inputs and processing options."""
+    action_msg = []
+    if save_copick:
+        action_msg.append("coordinate extraction")
+    if save_statistics:
+        action_msg.append("statistics calculation")
+    
+    print(f"\nRunning organelle {' and '.join(action_msg)} with the following parameters:\n"
+          f"\tConfig: {config}\n"
+          f"\tOrganelle Name: {organelle_name}\n"
+          f"\tSession ID: {session_id}\n"
+          f"\tUser ID: {user_id}\n"
+          f"\tVoxel Size: {voxel_size}\n"
+          f"\tRun IDs: {run_ids if run_ids else 'All'}\n"
+          f"\tSave to Copick: {save_copick}\n"
+          f"\tSave Statistics: {save_statistics}\n")
+
+def pickable_object_check(root, organelle_name):
+    """Check if the specified organelle exists as a pickable object in the config."""
+    objects = root.pickable_objects
+    if not any(obj.name == organelle_name for obj in objects):
+        # Print all available object names
+        available_names = [obj.name for obj in objects]
+        available_names = f"Available pickable object names: {', '.join(available_names)}"
+        raise ValueError(f"Pickable Object {organelle_name} not found in Config!\n{available_names}")
+
+########################################################
+
+# CLI Commands
+
+########################################################
+
+
+@cli.command(context_settings=cli_context)
 @common_options
 @click.option("--save-statistics", default=True,
               help="Save statistics to Zarr file")
@@ -179,7 +222,7 @@ def coordinates(
         save_statistics=save_statistics
     )
 
-@cli.command(context_settings={"show_default": True})
+@cli.command(context_settings=cli_context)
 @common_options
 def statistics(
     config: str,
@@ -203,7 +246,7 @@ def statistics(
         save_statistics=True
     )
 
-@cli.command(context_settings={"show_default": True})
+@cli.command(context_settings=cli_context)
 @common_options
 @click.option("--save-copick", default=False,
               help="Save coordinates to Copick")
@@ -219,8 +262,10 @@ def slurm(
     n_procs: int,
     save_copick: bool,
     save_statistics: bool
-):
-
+    ):
+    from saber.utils import slurm_submit
+    import copick
+    
     if save_copick is False and save_statistics is False:
         raise ValueError("At least one of save_copick or save_statistics must be True")
 
@@ -272,36 +317,3 @@ def slurm(
         command = command, 
         num_gpus = 0
     )
-
-def report_input_commands(
-    config, voxel_size, 
-    organelle_name, session_id, 
-    user_id, run_ids,
-    save_copick=True,
-    save_statistics=True
-):
-    """Print a summary of all inputs and processing options."""
-    action_msg = []
-    if save_copick:
-        action_msg.append("coordinate extraction")
-    if save_statistics:
-        action_msg.append("statistics calculation")
-    
-    print(f"\nRunning organelle {' and '.join(action_msg)} with the following parameters:\n"
-          f"\tConfig: {config}\n"
-          f"\tOrganelle Name: {organelle_name}\n"
-          f"\tSession ID: {session_id}\n"
-          f"\tUser ID: {user_id}\n"
-          f"\tVoxel Size: {voxel_size}\n"
-          f"\tRun IDs: {run_ids if run_ids else 'All'}\n"
-          f"\tSave to Copick: {save_copick}\n"
-          f"\tSave Statistics: {save_statistics}\n")
-
-def pickable_object_check(root, organelle_name):
-    """Check if the specified organelle exists as a pickable object in the config."""
-    objects = root.pickable_objects
-    if not any(obj.name == organelle_name for obj in objects):
-        # Print all available object names
-        available_names = [obj.name for obj in objects]
-        available_names = f"Available pickable object names: {', '.join(available_names)}"
-        raise ValueError(f"Pickable Object {organelle_name} not found in Config!\n{available_names}")

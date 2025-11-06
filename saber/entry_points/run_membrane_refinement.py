@@ -1,13 +1,6 @@
-from saber.analysis.refine_membranes import OrganelleMembraneFilter
-from copick_utils.io import readers, writers
-from typing import List, Tuple, Optional
-from saber.utils import parallelization
-import click, copick
-
-@click.group()
-@click.pass_context
-def cli(ctx):
-    pass
+from typing import Tuple, Optional
+from saber import cli_context
+import click
 
 def convert_info(ctx, param, value):
     if not value:
@@ -41,7 +34,7 @@ def refine_membranes_options(func):
         func = option(func)
     return func
 
-@cli.command(context_settings={"show_default": True})
+@click.command(context_settings=cli_context)
 @refine_membranes_options
 def refine_membranes(
     config: str,
@@ -51,6 +44,21 @@ def refine_membranes(
     save_session_id: str,
     ):
     """Refine organelle and membrane segmentations using morphological filtering."""
+
+    run_refine_membranes(config, voxel_size, org_info, mem_info, save_session_id)
+
+def run_refine_membranes(
+    config: str,
+    voxel_size: float,
+    org_info: Tuple[str, Optional[str], Optional[str]],
+    mem_info: Tuple[str, Optional[str], Optional[str]],
+    save_session_id: str,
+):
+    """Refine organelle and membrane segmentations using morphological filtering."""
+    from saber.analysis.refine_membranes import OrganelleMembraneFilter
+    from copick_utils.io import readers, writers
+    from saber.utils import parallelization
+    import copick
 
     # Open Copick Project and Query All Available Runs
     root = copick.from_file(config)
@@ -82,6 +90,8 @@ def refine_membranes(
     print('Completed the Membrane Refinement!')        
 
 def run_refinement(run, org_info, mem_info, voxel_size, save_session_id, gpu_id, models):
+
+    from copick_utils.io import readers, writers
 
     refiner = models
 
@@ -120,6 +130,7 @@ def return_write_user_id(user_id, run):
         return user_id + '-refined'
 
 def refine_membranes_workflow(gpu_id:int):
+    from saber.analysis.refine_membranes import OrganelleMembraneFilter
     return OrganelleMembraneFilter(gpu_id = gpu_id) 
 
 if __name__ == '__main__':
