@@ -23,7 +23,6 @@ def split(
         - Training zarr file
         - Validation zarr file
     """
-    from saber.classifier.preprocess.split_merge_data import copy_attributes
     from sklearn.model_selection import train_test_split
     from pathlib import Path
     import numpy as np
