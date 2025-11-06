@@ -330,5 +330,5 @@ def tomograms(
     """
 
     run_tomo_seg(
-        config, run_id, voxel_size, tomo_alg, slab_thickness, model_weights, model_config, target_class, sam2_cfg
+        config, run_ids, voxel_size, tomo_alg, seg_name, seg_session_id, slab_thickness, model_config, model_weights, target_class, multi_slab, sam2_cfg
     )
