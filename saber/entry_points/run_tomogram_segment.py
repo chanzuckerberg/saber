@@ -2,18 +2,6 @@ import saber.utils.slurm_submit as slurm_submit
 from saber import cli_context
 import click
 
-#     from saber.segmenters.tomo import cryoTomoSegmenter, multiDepthTomoSegmenter
-# from saber.entry_points.inference_core import segment_tomogram_core
-# from saber.segmenters.loaders import tomogram_workflow
-# import saber.utils.slurm_submit as slurm_submit
-# import copick, click, torch, os, matplotlib
-# from saber.utils import parallelization, io
-# from saber.classifier.models import common
-# from saber.visualization import galleries 
-# from copick_utils.io import readers
-# from saber import cli_context
-# import os
-
 # Segment a Single Tomogram
 def segment_tomogram_interactive(
     run,
