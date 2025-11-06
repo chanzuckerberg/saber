@@ -1,4 +1,4 @@
-import json, click, saber
+import click
 
 @click.group()
 @click.pass_context
@@ -49,13 +49,13 @@ conda activate /hpc/projects/group.czii/conda_environments/pySAM2
 def copick_commands(func):
     """Decorator to add common options to a Click command."""
     options = [
-    click.option("--config", type=str, required=True, default="path/to/copick_config.json",
+    click.option("-c", "--config", type=str, required=True, default="path/to/copick_config.json",
                  help="Path to Copick Config for Processing Data"),
-    click.option("--voxel-size", type=float, required=False, default=10, 
+    click.option("-vs", "--voxel-size", type=float, required=False, default=10, 
                  help="Resolution of Desired Tomograms to Process"),
-    click.option("--tomo-alg", type=str, required=False, default='denoised', 
+    click.option("-ta", "--tomo-alg", type=str, required=False, default='denoised', 
                  help="Reconstrution Algorithm to Query Tomgorams"),    
-    click.option("--slab-thickness", type=float, required=False, default=10, 
+    click.option("-st", "--slab-thickness", type=float, required=False, default=10, 
                  help="Thickness of Slab for Producing Initial Segmentation"),                              
     ]
     for option in reversed(options):  # Add options in reverse order to preserve correct order
@@ -65,9 +65,9 @@ def copick_commands(func):
 def tomogram_segment_commands(func):
     """Decorator to add common options to a Click command."""
     options = [
-    click.option("--seg-name", type=str, required=False, default="organelles", 
+    click.option("-sn", "--seg-name", type=str, required=False, default="organelles", 
                  help="Name of Segmentation Session"),
-    click.option("--seg-session-id", type=str, required=False, default="1", 
+    click.option("-sid", "--seg-session-id", type=str, required=False, default="1", 
                  help="SessionID to Write for Segmentation Mask"),
     ]
     for option in reversed(options):  # Add options in reverse order to preserve correct order
@@ -90,11 +90,11 @@ def compute_commands(func):
 def classifier_inputs(func):
     """Decorator to add common options for the Classifier command."""
     options = [
-        click.option("--model-config", type=str,required=False, default=None,
+        click.option("-mc", "--model-config", type=str,required=False, default=None,
                      help="Path to Classifier Model Config"),
-        click.option("--model-weights", type=str, required=False, default=None,
+        click.option("-mw", "--model-weights", type=str, required=False, default=None,
                     help="Path to Classifier model trained weights."),    
-        click.option("--target-class", type=int, required=False, default=-1,
+        click.option("-tc", "--target-class", type=int, required=False, default=-1,
                     help="Target Class for Segmentation. When set to -1, the model performs semantic segmentation.\nWhen set to a positive integer, the model performs instance segmentation for the desired class..")
     ]
     for option in reversed(options):  # Add options in reverse order to preserve correct order
@@ -104,7 +104,7 @@ def classifier_inputs(func):
 def sam2_inputs(func):
     """Decorator to add common options for the SAM2 command."""
     options = [
-        click.option("--sam2-cfg", required=False, default='large', help="SAM2 Model Config",
+        click.option("-cfg", "--sam2-cfg", required=False, default='large', help="SAM2 Model Config",
                      type=click.Choice(['large', 'base', 'small', 'tiny'], case_sensitive=False))
         # click.option("--min-mask-area", type=int, required=False, default=100,
         #              help="Minimum Area of Mask to Keep"),

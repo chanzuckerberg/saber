@@ -1,29 +1,19 @@
-from saber.filters.downsample import FourierRescale2D
-from saber.visualization.results import export_movie
-from saber.segmenters.fib import fibSegmenter
-from saber.classifier.models import common
 from saber.utils import slurm_submit
-from skimage import io as sio
-import glob, click
-import numpy as np
-
-@click.group()
-@click.pass_context
-def cli(ctx):
-    pass
+from saber import cli_context
+import click
 
 def fib_options(func):
     """Decorator to add shared options for fib commands."""
     options = [
-        click.option("--input", type=str, required=True,
+        click.option("-i", "--input", type=str, required=True,
                       help="Path to Fib or Project, in the case of project provide the file extention (e.g. 'path/*.mrc')"),
-        click.option("--output", type=str, required=False, default='masks.npy',
+        click.option("-o", "--output", type=str, required=False, default='masks.npy',
                       help="Path to Output Segmentation Masks"),
-        click.option("--ini_depth", type=int, required=False, default=10,
+        click.option("-d", "--ini_depth", type=int, required=False, default=10,
                       help="Spacing between slices to Segment"),
-        click.option("--nframes", type=int, required=False, default=None,
+        click.option("-f", "--nframes", type=int, required=False, default=None,
                       help="Number of frames to propagate in video segmentation"),
-        click.option('--scale-factor', type=float, required=False, default=1,
+        click.option('-sf', '--scale-factor', type=float, required=False, default=1,
                       help='Scale Factor to Downsample Images. If not provided, no downsampling will be performed.'),
     ]
     for option in reversed(options):  # Add options in reverse order to preserve order in CLI
@@ -31,7 +21,7 @@ def fib_options(func):
     return func
 
 
-@cli.command(context_settings={"show_default": True})
+@click.command(context_settings=cli_context)
 @fib_options
 @slurm_submit.sam2_inputs
 @slurm_submit.classifier_inputs
@@ -49,6 +39,32 @@ def fib(
     """
     Segment a Fib Volume
     """
+
+    run_fib_segment(
+        input, output, ini_depth, nframes, 
+        sam2_cfg, model_weights, model_config, 
+        target_class, scale_factor
+    )
+
+
+def run_fib_segment(
+    input: str,
+    output: str,
+    ini_depth: int,
+    nframes: int,
+    sam2_cfg: str,
+    model_weights: str,
+    model_config: str,
+    target_class: int,
+    scale_factor: float,
+):
+    """
+    Segment a Fib Volume
+    """
+    from saber.visualization.results import export_movie
+    from saber.segmenters.fib import fibSegmenter
+    from saber.classifier.models import common
+    import numpy as np
 
     print(f'\nStarting Fib Segmentation for the following input: {input}')
     print(f'Segmentations will be performed every {ini_depth} slices for ±{nframes} frames')
@@ -80,6 +96,10 @@ def read_fib_volume(input: str, scale_factor: float):
     """
     Read the Fib Volume from a directory or a single file
     """
+    from saber.filters.downsample import FourierRescale2D
+    import skimage.io as sio
+    import numpy as np
+    import glob
 
     # Read the Volume from a directory or a single file
     if '*' in input:
