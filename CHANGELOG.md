@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.10.0](https://github.com/chanzuckerberg/saber/compare/saber-em-v0.9.0...saber-em-v0.10.0) (2025-11-06)
+
+
+### ✨ Features
+
+* add better api calls and lazy loading ([ca34824](https://github.com/chanzuckerberg/saber/commit/ca348244b6d24bbe3768923687e386cdfd4c53a6))
+* add interactive 3d-seg widget ([ca0634c](https://github.com/chanzuckerberg/saber/commit/ca0634c222bc60bf1ded58a763c72b4d3750b84e))
+* add interactive 3d-seg widget ([2b8ebaa](https://github.com/chanzuckerberg/saber/commit/2b8ebaa3e3e2a4be599a4774a4c4afad7a64b389))
+* lazy loading and more api functions ([447ff4a](https://github.com/chanzuckerberg/saber/commit/447ff4a3c5625e824d67e433c408e7a80d832eaf))
+
 ## [0.9.0](https://github.com/chanzuckerberg/saber/compare/saber-em-v0.8.0...saber-em-v0.9.0) (2025-11-01)
 
 
