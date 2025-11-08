@@ -48,6 +48,10 @@ class ClassManagerWidget(QWidget):
         self.class_list.itemClicked.connect(self.on_class_selected)
         layout.addWidget(self.class_list)
 
+        self.counter_label = QLabel("Annotated Runs: 0")
+        self.counter_label.setStyleSheet("font-weight: bold; padding: 5px;")
+        layout.addWidget(self.counter_label)
+
         self.remove_btn = QPushButton("Remove Selected Class")
         self.remove_btn.clicked.connect(self.remove_class)
         self.remove_btn.setEnabled(False)
@@ -140,6 +144,10 @@ class ClassManagerWidget(QWidget):
     def get_class_dict(self):
         return self.class_dict
 
+    def update_counter(self, count):
+        """Update the annotated runs counter"""
+        self.counter_label.setText(f"Annotated Runs: {count}")
+
 
 class MainWindow(QMainWindow):
     def __init__(self, zarr_path: str):
@@ -181,6 +189,7 @@ class MainWindow(QMainWindow):
 
         # Class manager first
         self.class_manager = ClassManagerWidget()
+        self.update_annotation_counter()
 
         # Read initial data (sync for the first one)
         initial_run_id = self.run_ids[0]
@@ -418,6 +427,9 @@ class MainWindow(QMainWindow):
         if idx + 1 < len(self.run_ids):
             self.prefetch(self.run_ids[idx + 1])
 
+        # Update counter after loading
+        self.update_annotation_counter()
+
     def export_annotations(self):
         filepath, _ = QFileDialog.getSaveFileName(
             self, "Save Annotations", "labels.json", "JSON Files (*.json)"
@@ -435,6 +447,7 @@ class MainWindow(QMainWindow):
             with open(filepath, 'r') as f:
                 loaded_annotations = json.load(f)
             self.annotations.update(loaded_annotations)
+            self.update_annotation_counter()
 
             # Ensure all classes exist
             all_classes = set()
@@ -475,6 +488,11 @@ class MainWindow(QMainWindow):
                     self.class_manager.on_class_selected(it)
         else:
             super().keyPressEvent(event)
+
+    def update_annotation_counter(self):
+        """Count how many runs have at least one annotation"""
+        annotated_count = sum(1 for run_id, annotations in self.annotations.items() if annotations)
+        self.class_manager.update_counter(annotated_count)            
 
     def load_next_runID(self, new_row):
         new_row = max(0, min(new_row, self.image_list.count() - 1))
