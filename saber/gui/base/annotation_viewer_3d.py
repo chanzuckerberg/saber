@@ -421,6 +421,19 @@ class AnnotationSegmentationViewer3D(QtWidgets.QWidget):
         else:
             super().keyPressEvent(event)
 
+    def mousePressEvent(self, event):
+        """Handle mouse press events - right click to reset view"""
+        if event.button() == QtCore.Qt.RightButton:
+            self.reset_view()
+            event.accept()
+        else:
+            super().mousePressEvent(event)
+
+    def reset_view(self):
+        """Reset the view to fit the image"""
+        self.left_view.autoRange()
+        self.right_view.autoRange()            
+
     def load_existing_annotations(self):
         """Restore class -> mask bookkeeping from annotations_dict (optional)."""
         if self.current_run_id not in self.annotations_dict:
