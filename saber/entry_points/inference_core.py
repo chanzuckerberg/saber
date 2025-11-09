@@ -6,6 +6,10 @@ from copick_utils.io import writers, readers
 from saber.utils import zarr_writer, io
 import numpy as np
 import torch, os
+import logging
+
+# Set up logger for this module
+logger = logging.getLogger(__name__)
 
 def segment_tomogram_core(
     run,
@@ -35,7 +39,7 @@ def segment_tomogram_core(
     # Get Tomogram, Return None if No Tomogram is Found
     vol = readers.tomogram(run, voxel_size, algorithm=tomogram_algorithm)
     if vol is None:
-        print(f'No Tomogram Found for {run.name}')
+        logger.info(f'No Tomogram Found for {run.name}')
         return None
 
     # Ensure we're on the correct GPU
@@ -56,7 +60,7 @@ def segment_tomogram_core(
 
     # Check if the segment_mask is None
     if segment_mask is None:
-        print(f'No Segmentation Found for {run.name}')
+        logger.info(f'No Segmentation Found for {run.name}')
         return None
 
     # Write Segmentation if We aren't Displaying Results
@@ -79,7 +83,7 @@ def segment_tomogram_core(
         )
 
         # Print Success Message
-        print(f'Saved Segmentation for {run.name} as {segmentation_name}')
+        logger.info(f'Saved Segmentation for {run.name} as {segmentation_name}')
 
     # Clear GPU memory (but keep models if they're pre-loaded)
     del vol

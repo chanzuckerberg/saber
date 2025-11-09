@@ -104,7 +104,7 @@ def classifier_inputs(func):
 def sam2_inputs(func):
     """Decorator to add common options for the SAM2 command."""
     options = [
-        click.option("-cfg", "--sam2-cfg", required=False, default='large', help="SAM2 Model Config",
+        click.option("-cfg", "--sam2-cfg", required=False, default='small', help="SAM2 Model Config",
                      type=click.Choice(['large', 'base', 'small', 'tiny'], case_sensitive=False))
         # click.option("--min-mask-area", type=int, required=False, default=100,
         #              help="Minimum Area of Mask to Keep"),

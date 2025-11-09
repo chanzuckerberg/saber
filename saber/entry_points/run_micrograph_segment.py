@@ -66,7 +66,7 @@ def interactive_segment_micrograph(
         scale = target_resolution / pixel_size
         image = FourierRescale2D.run(image, scale)
     elif scale_factor is not None:
-        image = FourierRescale2D.run(image, scale_factor)   
+        image = FourierRescale2D.run(image, scale_factor)
 
     # Produce Initialial Segmentations with SAM2
     segmenter.segment( image, display_image=True, use_sliding_window=use_sliding_window )
