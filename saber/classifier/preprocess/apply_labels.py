@@ -7,7 +7,7 @@ from typing import Dict, List, Optional, Set
 from saber import cli_context
 from pathlib import Path
 from tqdm import tqdm
-import click
+import rich_click as click
 
 class SABERLabelConverter:
 

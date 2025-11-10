@@ -1,7 +1,7 @@
 from saber.filters.tomograms import Filter3D
 from copick_utils.io import writers, readers
 from saber.utils import io, slurm_submit
-import click, mrcfile, os, glob, json
+import rich_click as click, mrcfile, os, glob, json
 from tqdm import tqdm
 
 @click.group(name="filter3d")

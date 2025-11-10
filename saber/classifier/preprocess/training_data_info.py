@@ -1,5 +1,5 @@
 from saber import cli_context
-import click
+import rich_click as click
 
 @click.command(context_settings=cli_context)
 @click.option("-i", "--input", type=str, required=True, 

@@ -1,5 +1,5 @@
 from saber import cli_context
-import click
+import rich_click as click
 
 def predict_commands(func):
     """Decorator to add common options to a Click command."""

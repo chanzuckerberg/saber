@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from saber import cli_context
 from typing import List
-import click
+import rich_click as click
 
 def split(
     input: str,
