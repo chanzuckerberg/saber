@@ -6,10 +6,6 @@ from copick_utils.io import writers, readers
 from saber.utils import zarr_writer, io
 import numpy as np
 import torch, os
-import logging
-
-# Set up logger for this module
-logger = logging.getLogger(__name__)
 
 def segment_tomogram_core(
     run,
@@ -35,6 +31,10 @@ def segment_tomogram_core(
     Returns:
         str: Success message or None if failed
     """
+    import logging
+
+    # Set up logger for this module
+    logger = logging.getLogger(__name__)
     
     # Get Tomogram, Return None if No Tomogram is Found
     vol = readers.tomogram(run, voxel_size, algorithm=tomogram_algorithm)
