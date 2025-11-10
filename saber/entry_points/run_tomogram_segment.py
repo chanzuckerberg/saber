@@ -258,7 +258,7 @@ def run_tomo_seg(   # run_tomograms
 
     # Create a gallery of the tomograms
     galleries.create_png_gallery(
-        f'{seg_name}_gallery/frames',
+        f'sID-{seg_session_id}/frames',
     )
 
 ##########################################################

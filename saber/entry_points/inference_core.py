@@ -46,15 +46,15 @@ def segment_tomogram_core(
     torch.cuda.set_device(gpu_id)
     
     # Segment the Tomogram
-    save_name_name = run.name + '-' + segmentation_session_id
+    img_name = run.name + '-' + segmentation_session_id
     if num_slabs > 1:
         segment_mask = segmenter.segment(
             vol, slab_thickness, num_slabs, delta_z,
-            save_name_name, display_segmentation)
+            img_name, display_segmentation)
     else:
         segment_mask = segmenter.segment(
             vol, slab_thickness,
-            save_run=save_name_name, 
+            save_run=img_name, 
             show_segmentations=display_segmentation)
 
 

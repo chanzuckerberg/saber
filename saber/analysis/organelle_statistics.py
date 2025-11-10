@@ -20,36 +20,54 @@ def extract_organelle_statistics(
     for label in unique_labels:
         
         component_mask = (mask == label).astype("int")
-        rprops = regionprops(component_mask)[0]
-        centroid = rprops.centroid
         
-        # Flip Coordinates to X, Y, Z Order
-        if xyz_order:
-            centroid = centroid[::-1]
-        coordinates[str(label)] = centroid
-        
-        if save_statistics:
+        # Skip very small regions that might cause numerical issues
+        if np.sum(component_mask) < 3:
+            print(f"Skipping label {label} in {run.name}: too small (< 3 voxels)")
+            continue
             
-            # Compute Volume in nm^3
-            volume = np.sum(component_mask) * (voxel_size/10)**3 # Convert from Angstom to nm^3
+        try:
+            rprops = regionprops(component_mask)[0]
+            centroid = rprops.centroid
+            
+            # Flip Coordinates to X, Y, Z Order
+            if xyz_order:
+                centroid = centroid[::-1]
+            coordinates[str(label)] = centroid
+            
+            if save_statistics:
+                # Compute Volume in nm^3
+                volume = np.sum(component_mask) * (voxel_size/10)**3 # Convert from Angstrom to nm^3
 
-            # Sort axes to identify the first (Z-biased) and two in-plane dimensions
-            axes_lengths = sorted([rprops.axis_major_length, rprops.axis_minor_length, 
-                                   rprops.axis_minor_length])
+                # Try to get axis lengths with error handling
+                try:
+                    axis_major = rprops.axis_major_length
+                    axis_minor = rprops.axis_minor_length
+                    
+                    # For 3D, use both axes (major and minor are the only ones available)
+                    axis_x = axis_minor * (voxel_size/10)
+                    axis_y = axis_major * (voxel_size/10)
+                    diameter = (axis_x + axis_y) / 2
+                    
+                except (ValueError, AttributeError) as e:
+                    # Fall back to equivalent sphere diameter if axis calculation fails
+                    print(f"Warning: Could not compute axes for label {label} in {run.name}, using spherical approximation")
+                    diameter = 2 * ((3 * volume) / (4 * np.pi)) ** (1/3)
+                    axis_x = diameter
+                    axis_y = diameter
 
-            # Convert to physical units (nm)
-            axis_x = axes_lengths[1] * (voxel_size/10)  # Likely an in-plane axis
-            axis_y = axes_lengths[2] * (voxel_size/10)  # Likely an in-plane axis
-            diameter = (axis_x + axis_y) / 2
-
-            # Prepare row for CSV
-            csv_row = [
-                run.name,
-                int(label),
-                volume,
-                diameter,
-            ]
-            csv_rows.append(csv_row)
+                # Prepare row for CSV
+                csv_row = [
+                    run.name,
+                    int(label),
+                    volume,
+                    diameter,
+                ]
+                csv_rows.append(csv_row)
+                
+        except (ValueError, IndexError) as e:
+            print(f"Error processing label {label} in {run.name}: {e}")
+            continue
 
     # Save Statistics to CSV File
     if len(coordinates) > 0:
