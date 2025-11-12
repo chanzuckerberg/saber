@@ -6,6 +6,11 @@ import torch, zarr, os
 from tqdm import tqdm
 import numpy as np
 
+# Suppress SAM2 Logger 
+import logging
+logger = logging.getLogger()
+logger.disabled = True
+
 class ClassifierTrainer:
     def __init__(
         self, 
