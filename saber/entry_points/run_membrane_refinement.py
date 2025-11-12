@@ -1,6 +1,6 @@
 from typing import Tuple, Optional
 from saber import cli_context
-import click
+import rich_click as click
 
 def convert_info(ctx, param, value):
     if not value:

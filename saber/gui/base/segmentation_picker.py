@@ -215,6 +215,19 @@ class SegmentationViewer(pg.GraphicsLayoutWidget):
         
         super().keyPressEvent(event)
 
+    def mousePressEvent(self, event):
+        """Handle mouse press events - right click to reset view"""
+        if event.button() == QtCore.Qt.RightButton:
+            self.reset_view()
+            event.accept()
+        else:
+            super().mousePressEvent(event)
+
+    def reset_view(self):
+        """Reset the view to fit the image"""
+        self.left_view.autoRange()
+        self.right_view.autoRange()
+
 def main():
     app = QtWidgets.QApplication(sys.argv)
 

@@ -1,5 +1,5 @@
 from saber import cli_context
-import click
+import rich_click as click
 
 def run_gui(input: str):
     from saber.gui.base.zarr_gui import launch_gui

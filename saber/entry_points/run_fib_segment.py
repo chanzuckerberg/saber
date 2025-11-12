@@ -1,6 +1,6 @@
 from saber.utils import slurm_submit
 from saber import cli_context
-import click
+import rich_click as click
 
 def fib_options(func):
     """Decorator to add shared options for fib commands."""

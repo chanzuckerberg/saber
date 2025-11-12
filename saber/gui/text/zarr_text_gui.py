@@ -4,7 +4,7 @@ Handles UI setup and coordinates between components.
 """
 
 import sys
-import click
+import rich_click as click
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QSplitter, QListWidget, QPlainTextEdit,
     QVBoxLayout, QMessageBox

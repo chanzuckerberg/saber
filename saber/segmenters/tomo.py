@@ -88,8 +88,8 @@ class cryoTomoSegmenter(saber3Dsegmenter):
         """
 
         # Determine if We Should Show the 2D Segmentations or Show the Segmentations in 3D
-        if not show_segmentations:  save_mask = True
-        else:                       save_mask = False
+        if show_segmentations:  save_mask = False
+        else:                   save_mask = True
         self.is_tomogram_mode = True        
 
         # Segment Initial Slab 

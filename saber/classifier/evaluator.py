@@ -1,6 +1,6 @@
 from __future__ import annotations
 from saber import cli_context
-import click
+import rich_click as click
 
 def get_evaluator_class():
     from saber.classifier.trainer import ClassifierTrainer

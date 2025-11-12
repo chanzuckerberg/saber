@@ -1,6 +1,6 @@
 from saber.classifier.preprocess.micrograph_training_prep import micrograph_options
 import saber.utils.slurm_submit as slurm_submit
-import click
+import rich_click as click
 
 @click.command(context_settings={"show_default": True}, name='prepare-micrograph-training')
 @micrograph_options

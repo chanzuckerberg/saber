@@ -1,6 +1,6 @@
 import saber.utils.slurm_submit as slurm_submit
 from saber import cli_context
-import click
+import rich_click as click
 
 # Segment a Single Tomogram
 def segment_tomogram_interactive(
@@ -258,7 +258,7 @@ def run_tomo_seg(   # run_tomograms
 
     # Create a gallery of the tomograms
     galleries.create_png_gallery(
-        f'{seg_name}_gallery/frames',
+        f'sID-{seg_session_id}/frames',
     )
 
 ##########################################################

@@ -1,4 +1,4 @@
-import click
+import rich_click as click
 
 @click.group()
 @click.pass_context

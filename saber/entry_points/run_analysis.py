@@ -1,6 +1,6 @@
 from saber import cli_context
 from typing import Optional
-import click
+import rich_click as click
 
 @click.group(name="save")
 @click.pass_context

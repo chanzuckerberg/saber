@@ -4,7 +4,7 @@ from saber.analysis.analysis_cli import methods as analysis
 from saber.entry_points.run_analysis import cli as save
 from saber.gui.run import web
 from saber import cli_context
-import click
+import rich_click as click
 try:
     from saber.gui.run import gui
     gui_avail = True
