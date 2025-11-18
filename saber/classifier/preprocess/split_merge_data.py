@@ -17,7 +17,6 @@ def split(
         input: Path to the Zarr file
         ratio: Fraction of data to use for training
         random_seed: Random seed for reproducibility
-        max_workers: Maximum number of threads for parallel processing
         
     Returns:
         Tuple containing paths to:
