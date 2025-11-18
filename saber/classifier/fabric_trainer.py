@@ -197,7 +197,6 @@ class ClassifierTrainerFabrics:
                 refresh=False
             )
             pbar.update(1)
-            # pbar.refresh()  # Explicit single refresh
         pbar.close()
         self.fabric.barrier()
 
