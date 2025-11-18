@@ -125,7 +125,6 @@ def merge(inputs: List[str], output: str):
     Args:
         inputs: List of input Zarr files
         output: Path to the output Zarr file
-        max_workers: Maximum number of threads for parallel processing
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
     from saber.utils.progress import _progress 
