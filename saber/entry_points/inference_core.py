@@ -31,32 +31,36 @@ def segment_tomogram_core(
     Returns:
         str: Success message or None if failed
     """
+    import logging
+
+    # Set up logger for this module
+    logger = logging.getLogger(__name__)
     
     # Get Tomogram, Return None if No Tomogram is Found
     vol = readers.tomogram(run, voxel_size, algorithm=tomogram_algorithm)
     if vol is None:
-        print(f'No Tomogram Found for {run.name}')
+        logger.info(f'No Tomogram Found for {run.name}')
         return None
 
     # Ensure we're on the correct GPU
     torch.cuda.set_device(gpu_id)
     
     # Segment the Tomogram
-    save_name_name = run.name + '-' + segmentation_session_id
+    img_name = run.name + '-' + segmentation_session_id
     if num_slabs > 1:
         segment_mask = segmenter.segment(
             vol, slab_thickness, num_slabs, delta_z,
-            save_name_name, display_segmentation)
+            img_name, display_segmentation)
     else:
         segment_mask = segmenter.segment(
             vol, slab_thickness,
-            save_run=save_name_name, 
+            save_run=img_name, 
             show_segmentations=display_segmentation)
 
 
     # Check if the segment_mask is None
     if segment_mask is None:
-        print(f'No Segmentation Found for {run.name}')
+        logger.info(f'No Segmentation Found for {run.name}')
         return None
 
     # Write Segmentation if We aren't Displaying Results
@@ -79,7 +83,7 @@ def segment_tomogram_core(
         )
 
         # Print Success Message
-        print(f'Saved Segmentation for {run.name} as {segmentation_name}')
+        logger.info(f'Saved Segmentation for {run.name} as {segmentation_name}')
 
     # Clear GPU memory (but keep models if they're pre-loaded)
     del vol

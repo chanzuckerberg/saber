@@ -64,8 +64,8 @@ def save_slab_seg(
 
     # Save the Figure
     runID, sessionID = current_run.split('-')
-    os.makedirs(f'gallery_sessionID_{sessionID}/frames', exist_ok=True)
-    plt.savefig(f'gallery_sessionID_{sessionID}/frames/{runID}.png', bbox_inches='tight', pad_inches=0)
+    os.makedirs(f'sID-{sessionID}/frames', exist_ok=True)
+    plt.savefig(f'sID-{sessionID}/frames/{runID}.png', bbox_inches='tight', pad_inches=0)
     plt.close('all')
 
 def export_movie(vol, vol_masks, output_path='segmentation_movie.gif', fps=5):

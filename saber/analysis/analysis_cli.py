@@ -1,6 +1,6 @@
 from saber.entry_points.run_membrane_refinement import refine_membranes
 from saber.entry_points.run_analysis import statistics
-import click
+import rich_click as click
 
 @click.group(name='analysis')
 @click.pass_context

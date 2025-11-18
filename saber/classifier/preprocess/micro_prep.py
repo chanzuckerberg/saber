@@ -1,6 +1,6 @@
 from saber.utils import slurm_submit
 from saber import cli_context
-import click
+import rich_click as click
 
 @click.group()
 @click.pass_context
@@ -89,10 +89,10 @@ def prep2d(input, output, target_resolution, scale_factor, sam2_cfg):
     # Prepare tasks
     if target_resolution is not None:
         print(f'Running SABER Segmentations with a Target Resolution of: {target_resolution} Å.')
-        tasks = [ (fName, output, target_resolution, None, False, False) for fName in files ]
+        tasks = [ (fName, output, None, target_resolution, False, False) for fName in files ]
     elif scale_factor is not None:
         print(f'Running SABER Segmentations with a Downsampling Scale Factor of: {scale_factor}.')
-        tasks = [ (fName, output, None, scale_factor, False, False) for fName in files ]
+        tasks = [ (fName, output, scale_factor, None, False, False) for fName in files ]
     else:  # We're not downsampling
         print('Running the Segmentations at the full micrograph resolution.')
         tasks = [ (fName, output, None, None, False, False) for fName in files ]

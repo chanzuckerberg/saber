@@ -5,7 +5,7 @@
 [![Python Version](https://img.shields.io/pypi/pyversions/saber-em.svg?color=green)](https://www.python.org/)
 
 
-**S**egment **A**nything **B**ased **E**lectron tomography **R**ecognition is a robust platform designed for autonomous segmentation of organelles from cryo-electron tomography (cryo-ET) or electron microscopy (EM) datasets. 
+**S**egment **A**nything **B**ased **E**xpert **R**ecognition is a robust platform designed for autonomous segmentation of organelles from cryo-electron tomography (cryo-ET) or electron microscopy (EM) datasets. 
 
 ## Introduction
 Leveraging foundational models, SABER enables segmentation directly from video-based training translated into effective 3D tomogram analysis. Users can utilize zero-shot inference with morphological heuristics or enhance prediction accuracy through data-driven training.

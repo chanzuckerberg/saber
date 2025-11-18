@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from saber import cli_context
-from typing import List
-import click
+from typing import List, Tuple
+import rich_click as click
 
 def split(
     input: str,
@@ -23,10 +23,17 @@ def split(
         - Training zarr file
         - Validation zarr file
     """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     from sklearn.model_selection import train_test_split
+    from saber.utils.progress import _progress 
+    from rich.console import Console
+    from threading import Lock
     from pathlib import Path
     import numpy as np
-    import zarr
+    import zarr, os
+
+    # Initialize Rich console for output
+    console = Console()
 
     # Convert input path to Path object for easier manipulation
     input_path = Path(input)
@@ -48,6 +55,12 @@ def split(
         train_size=ratio,
         random_state=random_seed
     )
+
+    console.rule("[bold]Split Summary")
+    console.print(f"[b]Source:[/b] {input}")
+    console.print(f"Total samples: {len(all_keys)}")
+    console.print(f"Training samples: {len(train_keys)}")
+    console.print(f"Validation samples: {len(val_keys)}\n")
     
     # Create new zarr files for training and validation
     train_zarr = zarr.open(str(train_path), mode='w')
@@ -58,34 +71,52 @@ def split(
         train_zarr.attrs[attr_name] = attr_value
         val_zarr.attrs[attr_name] = attr_value
     
-    # Copy data to new zarr files
+    # Define items to copy
     items = ['0', 'labels/0', 'labels/rejected']
-    print('Copying data to train zarr file...')
-    for key in train_keys:
-        train_zarr.create_group(key)  # Explicitly create the group first
-        copy_attributes(zfile[key], train_zarr[key])
-        for item in items:
-            train_zarr[key][item] = zfile[key][item][:]  # [:] ensures a full copy
-        copy_attributes(zfile[key]['labels'], train_zarr[key]['labels'])
     
-    print('Copying data to validation zarr file...')
-    for key in val_keys:
-        val_zarr.create_group(key)  # Explicitly create the group first
-        copy_attributes(zfile[key], val_zarr[key])
+    # Function to copy a single key
+    def copy_key(key, source_zarr, dest_zarr):
+        """Copy a single key from source to destination zarr."""
+        dest_zarr.create_group(key)
+        copy_attributes(source_zarr[key], dest_zarr[key])
         for item in items:
-            val_zarr[key][item] = zfile[key][item][:]  # [:] ensures a full copy
-        copy_attributes(zfile[key]['labels'], val_zarr[key]['labels'])
+            try:
+                dest_zarr[key][item] = source_zarr[key][item][:]
+            except Exception as e:
+                console.print(f"[yellow]Warning: Failed to copy {key}/{item}: {e}[/yellow]")
+        copy_attributes(source_zarr[key]['labels'], dest_zarr[key]['labels'])
+    
+    # Parallel copy for training data
+    max_workers = num_workers = min(os.cpu_count() or 8, len(train_keys))
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = []
+        for key in train_keys:
+            future = executor.submit(copy_key, key, zfile, train_zarr)
+            futures.append(future)
+        
+        # Wait for completion with progress bar
+        for _ in _progress(as_completed(futures), total=len(futures), description="Copying train data"):
+            pass
+    
+    # Parallel copy for validation data
+    max_workers = num_workers = min(os.cpu_count() or 8, len(val_keys))
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = []
+        for key in val_keys:
+            future = executor.submit(copy_key, key, zfile, val_zarr)
+            futures.append(future)
+        
+        # Wait for completion with progress bar
+        for _ in _progress(as_completed(futures), total=len(futures), description="Copying validation data"):
+            pass
     
     # Print summary
-    print(f"\nSplit Summary:")
-    print(f"Total samples: {len(all_keys)}")
-    print(f"Training samples: {len(train_keys)}")
-    print(f"Validation samples: {len(val_keys)}")
-    print(f"\nCreated files:")
-    print(f"Training data: {train_path}")
-    print(f"Validation data: {val_path}")
+    console.rule("[bold]Created files")
+    console.print(f"[b]Training data:[/b] {train_path}")
+    console.print(f"[b]Validation data:[/b] {val_path}\n")
     
     return str(train_path), str(val_path)
+
 
 def merge(inputs: List[str], output: str):
     """
@@ -95,49 +126,74 @@ def merge(inputs: List[str], output: str):
         inputs: List of input Zarr files
         output: Path to the output Zarr file
     """
-    from saber.classifier.preprocess.split_merge_data import copy_attributes
-    import zarr
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from saber.utils.progress import _progress 
+    from rich.console import Console
+    from threading import Lock
+    import zarr, os 
+
+    console = Console()
+    attr_lock = Lock()  # Lock for thread-safe attribute updates
+
+    console.rule("[bold cyan]Zarr Merge")
+    console.print(f"[b green]Creating merged zarr file at:[/b green] {output}")
     
     # Create the output zarr group
-    print('Creating merged zarr file at:', output)
     mergedZarr = zarr.open_group(output, mode='w')
-
-    # Copy data from each input zarr file to the merged zarr file
-    for input in inputs:
+    
+    # Define items to copy
+    items = ['0', 'labels/0', 'labels/rejected']
+    
+    # Function to copy a single key
+    def copy_key(key, session_label, source_zarr, dest_zarr):
+        """Copy a single key from source to destination zarr."""
+        write_key = f"{session_label}_{key}"
         
+        # Create the group and copy its attributes
+        new_group = dest_zarr.create_group(write_key)
+        copy_attributes(source_zarr[key], new_group)
+        
+        # Copy the data arrays
+        for item in items:
+            try:
+                dest_zarr[write_key][item] = source_zarr[key][item][:]
+            except Exception as e:
+                pass  # Silently skip missing items
+        
+        # Copy attributes for labels subgroup
+        copy_attributes(source_zarr[key]['labels'], new_group['labels'])
+    
+    # Process each input zarr file
+    for input_spec in _progress(inputs, description="Merging inputs"):
         # Get the session label from the input
-        session_label, zarr_path = input.split(',')
-
+        session_label, zarr_path = input_spec.split(',')
+        
         # Open the zarr file
-        print('Merging data from:', zarr_path)
         zfile = zarr.open_group(zarr_path, mode='r')
         keys = list(zfile.keys())
-
-        # Copy data to new zarr files
-        items = ['0', 'labels/0', 'labels/rejected']
-        for key in keys:
-            write_key = session_label + '_' + key
+        
+        # Parallel copy of keys
+        max_workers = min(os.cpu_count() or 8, len(keys))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = []
+            for key in keys:
+                future = executor.submit(copy_key, key, session_label, zfile, mergedZarr)
+                futures.append(future)
             
-            # Create the group and copy its attributes
-            new_group = mergedZarr.create_group(write_key)  # Explicitly create the group first
-            copy_attributes(zfile[key], new_group)  
+            # Wait for completion with progress bar
+            for _ in _progress(as_completed(futures), total=len(futures), 
+                             description=f"[{session_label}] merging keys"):
+                pass
+        
+        # Copy all attributes from the input zarr file (thread-safe)
+        with attr_lock:
+            for attr_name, attr_value in zfile.attrs.items():
+                if attr_name not in mergedZarr.attrs:
+                    mergedZarr.attrs[attr_name] = attr_value
 
-            # Copy the data arrays
-            for item in items:
-                try:
-                    # [:] ensures a full copy
-                    mergedZarr[write_key][item] = zfile[key][item][:] 
-                except Exception as e:
-                    pass
-            # Copy attributes for labels subgroup
-            copy_attributes(zfile[key]['labels'], new_group['labels'])
+    console.rule("[bold green]Merge complete!")
+    console.print(f"[b white]Output file:[/b white] {output}")
 
-        # Copy all attributes from the last input zarr file
-        for attr_name, attr_value in zfile.attrs.items():
-            if attr_name not in mergedZarr.attrs:
-                mergedZarr.attrs[attr_name] = attr_value
-
-    print("Merge complete!")
 
 def check_inputs(inputs: List[str]):
     """
@@ -164,6 +220,7 @@ def check_inputs(inputs: List[str]):
             raise click.BadParameter(
                 f"Zarr file does not exist: '{zarr_path}'"
             )
+
 
 def copy_attributes(source, destination):
     """
@@ -208,7 +265,7 @@ def merge_data(inputs: List[str], output: str):
 @click.command(context_settings=cli_context)
 @click.option("-i", "--input", type=str, required=True, 
               help="Path to the Zarr file.")
-@click.option("--ratio", type=float, required=False, default=0.8, 
+@click.option('-r', "--ratio", type=float, required=False, default=0.8, 
               help="Fraction of data to use for training.")
 @click.option("--random-seed", type=int, required=False, default=42, 
               help="Random seed for reproducibility.")
@@ -218,9 +275,8 @@ def split_data(input, ratio, random_seed):
     Creates two new zarr files for training and validation data.
 
     Example:
-        saber classifier split-data --i data.zarr --ratio 0.8 
+        saber classifier split-data --i data.zarr --ratio 0.8 --max-workers 16
     """
 
     # Call the split function
     split(input, ratio, random_seed)
-    
