@@ -53,8 +53,6 @@ def extract_organelle_statistics(
                     # Fall back to equivalent sphere diameter if axis calculation fails
                     print(f"Warning: Could not compute axes for label {label} in {run.name}, using spherical approximation")
                     diameter = 2 * ((3 * volume) / (4 * np.pi)) ** (1/3)
-                    axis_x = diameter
-                    axis_y = diameter
 
                 # Prepare row for CSV
                 csv_row = [
