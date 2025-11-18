@@ -250,7 +250,7 @@ def merge_data(inputs: List[str], output: str):
     Merge multiple Zarr files into a single Zarr file.
 
     Example:
-        saber classifier merge-data --inputs session1,/path/to/session1.zarr --inputs session2,/path/to/session2.zarr --output merged.zarr --max-workers 16
+        saber classifier merge-data --inputs session1,/path/to/session1.zarr --inputs session2,/path/to/session2.zarr --output merged.zarr
     """
 
     # Check if the inputs are valid
