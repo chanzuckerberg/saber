@@ -1,5 +1,6 @@
 import saber.classifier.models.common as common
 from saber import pretrained_weights
+from contextlib import nullcontext
 import torch.nn.functional as F
 from saber.utils import io
 import torch.nn as nn
@@ -34,8 +35,11 @@ class SAM2Classifier(nn.Module):
         self.input_mode = 'separate'
 
         # Get Device
-        self.device = io.get_available_devices(deviceID)
-
+        if deviceID < 0:
+            self.device = torch.device('cpu')
+        else:
+            self.device = io.get_available_devices(deviceID)
+            
         # Build SAM2 model
         (cfg, checkpoint) = pretrained_weights.get_sam2_checkpoint(backbone_type)      
         sam2_model = build_sam2(cfg, checkpoint, device=self.device)
@@ -92,6 +96,22 @@ class SAM2Classifier(nn.Module):
         # Weight initialization for better convergence
         common.initialize_weights(self)
 
+    def to(self, *args, **kwargs):
+        """
+        Override to() to automatically move backbone when model is moved.
+        This is called by Fabric, PyTorch, and any code that does model.to(device).
+        """
+        super().to(*args, **kwargs)
+        
+        # Automatically move backbone to the same device
+        try:
+            self.device = next(self.parameters()).device
+            self.backbone.model.to(self.device)
+        except StopIteration:
+            pass  # No parameters yet
+        
+        return self
+
     def train(self, mode=True):
         """
         Override the default train() to ensure the backbone always remains in eval mode.
@@ -108,11 +128,21 @@ class SAM2Classifier(nn.Module):
             x: Input tensor of shape [B, 1, H, W]
             mask: Unused in this example or processed later
         """
+
         # Remove the channel dimension:
         x = x[:, 0, ...]  # Now x has shape [B, H, W]
 
+        # --- make NumPy conversion dtype-safe, even under bf16 autocast ---
+        # When tensors are bf16 (from mixed precision), NumPy conversion will fail.
+        # Detach, cast to fp32, move to CPU, then .numpy().
+        autocast_off = (
+            torch.autocast(device_type="cuda", enabled=False) if x.is_cuda else nullcontext()
+        )
+        with autocast_off:
+            x_np = x.detach().to(torch.float32).cpu().numpy()  # [B, H, W]        
+
         # Move to CPU and convert to numpy
-        x_np = x.cpu().numpy()  # shape: [B, H, W]
+        # x_np = x.cpu().numpy()  # shape: [B, H, W]
 
         # Convert each grayscale image to a 3-channel image (H, W, 3)
         images_list = [np.repeat(img[..., None], 3, axis=2) for img in x_np]
@@ -154,6 +184,10 @@ class SAM2Classifier(nn.Module):
             concatenated_features: Tensor of shape (B, 2*C, H, W)
                 Where the first C channels correspond to the masked ROI and the next C channels correspond to the background.
         """
+
+        # Ensure mask is on same device as features
+        mask = mask.to(feature_map.device)
+
         # Resize the mask to the feature map's spatial dimensions
         mask_resized = F.interpolate(mask, size=feature_map.shape[2:], mode='nearest')
         

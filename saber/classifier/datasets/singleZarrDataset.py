@@ -1,93 +1,119 @@
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from torch.utils.data import Dataset
 from scipy.ndimage import label
+from functools import partial
 import torch, zarr, os
 from tqdm import tqdm
 import numpy as np
 
 class ZarrSegmentationDataset(Dataset):
-    def __init__(self, zarr_path, mode='train', transform=None, min_area = 250):
-        """
-        Args:
-            zarr_path (str): Path to the Zarr file.
-            run_ids (list): List of run IDs to include.
-            mode (str): 'train' for random sampling, 'inference' for deterministic order.
-            transform (callable, optional): Optional transform to apply to the data.
-            min_area (int, optional): Minimum area of masks to keep. Default is 100.
-        """
-        
+    def __init__(self, zarr_path, mode='train', transform=None, min_area=500, 
+                 negative_class_reduction=1, num_workers=None):
         if not os.path.exists(zarr_path):
             raise FileNotFoundError(f"Zarr file not found: {zarr_path}")
+        
+        self.zarr_path = zarr_path
         self.zfile = zarr.open(zarr_path, mode='r')
         self.mode = mode
         self.min_area = min_area
         self.transform = transform
+        self.negative_class_reduction = negative_class_reduction
 
-        # Factor to reduce the number of negative samples
-        negative_class_reduction = 1
-
-        # Extract group names as a string array
-        self.run_ids = [group[0] for group in self.zfile.groups()]
-
-        # Preload all masks and labels for efficient access
-        self.samples = []
-        for run_id in tqdm(self.run_ids):
-            group = self.zfile[run_id]
-            image = group['0'][:]
-            labels = group['labels']
-            
-            # Process candidate masks
-            if '0' in labels:
-                candidate_masks = labels['0'][:] # [Nclass, Nx, Ny]
-                self._process_masks(candidate_masks, image)
-            else:
-                continue
-            
-            # Check if "rejected_masks" exists before accessing
-            if 'rejected' in labels:
-                # Process rejected masks
-                rejected_masks = labels['rejected'][::negative_class_reduction]
-                self._process_masks(rejected_masks, image, is_negative_mask=True)  
-
-    def _process_masks(self, masks, image, is_negative_mask = False):
-        """
-        Process masks by separating connected components and filtering out empty masks.
+        # Get all run IDs
+        run_ids = [group[0] for group in self.zfile.groups()]
         
-        Args:
-            masks (numpy.ndarray): Array of masks to process.
-            image (numpy.ndarray): Corresponding image data.
-            label_value (int): Label to assign to the masks (1 for candidates, 0 for rejected).
-        """
-        for class_idx, mask in enumerate(masks):  # Iterate over each class dimension
-            if mask.max() > 0:  # Ignore empty masks
-                # Separate connected components
-                labeled_mask, num_features = label(mask)
-                for component_idx in range(1, num_features + 1):
-                    component_mask = (labeled_mask == component_idx).astype(np.uint8)
-                    if ( component_mask.max() > 0 ) and ( component_mask.sum() > self.min_area ):  # Ensure the component is non-empty
-                        self.samples.append({
-                            'image': image,
-                            'mask': component_mask,
-                            'label': 0 if is_negative_mask else class_idx  # Assign labels properly
-                        })
+        # Build index in parallel
+        self.sample_index = []
+        
+        if num_workers is None:
+            num_workers = min(os.cpu_count() or 1, len(run_ids))
+        
+        if num_workers > 1 and len(run_ids) > 1:
+            # Parallel indexing
+            with ProcessPoolExecutor(max_workers=num_workers) as executor:
+                # Submit all tasks
+                index_fn = partial(_index_run, 
+                                   zarr_path=zarr_path,
+                                   min_area=min_area,
+                                   negative_class_reduction=negative_class_reduction)
+                
+                futures = {executor.submit(index_fn, run_id): run_id 
+                          for run_id in run_ids}
+                
+                # Collect results with progress bar
+                for future in tqdm(as_completed(futures), 
+                                  total=len(futures), 
+                                  desc="Indexing dataset (parallel)"):
+                    samples = future.result()
+                    self.sample_index.extend(samples)
+        else:
+            # Sequential fallback (for debugging or small datasets)
+            for run_id in tqdm(run_ids, desc="Indexing dataset"):
+                samples = _index_run(run_id, zarr_path, min_area, negative_class_reduction)
+                self.sample_index.extend(samples)
 
     def __len__(self):
-        return len(self.samples)
+        return len(self.sample_index)
 
     def __getitem__(self, idx):
-
-        image = self.samples[idx]['image']
-        mask = self.samples[idx]['mask']
-        label = self.samples[idx]['label']
+        run_id, class_idx, component_idx, is_negative = self.sample_index[idx]
+        
+        # Load image and masks on-demand
+        group = self.zfile[run_id]
+        image = group['0'][:]
+        
+        # Get the specific mask
+        if is_negative:
+            mask_array = group['labels']['rejected'][:]
+        else:
+            mask_array = group['labels']['0'][:]
+        
+        # Extract the specific component
+        labeled_mask, _ = label(mask_array[class_idx])
+        component_mask = (labeled_mask == component_idx).astype(np.uint8)
+        
+        label_value = 0 if is_negative else class_idx
         
         # Apply transforms
         if self.transform:
-            data = self.transform({'image': image, 'mask': mask})
+            data = self.transform({'image': image, 'mask': component_mask})
             image = data['image']
-            mask = data['mask']        
-
-        # Return as tensors
+            component_mask = data['mask']
+        
         return {
             'image': image,
-            'mask': mask,
-            'label': torch.tensor(label, dtype=torch.long)
+            'mask': component_mask,
+            'label': torch.tensor(label_value, dtype=torch.long)
         }
+
+def _index_run(run_id, zarr_path, min_area, negative_class_reduction):
+    """Worker function to index a single run. Must be at module level for pickling."""
+    zfile = zarr.open(zarr_path, mode='r')
+    group = zfile[run_id]
+    labels = group['labels']
+    
+    samples = []
+    
+    # Index candidate masks
+    if '0' in labels:
+        candidate_masks = labels['0'][:]
+        for class_idx, mask in enumerate(candidate_masks):
+            if mask.max() > 0:
+                labeled_mask, num_features = label(mask)
+                for component_idx in range(1, num_features + 1):
+                    component_mask = (labeled_mask == component_idx)
+                    if component_mask.sum() > min_area:
+                        samples.append((run_id, class_idx, component_idx, False))
+    
+    # Index rejected masks
+    if 'rejected' in labels:
+        rejected_masks = labels['rejected'][::negative_class_reduction]
+        for class_idx, mask in enumerate(rejected_masks):
+            if mask.max() > 0:
+                labeled_mask, num_features = label(mask)
+                for component_idx in range(1, num_features + 1):
+                    component_mask = (labeled_mask == component_idx)
+                    if component_mask.sum() > min_area:
+                        samples.append((run_id, class_idx, component_idx, True))
+    
+    return samples

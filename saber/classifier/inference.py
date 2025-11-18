@@ -31,6 +31,7 @@ def run_predict(model_weights, model_config, input, output, save_results = False
     from saber.visualization import galleries, classifier as classviz
     from saber.classifier.models.predictor import Predictor
     from saber.filters import masks as mask_filters
+    from saber.utils.progress import _progress
     from saber.utils import slurm_submit
     import zarr, torch, os
     from tqdm import tqdm
@@ -60,7 +61,7 @@ def run_predict(model_weights, model_config, input, output, save_results = False
     final_masks = np.zeros([num_classes - 1, nx, ny], dtype=np.uint8)
     
     # Main Loop
-    for run_id in tqdm(run_ids):
+    for run_id in _progress(run_ids, description="Running inference"):
 
         im = np.array(zfile[run_id]['0'])
         masks = np.array(zfile[run_id]['labels']['0'])

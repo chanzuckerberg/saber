@@ -266,10 +266,9 @@ class ClassifierTrainer:
         for pred, label in zip(preds, labels):
             if pred == label:
                 tp[label] += 1
-            elif pred != label and pred > 0:
-                fp[pred] += 1
-            elif pred != label and pred == 0:
-                fn[label] += 1
+            else:
+                fp[pred]  += 1   # predicted class got a false positive
+                fn[label] += 1   # true class suffered a false negative
 
         per_class_precision = []
         per_class_recall = []

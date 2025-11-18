@@ -96,6 +96,7 @@ class SABERLabelConverter:
         Convert JSON annotations to labeled zarr format compatible with SABER dataloader.
         """
         from saber.utils.zarr_writer import add_attributes
+        from saber.utils.progress import _progress
         import numpy as np
         import json, zarr
 
@@ -116,7 +117,7 @@ class SABERLabelConverter:
             root.attrs['amg'] = dict(sam2_data.attrs['amg'])
         
         # Process each run_id
-        for run_id in tqdm(frame_labels.keys()):
+        for run_id in _progress(frame_labels.keys(), description="Adding Annotations"):
             annotations = frame_labels[run_id]
             
             # Skip empty annotations
@@ -149,64 +150,68 @@ class SABERLabelConverter:
             masks = np.zeros((len(labels), nx, ny), dtype=np.uint8)
             used_mask_values = set()
 
-            # Extract mask values and create mapping
-            mask_value_to_array = self.extract_mask_values(masks0)
+            try:
+                # Extract mask values and create mapping
+                mask_value_to_array = self.extract_mask_values(masks0)
 
-            for seg_value, label in annotations.items():
-                # Skip labels that were excluded from the mapping
-                if label not in label_mapping:
-                    continue
-                # Add mask to the corresponding class
-                mask_array = mask_value_to_array[float(seg_value)]
-                masks[label_mapping[label],] = np.logical_or(
-                        masks[label_mapping[label],], 
-                        mask_array
-                    ).astype(np.uint8)
-                used_mask_values.add(float(seg_value))
+                for seg_value, label in annotations.items():
+                    # Skip labels that were excluded from the mapping
+                    if label not in label_mapping:
+                        continue
+                    # Add mask to the corresponding class
+                    mask_array = mask_value_to_array[float(seg_value)]
+                    masks[label_mapping[label],] = np.logical_or(
+                            masks[label_mapping[label],], 
+                            mask_array
+                        ).astype(np.uint8)
+                    used_mask_values.add(float(seg_value))
 
-            # Get rejected masks (masks not assigned to any class)
-            rejected_masks = []
-            for mask_value, mask_array in mask_value_to_array.items():
-                if mask_value not in used_mask_values:
-                    rejected_masks.append(mask_array)
-            
-            # Create group for this run_id - Save image
-            group = root.create_group(run_id)
-            group.create_dataset(
-                '0', 
-                data=image, 
-                dtype=image.dtype, 
-                compressor=zarr.Blosc(cname='zstd', clevel=2, shuffle=2)
-            )
-            pixel_size = sam2_data[run_id].attrs['multiscales'][0]['datasets'][0]['coordinateTransformations'][0]['scale'][0]
-            add_attributes(group, pixel_size, False)
-            
-            # Save class masks
-            if masks.sum() > 0:
-                labels_group = group.create_group('labels')
-                labels_group.create_dataset(
-                    '0',  # Changed from 'labels' to 'masks' to match dataloader
-                    data=masks,
-                    dtype=np.uint8,
+                # Get rejected masks (masks not assigned to any class)
+                rejected_masks = []
+                for mask_value, mask_array in mask_value_to_array.items():
+                    if mask_value not in used_mask_values:
+                        rejected_masks.append(mask_array)
+                
+                # Create group for this run_id - Save image
+                group = root.create_group(run_id)
+                group.create_dataset(
+                    '0', 
+                    data=image, 
+                    dtype=image.dtype, 
                     compressor=zarr.Blosc(cname='zstd', clevel=2, shuffle=2)
                 )
-                add_attributes(labels_group, pixel_size, True)
-            
-            # Save rejected masks
-            if len(rejected_masks) > 0:
-                labels_group.create_dataset(
-                    'rejected',
-                    data=rejected_masks,
-                    dtype=np.uint8,
-                    compressor=zarr.Blosc(cname='zstd', clevel=2, shuffle=2)
-                )
-            else:
-                # Empty array if no rejected masks
-                labels_group.create_dataset(
-                    'rejected',
-                    data=np.array([]),
-                    dtype=np.uint8
-                )
+                pixel_size = sam2_data[run_id].attrs['multiscales'][0]['datasets'][0]['coordinateTransformations'][0]['scale'][0]
+                add_attributes(group, pixel_size, False)
+                
+                # Save class masks
+                if masks.sum() > 0:
+                    labels_group = group.create_group('labels')
+                    labels_group.create_dataset(
+                        '0',  # Changed from 'labels' to 'masks' to match dataloader
+                        data=masks,
+                        dtype=np.uint8,
+                        compressor=zarr.Blosc(cname='zstd', clevel=2, shuffle=2)
+                    )
+                    add_attributes(labels_group, pixel_size, True)
+                
+                # Save rejected masks
+                if len(rejected_masks) > 0:
+                    labels_group.create_dataset(
+                        'rejected',
+                        data=rejected_masks,
+                        dtype=np.uint8,
+                        compressor=zarr.Blosc(cname='zstd', clevel=2, shuffle=2)
+                    )
+                else:
+                    # Empty array if no rejected masks
+                    labels_group.create_dataset(
+                        'rejected',
+                        data=np.array([]),
+                        dtype=np.uint8
+                    )
+            except Exception as e:
+                click.echo(f"❌ Error processing run ID '{run_id}': {e}", err=True)
+                continue
         
         # Save metadata at root level
         root.attrs['labels'] = label_mapping

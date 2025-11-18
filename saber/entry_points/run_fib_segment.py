@@ -86,11 +86,11 @@ def run_fib_segment(
     # Segment the Volume
     masks = segmenter.segment(volume, ini_depth, nframes)
 
-    # Export the Masks as a Movie
-    export_movie(volume, masks,'segmentation.gif')
-
     # (TODO): Save the Masks
     np.save(output, masks)
+
+    # Export the Masks as a Movie
+    export_movie(volume, masks,'segmentation.gif')
 
 def read_fib_volume(input: str, scale_factor: float):
     """
