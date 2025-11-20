@@ -81,11 +81,11 @@ class SAM2Classifier(nn.Module):
         # Classification head (fully connected layers)
         # classifier_dims = [256, 128]
         self.classifier = nn.Sequential(
-            nn.Linear(projection_dims[1], 128),  #  feature dim
-            nn.LayerNorm(128),
+            nn.Linear(projection_dims[1], 64),  #  feature dim
+            nn.LayerNorm(64),
             nn.PReLU(),
             nn.Dropout(0.1),
-            nn.Linear(128, num_classes)   # Output classification layer
+            nn.Linear(64, num_classes)   # Output classification layer
         )
         
         # Weight initialization for better convergence

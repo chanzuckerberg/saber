@@ -85,7 +85,7 @@ def remove_duplicate_masks(masks: List[Dict[str, Any]],
     
     return unique_masks
 
-def separate_masks(combined_mask: np.ndarray) -> np.ndarray:
+def separate_masks(combined_mask: np.ndarray, min_mask_area: int = 100) -> np.ndarray:
     """
     Minimal 3D connected-components with compact relabeling.
     - 26-connectivity; touching objects stay merged.
@@ -108,7 +108,7 @@ def separate_masks(combined_mask: np.ndarray) -> np.ndarray:
     labels_sub, _ = ndi.label(sub, structure=structure)  # 0..N, 0 is bg
 
     # optional: remove small components (labels >=1 only)
-    min_vol = int(getattr(self, "min_mask_area", 0) or 0) * 10 # scale up for 3D
+    min_vol = min_mask_area * 10 # scale up for 3D
     if min_vol > 1:
         counts = np.bincount(labels_sub.ravel())
         small = np.flatnonzero((counts < min_vol) & (np.arange(counts.size) != 0))
