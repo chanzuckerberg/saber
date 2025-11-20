@@ -2,7 +2,7 @@ from saber.utils import slurm_submit
 from saber import cli_context
 import rich_click as click
 
-def fib_options(func):
+def light_options(func):
     """Decorator to add shared options for fib commands."""
     options = [
         click.option("-i", "--input", type=str, required=True,
@@ -22,10 +22,10 @@ def fib_options(func):
 
 
 @click.command(context_settings=cli_context)
-@fib_options
+@light_options
 @slurm_submit.sam2_inputs
 @slurm_submit.classifier_inputs
-def fib(
+def light(
     input: str,
     output: str,
     ini_depth: int,
@@ -37,17 +37,17 @@ def fib(
     scale_factor: float,
     ):
     """
-    Segment a Fib Volume
-    """
+    Segment features from light microscopy movies (e.g. cells under an optical microscope).
+    """ 
 
-    run_fib_segment(
+    run_light_segment(
         input, output, ini_depth, nframes, 
         sam2_cfg, model_weights, model_config, 
         target_class, scale_factor
     )
 
 
-def run_fib_segment(
+def run_light_segment(
     input: str,
     output: str,
     ini_depth: int,
@@ -59,19 +59,19 @@ def run_fib_segment(
     scale_factor: float,
 ):
     """
-    Segment a Fib Volume
+    Segment a Light Movie
     """
     from saber.visualization.results import export_movie
     from saber.segmenters.fib import propagationSegmenter
     from saber.classifier.models import common
     import numpy as np
 
-    print(f'\nStarting Fib Segmentation for the following input: {input}')
+    print(f'\nStarting Light Movie Segmentation for the following input: {input}')
     print(f'Segmentations will be performed every {ini_depth} slices for ±{nframes} frames')
     print(f'Output Masks will be saved to: {output}')
 
     # Read the Fib Volume
-    volume = read_fib_volume(input, scale_factor)
+    volume = read_light_movie(input, scale_factor)
 
     # Load the Classifier Model
     predictor = common.get_predictor(model_weights, model_config)
@@ -81,6 +81,7 @@ def run_fib_segment(
         sam2_cfg=sam2_cfg,
         classifier=predictor,
         target_class=target_class,
+        em_modality = False,
     )
 
     # Segment the Volume
@@ -92,9 +93,9 @@ def run_fib_segment(
     # Export the Masks as a Movie
     export_movie(volume, masks,'segmentation.gif')
 
-def read_fib_volume(input: str, scale_factor: float):
+def read_light_movie(input: str, scale_factor: float):
     """
-    Read the Fib Volume from a directory or a single file
+    Read the Light Movie from a directory or a single file
     """
     from saber.filters.downsample import FourierRescale2D
     import skimage.io as sio
@@ -118,9 +119,12 @@ def read_fib_volume(input: str, scale_factor: float):
 
     # Downsample if needed
     if scale_factor > 1:
-        for i in range(volume.shape[0]):
-            volume[i, :, :] = FourierRescale2D.run(volume[i, :, :], scale_factor)
+        tmp_im = FourierRescale2D.run(volume[0, :, :], scale_factor)
+        out_shape = (volume.shape[0], tmp_im.shape[0], tmp_im.shape[1])
+        vol_out = np.zeros(out_shape, dtype=volume.dtype)
+        vol_out[0, :, :] = tmp_im
+        for i in range(1, volume.shape[0]):
+            vol_out[i, :, :] = FourierRescale2D.run(volume[i, :, :], scale_factor)
+        volume = vol_out
     
     return volume
-
-    

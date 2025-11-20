@@ -1,11 +1,11 @@
-from saber.segmenters.general import generalSegmenter
+from saber.segmenters.general import volumeSegmenter
 from saber.utils import preprocessing
+from saber.segmenters import utils
 from tqdm import tqdm
 import numpy as np
 import torch
 
-
-class fibSegmenter(generalSegmenter):
+class propagationSegmenter(volumeSegmenter):
 
     def __init__(self, 
         sam2_cfg: str = 'base', 
@@ -14,11 +14,15 @@ class fibSegmenter(generalSegmenter):
         target_class: int = 1, 
         min_mask_area: int = 100, 
         min_rel_box_size: float = 0.025,
+        em_modality: bool = True,
         ):
         """
-        Initialize the fibSegmenter
+        Initialize the propagationSegmenter
         """
-        super().__init__(sam2_cfg, deviceID, classifier, target_class, min_mask_area, min_rel_box_size)
+        super().__init__(
+            sam2_cfg, deviceID, classifier, target_class, 
+            min_mask_area, min_rel_box_size, em_modality
+        )
         self.ini_depth = 10 # Default spacing between slices to segment
 
     def segment(self, volume: np.ndarray, ini_depth: int, nframes: int = None):
@@ -74,6 +78,9 @@ class fibSegmenter(generalSegmenter):
             
             # Update final masks with maximum operation (in-place)
             np.maximum(final_masks, masks3d, out=final_masks)
+
+        # Separate the masks to instances
+        final_masks = utils.separate_masks(final_masks)
         
         return final_masks
 

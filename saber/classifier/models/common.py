@@ -1,6 +1,6 @@
 from saber.classifier.models import ( SwinTransformer, ConvNeXt, SAM2 )
 import torch.nn as nn
-import os
+import os, torch
 
 def get_classifier_model(backbone, num_classes, model_size, deviceID=0, **kwargs):
     model_map = {
@@ -70,3 +70,24 @@ def initialize_weights(model):
             elif isinstance(m, nn.BatchNorm2d):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
+
+def load_model_weights(model, model_weights, fine_tune=False):
+    """
+    Load model weights and freeze backbone if fine_tune is False.
+    """
+    # Extract state_dict from checkpoint dictionary
+    print(f'Loading classifier weights from {model_weights}...')
+    checkpoint = torch.load(model_weights, weights_only=True)
+    if isinstance(checkpoint, dict) and "model" in checkpoint:
+        state_dict = checkpoint["model"]
+    else:
+        state_dict = checkpoint  # Backwards compatibility
+    model.load_state_dict(state_dict)
+    
+    # Freeze backbone (only train classifier head)
+    if fine_tune:
+        for param in model.backbone.model.parameters():
+            param.requires_grad = False
+
+    return model
+    

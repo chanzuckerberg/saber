@@ -233,13 +233,16 @@ class saber3Dsegmenter(saber2Dsegmenter):
         classifier = None,
         target_class: int = 1,
         min_mask_area: int = 100,
-        min_rel_box_size: float = 0.025
+        min_rel_box_size: float = 0.025,
+        em_modality: bool = True
     ):  
         super().__init__(sam2_cfg, deviceID, classifier, target_class, min_mask_area, min_rel_box_size)
 
         # Build Tomogram Predictor (VOS Optimized)
         (cfg, checkpoint) = pretrained_weights.get_sam2_checkpoint(self.cfg['sam2_cfg'])
-        self.video_predictor = tomogram_predictor.TomogramSAM2Adapter(cfg, checkpoint, self.device)  
+        self.video_predictor = tomogram_predictor.TomogramSAM2Adapter(
+            cfg, checkpoint, self.device, em_modality=em_modality
+        )  
         
         # Initialize Inference State
         self.inference_state = None

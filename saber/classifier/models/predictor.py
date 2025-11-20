@@ -42,15 +42,15 @@ class Predictor:
             self.config['model']['num_classes'], 
             self.config['amg_params']['sam2_cfg'],
             deviceID=deviceID   )
+        self.model = common.load_model_weights(self.model, model_weights)
 
-
-        # Extract state_dict from checkpoint dictionary
-        checkpoint = torch.load(model_weights, weights_only=True)
-        if isinstance(checkpoint, dict) and "model" in checkpoint:
-            state_dict = checkpoint["model"]
-        else:
-            state_dict = checkpoint  # Backwards compatibility
-        self.model.load_state_dict(state_dict)
+        # # Extract state_dict from checkpoint dictionary
+        # checkpoint = torch.load(model_weights, weights_only=True)
+        # if isinstance(checkpoint, dict) and "model" in checkpoint:
+        #     state_dict = checkpoint["model"]
+        # else:
+        #     state_dict = checkpoint  # Backwards compatibility
+        # self.model.load_state_dict(state_dict)
 
         # Load the model weights
         # self.model.load_state_dict(torch.load(model_weights, weights_only=True))    

@@ -1,19 +1,22 @@
 from saber.segmenters.base import saber3Dsegmenter
 import torch
 
-class generalSegmenter(saber3Dsegmenter):
+class volumeSegmenter(saber3Dsegmenter):
     def __init__(self,
         sam2_cfg: str = 'base', 
         deviceID: int = 0,
         classifier = None,
         target_class: int = 1,
         min_mask_area: int = 100,
-        min_rel_box_size: float = 0.025
+        min_rel_box_size: float = 0.025,
+        em_modality: bool = True
     ):  
         """
         Initialize the generalSegmenter
         """ 
-        super().__init__(sam2_cfg, deviceID, classifier, target_class, min_mask_area, min_rel_box_size)
+        super().__init__(
+            sam2_cfg, deviceID, classifier, target_class, 
+            min_mask_area, min_rel_box_size, em_modality)
 
         # Flag to Bound the Segmentation to the Tomogram
         self.bound_segmentation = True
