@@ -12,7 +12,7 @@ class TomogramPreprocessor:
     This class handles tomogram-specific preprocessing without inheriting from SAM2.
     """
     
-    def __init__(self, light_modality: bool = True):
+    def __init__(self, light_modality: bool = False):
         self.light_modality = light_modality
     
     def load_img_as_tensor(self, img: np.ndarray, image_size: int) -> Tuple[torch.Tensor, int, int]:
@@ -125,7 +125,7 @@ class TomogramSAM2Adapter:
     This uses composition instead of inheritance to avoid license mixing.
     """
     
-    def __init__(self, cfg, checkpoint, device, em_modality: bool = True, num_maskmem: int = 2):
+    def __init__(self, cfg, checkpoint, device, light_modality: bool = False, num_maskmem: int = 2):
         """
         Initialize with a SAM2 predictor instance.
         
@@ -150,7 +150,7 @@ class TomogramSAM2Adapter:
             self.predictor.num_maskmem = num_maskmem  
 
         # Initialize Preprocessor
-        self.preprocessor = TomogramPreprocessor(em_modality)
+        self.preprocessor = TomogramPreprocessor(light_modality)
     
     @torch.inference_mode()
     def create_inference_state_from_tomogram(

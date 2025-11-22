@@ -83,6 +83,8 @@ def run_light_segment(
         target_class=target_class,
         em_modality = False,
     )
+    # Assume Mass is Preserved for this type of data
+    segmenter.filter_threshold = -1
 
     # Segment the Volume
     masks = segmenter.segment(volume, ini_depth, nframes)

@@ -234,14 +234,14 @@ class saber3Dsegmenter(saber2Dsegmenter):
         target_class: int = 1,
         min_mask_area: int = 100,
         min_rel_box_size: float = 0.025,
-        em_modality: bool = True
+        light_modality: bool = False
     ):  
         super().__init__(sam2_cfg, deviceID, classifier, target_class, min_mask_area, min_rel_box_size)
 
         # Build Tomogram Predictor (VOS Optimized)
         (cfg, checkpoint) = pretrained_weights.get_sam2_checkpoint(self.cfg['sam2_cfg'])
         self.video_predictor = tomogram_predictor.TomogramSAM2Adapter(
-            cfg, checkpoint, self.device, em_modality=em_modality
+            cfg, checkpoint, self.device, light_modality=light_modality
         )  
         
         # Initialize Inference State
@@ -255,6 +255,9 @@ class saber3Dsegmenter(saber2Dsegmenter):
 
         # Default to full volume propagation
         self.nframes = None 
+
+        # Filter Threshold for Confidence
+        self.filter_threshold = 0.5
         
     @torch.inference_mode()
     def propagate_segementation(
@@ -369,7 +372,6 @@ class saber3Dsegmenter(saber2Dsegmenter):
     def _propagate_and_filter(
         self, vol, masks, 
         captured_scores, mask_shape, 
-        filter_segmentation=True
         ):
         """
         Propagate segmentation and optionally filter results.
@@ -395,7 +397,7 @@ class saber3Dsegmenter(saber2Dsegmenter):
         nMasks = self.nMasks
 
         # Filter if requested
-        if filter_segmentation:
+        if self.filter_threshold > 0:
             self.frame_scores = np.zeros([vol.shape[0], nMasks])
             vol_masks, video_segments = self.filter_video_segments(
                 video_segments, captured_scores, mask_shape
@@ -404,6 +406,9 @@ class saber3Dsegmenter(saber2Dsegmenter):
             vol_masks = filters.segments_to_mask(
                 video_segments, vol_masks, mask_shape
             )
+
+        # Remove hook and Reset Inference State
+        self.video_predictor.reset_state(self.inference_state)
             
         return vol_masks, video_segments        
 
@@ -438,7 +443,7 @@ class saber3Dsegmenter(saber2Dsegmenter):
             vals = list(seg_dict.keys())
             for mask_idx in range(nMasks):
                 mask_val = vals[mask_idx]
-                if self.mask_boundaries[frame_idx, mask_idx] > 0.5:
+                if self.mask_boundaries[frame_idx, mask_idx] > self.filter_threshold:
                     filtered_video_segments[frame_idx][mask_val] = seg_dict[mask_val]
                 else:
                     # For null frames, create an empty mask for given object id.

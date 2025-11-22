@@ -14,14 +14,14 @@ class propagationSegmenter(volumeSegmenter):
         target_class: int = 1, 
         min_mask_area: int = 100, 
         min_rel_box_size: float = 0.025,
-        em_modality: bool = True,
+        light_modality: bool = False,
         ):
         """
         Initialize the propagationSegmenter
         """
         super().__init__(
             sam2_cfg, deviceID, classifier, target_class, 
-            min_mask_area, min_rel_box_size, em_modality
+            min_mask_area, min_rel_box_size, light_modality
         )
         self.ini_depth = 10 # Default spacing between slices to segment
 
@@ -56,7 +56,7 @@ class propagationSegmenter(volumeSegmenter):
         final_masks = np.zeros(volume.shape, dtype=np.uint16)
 
         # Main Loop
-        for ii in tqdm(range(self.ini_depth, volume.shape[0], self.ini_depth)):
+        for ii in tqdm(range(2, volume.shape[0], self.ini_depth)):
 
             # Set image and segment
             im = volume[ii]
@@ -81,7 +81,7 @@ class propagationSegmenter(volumeSegmenter):
 
         # Separate the masks to instances
         final_masks = utils.separate_masks(final_masks)
-        
+
         return final_masks
 
     @torch.inference_mode()
@@ -97,7 +97,7 @@ class propagationSegmenter(volumeSegmenter):
         max_confidence = np.zeros(volume.shape, dtype=np.float32)
 
         # Main Loop
-        for ii in tqdm(range(self.ini_depth, volume.shape[0], self.ini_depth)):
+        for ii in tqdm(range(2, volume.shape[0], self.ini_depth)):
 
             # Call mask generator directly
             im = volume[ii]
@@ -140,5 +140,5 @@ class propagationSegmenter(volumeSegmenter):
                     update_mask = mask_region & (confidence > max_confidence)
                     final_masks[update_mask] = class_id
                     max_confidence[update_mask] = confidence
-        
+
         return final_masks

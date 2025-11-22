@@ -22,9 +22,8 @@ class cryoTomoSegmenter(saber3Dsegmenter):
         """ 
         super().__init__(sam2_cfg, deviceID, classifier, target_class, min_mask_area)
 
-        # Flag to Bound the Segmentation to the Tomogram
-        self.filter_segmentation = True
-        self.bound_segmentation = True
+        # Threshold for Certainty Aware Distillation
+        self.filter_threshold = 0.5
 
     def generate_slab(self, vol, zSlice, slab_thickness):
         """
@@ -127,13 +126,12 @@ class cryoTomoSegmenter(saber3Dsegmenter):
         # Propagate and filter
         mask_shape = (nx, ny, nz)
         vol_masks, video_segments = self._propagate_and_filter(
-            self.vol, self.masks, captured_scores, mask_shape,
-            filter_segmentation=self.bound_segmentation
+            self.vol, self.masks, 
+            captured_scores, mask_shape,
         )
 
         # Remove hook and Reset Inference State
         hook_handle.remove()
-        self.video_predictor.reset_state(self.inference_state)
         
         # Display if requested
         if show_segmentations:

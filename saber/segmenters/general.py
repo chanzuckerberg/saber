@@ -9,17 +9,14 @@ class volumeSegmenter(saber3Dsegmenter):
         target_class: int = 1,
         min_mask_area: int = 100,
         min_rel_box_size: float = 0.025,
-        em_modality: bool = True
+        light_modality: bool = False
     ):  
         """
         Initialize the generalSegmenter
         """ 
         super().__init__(
             sam2_cfg, deviceID, classifier, target_class, 
-            min_mask_area, min_rel_box_size, em_modality)
-
-        # Flag to Bound the Segmentation to the Tomogram
-        self.bound_segmentation = True
+            min_mask_area, min_rel_box_size, light_modality)
 
     @torch.inference_mode()
     def segment_3d(
@@ -61,11 +58,9 @@ class volumeSegmenter(saber3Dsegmenter):
         mask_shape = (nx, ny, nz)
         vol_masks, video_segments = self._propagate_and_filter(
             vol, self.masks, captured_scores, mask_shape,
-            filter_segmentation=self.bound_segmentation,
         )
 
         # Remove hook and Reset Inference State
         hook_handle.remove()
-        self.video_predictor.reset_state(self.inference_state)
 
         return vol_masks
