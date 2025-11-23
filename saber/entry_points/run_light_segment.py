@@ -81,7 +81,7 @@ def run_light_segment(
         sam2_cfg=sam2_cfg,
         classifier=predictor,
         target_class=target_class,
-        em_modality = False,
+        light_modality = True,
     )
     # Assume Mass is Preserved for this type of data
     segmenter.filter_threshold = -1
