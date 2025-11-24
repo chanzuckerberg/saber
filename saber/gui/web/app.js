@@ -33,8 +33,6 @@ let state = {
     currentMaskIndex: 0,
     applyRotation: false,
     boundaryCache: {},
-    dataCache: {},  // Cache loaded run data
-    prefetchPromise: null  // Track prefetch operations
 };
 
 // Initialize the application
@@ -42,6 +40,7 @@ async function init() {
     await loadRuns();
     setupEventListeners();
     updateStatus('Application initialized');
+    updateAnnotationCounter();
 }
 
 // Load available runs
@@ -86,7 +85,9 @@ async function selectRun(index) {
     
     // Update UI
     renderRunList();
-    updateStatus(`Loading run: ${state.currentRunId}`);
+    updateStatus(`Loading run: ${state.currentRunId}...`);
+    
+    const startTime = performance.now();
     
     // Load run data
     try {
@@ -110,7 +111,9 @@ async function selectRun(index) {
         // Render canvases
         renderCanvases();
         
-        updateStatus(`Loaded run: ${state.currentRunId}`);
+        const endTime = performance.now();
+        const loadTime = ((endTime - startTime) / 1000).toFixed(3);
+        updateStatus(`Loaded run: ${state.currentRunId} in ${loadTime}s`);
     } catch (error) {
         console.error('Failed to load run data:', error);
         updateStatus('Failed to load run data', 'error');
@@ -180,14 +183,14 @@ function getBoundaryPoints(mask, width, height, maskValue) {
     }
     
     const points = [];
-    for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-            if (mask[y][x] > 0.5) {
+    for (let y = 1; y < height - 1; y++) {
+        for (let x = 1; x < width - 1; x++) {
+            if (mask[y][x] > 0) {
                 const isBoundary = 
-                    (x === 0 || mask[y][x-1] <= 0.5) ||
-                    (x === width-1 || mask[y][x+1] <= 0.5) ||
-                    (y === 0 || mask[y-1][x] <= 0.5) ||
-                    (y === height-1 || mask[y+1][x] <= 0.5);
+                    mask[y][x-1] === 0 ||
+                    mask[y][x+1] === 0 ||
+                    mask[y-1][x] === 0 ||
+                    mask[y+1][x] === 0;
                 
                 if (isBoundary) {
                     points.push({x, y});
@@ -203,7 +206,7 @@ function getBoundaryPoints(mask, width, height, maskValue) {
 // Render a single canvas
 function renderCanvas(canvasId, isLeft) {
     const canvas = document.getElementById(canvasId);
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     
     if (!state.currentData) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -277,7 +280,7 @@ function renderCanvas(canvasId, isLeft) {
         
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
-                if (mask[y][x] > 0.5) {
+                if (mask[y][x] > 0) {
                     ctx.fillRect(x, y, 1, 1);
                 }
             }
@@ -287,7 +290,7 @@ function renderCanvas(canvasId, isLeft) {
         if (maskValue === state.highlightedMaskValue && visibility[maskValue]) {
             const boundaryPoints = getBoundaryPoints(mask, width, height, maskValue);
             ctx.fillStyle = 'white';
-            const thickness = 2; // Increase this value for thicker outline
+            const thickness = 2;
             boundaryPoints.forEach(point => {
                 ctx.fillRect(point.x - Math.floor(thickness/2), 
                            point.y - Math.floor(thickness/2), 
@@ -374,6 +377,7 @@ function removeClass() {
     
     renderClassList();
     renderCanvases();
+    updateAnnotationCounter();
     updateStatus(`Removed class: ${className}`);
 }
 
@@ -415,6 +419,16 @@ function renderClassList() {
     // Update remove button state
     const removeBtn = document.getElementById('removeClassBtn');
     removeBtn.disabled = !state.selectedClass;
+}
+
+// Update annotation counter
+function updateAnnotationCounter() {
+    const count = Object.keys(state.annotations).filter(runId => 
+        Object.keys(state.annotations[runId] || {}).length > 0
+    ).length;
+    
+    document.getElementById('statusRight').textContent = 
+        `Annotated Runs: ${count}/${state.runs.length} | Use A/D to navigate runs, W/S to switch classes`;
 }
 
 // Toggle rotation
@@ -464,7 +478,7 @@ function handleCanvasClick(event, isLeft) {
         const maskValue = state.indexToMaskValue[index];
         const visibility = isLeft ? state.leftMaskVisibility : state.rightMaskVisibility;
         
-        if (mask[y] && mask[y][x] > 0.5 && visibility[maskValue]) {
+        if (mask[y] && mask[y][x] > 0 && visibility[maskValue]) {
             maskHits.push(index);
         }
     });
@@ -506,6 +520,7 @@ function handleCanvasClick(event, isLeft) {
         state.highlightedMaskValue = maskValue;
         
         renderCanvases();
+        updateAnnotationCounter();
         updateStatus(`Mask ${maskValue} assigned to ${state.selectedClass}`);
     } else {
         // Toggle selection on right panel
@@ -603,6 +618,7 @@ function removeHighlightedMask() {
     state.highlightedMaskValue = null;
     
     renderCanvases();
+    updateAnnotationCounter();
     updateStatus(`Removed mask ${maskValue} from ${className || 'unknown class'}`);
 }
 
@@ -662,10 +678,11 @@ async function importAnnotations() {
             
             renderClassList();
             
-            // Reload current run or switch to first annotated run
+            // Reload current run
             if (loadedAnnotations[state.currentRunId]) {
                 loadExistingAnnotations();
                 renderCanvases();
+                updateAnnotationCounter();
                 updateStatus(`Imported ${annotationCount} annotations`);
             } else {
                 const firstRunWithAnnotations = Object.keys(loadedAnnotations)[0];
@@ -673,11 +690,13 @@ async function importAnnotations() {
                     const runIndex = state.runs.indexOf(firstRunWithAnnotations);
                     if (runIndex >= 0) {
                         await selectRun(runIndex);
+                        updateAnnotationCounter();
                         updateStatus(`Imported annotations and switched to ${firstRunWithAnnotations}`);
                         return;
                     }
                 }
                 renderCanvases();
+                updateAnnotationCounter();
                 updateStatus(`Imported ${annotationCount} annotations`);
             }
         } catch (error) {

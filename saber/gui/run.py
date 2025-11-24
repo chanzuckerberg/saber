@@ -7,10 +7,10 @@ def run_gui(input: str):
 
 def run_web_gui(
     input: str, output: str, port: int, 
-    host: str, dask_scheduler: str, workers: int, debug: bool
+    host: str, debug: bool
     ):
     from saber.gui.web.main import launch_web
-    launch_web(input, output, port, host, dask_scheduler, workers, debug)
+    launch_web(input, output, port, host, debug)
 
 ########################################################
 # GUI Command
@@ -38,15 +38,25 @@ def gui(input: str):
               help='Port to run the web server on')
 @click.option('--host', type=str, default='localhost',
               help='Host to bind the server to (localhost for external access)')
-@click.option('--dask-scheduler', type=str, default=None,
-              help='Dask scheduler address (e.g., tcp://localhost:8786)')
-@click.option('--workers', '-w', type=int, default=4,
-              help='Number of Dask workers to spawn (if no scheduler provided)')
 @click.option('--debug', default=False, type=bool,
               help='Run in debug mode')
 def web(input: str, output: str, port: int, host: str, 
-        dask_scheduler: str, workers: int, debug: bool):
+        debug: bool):
     """
-    Saber Web GUI for annotating SAM2 segmentations with custom classes.
+    SABER Annotation GUI Web Server
+    
+    Examples:
+        # Basic usage
+        python main.py --input /path/to/zarr/files --port 8080
+        
+        # With output directory
+        python main.py --input /data --output /annotations
+        
+        # With external Dask cluster
+        python main.py --input /data --dask-scheduler tcp://scheduler:8786
+        
+        # Remote access via SSH tunnel
+        ssh -L 8080:localhost:8080 user@remote-server
+        Then access at http://localhost:8080
     """
-    run_web_gui(input, output, port, host, dask_scheduler, workers, debug)
+    run_web_gui(input, output, port, host, debug)

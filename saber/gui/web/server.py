@@ -14,6 +14,7 @@ import zarr
 import numpy as np
 from typing import Dict, List, Optional, Any
 
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -23,9 +24,12 @@ def create_app(data_path: str, output_path: str = None):
     # Get the directory where this script is located
     base_dir = Path(__file__).parent
     
+    logger.info(f"Base directory: {base_dir}")
+    logger.info(f"Files in base directory: {list(base_dir.glob('*'))}")
+    
     app = Flask(__name__,
-                template_folder=str(base_dir),  # Look for templates in same directory
-                static_folder=str(base_dir))    # Look for static files in same directory
+                template_folder=str(base_dir),
+                static_folder=str(base_dir))
     CORS(app)
     
     # Store configuration
@@ -55,9 +59,12 @@ def extract_mask_values(masks: np.ndarray) -> tuple:
         unique_values = np.unique(masks[masks > 0])
         num_masks = len(unique_values)
         
+        if num_masks == 0:
+            return [], []
+        
         # Vectorized mask extraction
         masks_3d = masks[np.newaxis, :, :] == unique_values[:, np.newaxis, np.newaxis]
-        extracted_masks = [masks_3d[i].astype(np.float32) for i in range(num_masks)]
+        extracted_masks = [masks_3d[i].astype(np.uint8) for i in range(num_masks)]
         mask_values = unique_values.tolist()
         
     elif len(masks.shape) == 3:
@@ -68,7 +75,7 @@ def extract_mask_values(masks: np.ndarray) -> tuple:
                 mask_values.append(float(unique_vals[0]))
             else:
                 mask_values.append(float(i + 1))
-            extracted_masks.append(mask.astype(np.float32))
+            extracted_masks.append(mask.astype(np.uint8))
     
     return mask_values, extracted_masks
 
@@ -105,35 +112,33 @@ def run_server(data_path: str,
                output_path: str = None,
                host: str = '0.0.0.0', 
                port: int = 8080,
-               dask_scheduler: str = None,
-               n_workers: int = 4,
                debug: bool = False):
     """Run the Flask server"""
     
     app = create_app(data_path, output_path)
     base_dir = Path(__file__).parent
     
-    # Initialize Dask if configured
-    if dask_scheduler or n_workers > 0:
-        try:
-            from .dask_processor import DaskProcessor
-            app.dask_processor = DaskProcessor(dask_scheduler, n_workers)
-            app.dask_processor.start()
-        except ImportError as e:
-            logger.warning(f"Dask processor not available: {e}")
-            app.dask_processor = None
-    else:
-        app.dask_processor = None
-    
     @app.route('/')
     def index():
         """Serve the main HTML interface"""
-        return render_template('gui.html')
+        try:
+            logger.info(f"Serving index from template_folder: {app.template_folder}")
+            return render_template('gui.html')
+        except Exception as e:
+            logger.error(f"Error serving index: {e}")
+            logger.error(f"Template folder: {app.template_folder}")
+            logger.error(f"Template files: {list(Path(app.template_folder).glob('*.html'))}")
+            return f"Error: {e}", 500
     
-    @app.route('/static/<filename>')
+    @app.route('/static/<path:filename>')
     def serve_static(filename):
         """Serve static files (CSS, JS)"""
-        return send_from_directory(base_dir, filename)
+        try:
+            logger.info(f"Serving static file: {filename} from {base_dir}")
+            return send_from_directory(base_dir, filename)
+        except Exception as e:
+            logger.error(f"Error serving static file {filename}: {e}")
+            return f"Error: {e}", 404
     
     @app.route('/api/runs')
     def get_runs():
@@ -163,7 +168,7 @@ def run_server(data_path: str,
             
             # Handle different image dimensions
             if image.ndim == 2:
-                # 2D grayscale - ensure proper orientation
+                # 2D grayscale - keep as is
                 pass
             elif image.ndim == 3 and image.shape[0] == 3:
                 # RGB image - convert to grayscale for web display
@@ -187,7 +192,7 @@ def run_server(data_path: str,
                 'image': image.tolist(),
                 'masks': [m.tolist() for m in extracted_masks],
                 'mask_values': mask_values,
-                'shape': image.shape
+                'shape': list(image.shape)
             }
             
             return jsonify(response_data)
@@ -234,11 +239,8 @@ def run_server(data_path: str,
             'output_path': str(app.config['OUTPUT_PATH']) if app.config['OUTPUT_PATH'] else None,
         }
         
-        if app.dask_processor:
-            status['dask'] = app.dask_processor.get_status()
-        
         return jsonify(status)
     
     # Run the server
     logger.info(f"Starting server at http://{host}:{port}")
-    app.run(host=host, port=port, debug=debug)
+    app.run(host=host, port=port, debug=debug, threaded=True)
