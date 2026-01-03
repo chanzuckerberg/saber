@@ -114,6 +114,7 @@ class Predictor:
         
         return input_batch, valid_indices
 
+    @torch.inference_mode()
     def predict(self, image, masks):
         """
         Runs inference on a batch of masks.
@@ -164,6 +165,7 @@ class Predictor:
 
         return full_probs        
 
+    @torch.inference_mode()
     def batch_predict(self, image, masks, batch_size=32):
         """
         Runs inference on masks in batches to avoid CUDA memory issues.

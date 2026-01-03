@@ -90,8 +90,12 @@ def _index_run(run_id, zarr_path, min_area, negative_class_reduction):
     """Worker function to index a single run. Must be at module level for pickling."""
     zfile = zarr.open(zarr_path, mode='r')
     group = zfile[run_id]
+
+    # Validate required structure
+    if 'labels' not in group:
+        return []
+
     labels = group['labels']
-    
     samples = []
     
     # Index candidate masks

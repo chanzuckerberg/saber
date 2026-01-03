@@ -1,9 +1,9 @@
 from saber.filters.gaussian import gaussian_smoothing_3d
+import torch.nn.functional as F
 from saber.utils import io
 from scipy import ndimage
 import torch, gc, skimage
 import numpy as np
-
 
 def apply_classifier(image, masks, classifier, desired_class: int = None, min_mask_area: int = 100, batchsize: int = 32):
     """
@@ -204,19 +204,27 @@ def masks_to_list(masks):
 
 def segments_to_mask(video_segments, masks, mask_shape):
     """
-    Convert SAM2 video segments to 3D mask array.
+    Convert SAM2 video segments to 3D mask array..
     """
-    # Iterate through each frame / slice in the volume
-    for frame_idx in list(video_segments):
-        # Keys in this case indicate value labels for each mask 
-        for jj in video_segments[frame_idx].keys():
-            resized_mask = skimage.transform.resize(
-                video_segments[frame_idx][jj][0,], 
-                (mask_shape[1], mask_shape[2]), anti_aliasing=False
-            )
-            mask_update = resized_mask > 0
-            masks[frame_idx,:,:][mask_update] = jj  
-
+    
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    first_obj = next(iter(next(iter(video_segments.values())).values()))
+    sam_h, sam_w = first_obj[0].shape
+    
+    frames = sorted(video_segments.keys())
+    temp = torch.zeros((len(frames), sam_h, sam_w), dtype=torch.int32, device=device)
+    
+    for i, f in enumerate(frames):
+        for obj_id, obj_mask in video_segments[f].items():
+            mask_t = torch.from_numpy(obj_mask[0]).to(device) if isinstance(obj_mask[0], np.ndarray) else obj_mask[0].to(device)
+            temp[i][mask_t] = obj_id
+    
+    if sam_h != mask_shape[1] or sam_w != mask_shape[2]:
+        temp = F.interpolate(temp.unsqueeze(1).float(), size=(mask_shape[1], mask_shape[2]), mode='nearest').squeeze(1).int()
+    
+    for i, f in enumerate(frames):
+        masks[f] = temp[i].cpu().numpy()
+    
     return masks
 
 def fast_3d_gaussian_smoothing(volume, scale=0.075, deviceID = None):
