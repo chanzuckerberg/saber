@@ -62,7 +62,7 @@ def run_fib_segment(
     Segment a Fib Volume
     """
     from saber.visualization.results import export_movie
-    from saber.segmenters.fib import propagationSegmenter
+    from saber.segmenters.propagation import propagationSegmenter
     from saber.classifier.models import common
     from saber.utils import io 
     import numpy as np
