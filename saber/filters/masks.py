@@ -204,7 +204,7 @@ def masks_to_list(masks):
 
 def segments_to_mask(video_segments, masks, mask_shape):
     """
-    Convert SAM2 video segments to 3D mask array..
+    Convert SAM2 video segments to 3D mask array.
     """
     
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
