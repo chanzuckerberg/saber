@@ -142,8 +142,8 @@ def run_server(data_path: str,
             logger.info(f"Serving static file: {safe_filename} from {base_dir}")
             return send_from_directory(base_dir, filename)
         except Exception as e:
-            logger.error(f"Error serving static file {filename}: {e}")
-            return f"Error: {e}", 404
+            logger.error(f"Error serving static file {filename}: {_sanitize_for_log(str(e))}")
+            return "File not found", 404
     
     @app.route('/api/runs')
     def get_runs():
