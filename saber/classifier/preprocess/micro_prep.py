@@ -33,22 +33,31 @@ def prepare_micrograph_training(
     target_resolution: float,
     scale_factor: float,
     sam2_cfg: str,
-    npoints: int,  # Changed from npts
-    points_per_batch: int,  # Changed from nbatch
-    pred_iou_thresh: float,  # Changed from iou
-    crop_n_layers: int,  # Changed from nlayers
-    box_nms_thresh: float,  # Changed from box
-    crop_n_points: int,  # Changed from crop
-    use_m2m: bool,  # Changed from m2m
-    multimask_output: bool,  # Changed from multi
+    npoints: int,
+    points_per_batch: int,
+    pred_iou_thresh: float,
+    crop_n_layers: int,
+    box_nms_thresh: float,
+    crop_n_points: int,
+    use_m2m: bool,
+    multimask: bool,
     ):
     """
     Prepare Training Data from Micrographs for a Classifier.
     """ 
 
-    prep2d(input, output, target_resolution, scale_factor, sam2_cfg)
+    print('⚙️  Preparing Micrograph Training Data...')
+    prep2d(
+        input, output, target_resolution, scale_factor, sam2_cfg,
+        npoints, points_per_batch, pred_iou_thresh, box_nms_thresh, 
+        crop_n_points, use_m2m, multimask
+    )
 
-def prep2d(input, output, target_resolution, scale_factor, sam2_cfg):
+def prep2d(
+        input, output, target_resolution, scale_factor, sam2_cfg, 
+        npoints, points_per_batch, pred_iou_thresh, box_nms_thresh, 
+        crop_n_points, use_m2m, multimask
+    ):
     """
     Prepare Training Data from Micrographs for a Classifier.
     """
@@ -58,6 +67,8 @@ def prep2d(input, output, target_resolution, scale_factor, sam2_cfg):
     from saber.visualization import galleries
     from skimage import io as sio
     import glob, os, shutil
+
+    import pdb; pdb.set_trace()
 
 
     # Check to Make Sure Only One of the Inputs is Provided

@@ -5,6 +5,17 @@ click.rich_click.USE_RICH_MARKUP = True
 click.rich_click.SHOW_ARGUMENTS = True
 click.rich_click.GROUP_ARGUMENTS_OPTIONS = True
 
+
+click.rich_click.COMMAND_GROUPS = {
+	"routines classifier": [
+		{"name": "Pre-Process", 
+		"commands": ["prep2d", "prep3d", "split-data", "merge-data", "labeler"]
+		},
+		{"name": "Train Classifier", "commands":["train"]},
+		{"name": "Inference", "commands": ["predict", "evaluate"]}
+	]
+}
+
 click.rich_click.OPTION_GROUPS = {
     "routines classifier prep2d": [
         {"name": "I/O", "options": ["--input", "--output", "--scale-factor", "--target-resolution"]},

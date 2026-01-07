@@ -112,6 +112,7 @@ def prepare_tomogram_training(
     Prepare Training Data from Tomograms for a Classifier.
     """
 
+    print('⚙️  Preparing Tomogram Training Data...')
     prep3d(config, voxel_size, tomo_alg, slab_thickness, output, sam2_cfg, num_slabs)
 
 
