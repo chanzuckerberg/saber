@@ -6,6 +6,7 @@ from saber.classifier.inference import predict, predict_slurm
 from saber.classifier.preprocess.apply_labels import labeler
 from saber.classifier.train import train, train_slurm
 from saber.classifier.evaluator import evaluate
+from saber.classifier.preprocess import groups
 import rich_click as click
 
 @click.group(name="classifier")

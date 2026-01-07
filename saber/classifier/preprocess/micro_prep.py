@@ -1,3 +1,4 @@
+from saber.sam2.automask import amg_cli as amg
 from saber.utils import slurm_submit
 from saber import cli_context
 import rich_click as click
@@ -25,13 +26,21 @@ def micrograph_options(func):
 
 @click.command(context_settings=cli_context, name='prep2d')
 @micrograph_options
-@slurm_submit.sam2_inputs
+@amg()
 def prepare_micrograph_training(
     input: str, 
     output: str,
     target_resolution: float,
     scale_factor: float,
     sam2_cfg: str,
+    npoints: int,  # Changed from npts
+    points_per_batch: int,  # Changed from nbatch
+    pred_iou_thresh: float,  # Changed from iou
+    crop_n_layers: int,  # Changed from nlayers
+    box_nms_thresh: float,  # Changed from box
+    crop_n_points: int,  # Changed from crop
+    use_m2m: bool,  # Changed from m2m
+    multimask_output: bool,  # Changed from multi
     ):
     """
     Prepare Training Data from Micrographs for a Classifier.

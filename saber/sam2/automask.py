@@ -1,16 +1,26 @@
-# Suppress Warning for Post Processing from SAM2 - 
-# Explained Here: https://github.com/facebookresearch/sam2/blob/main/INSTALL.md
-import warnings
-warnings.filterwarnings("ignore", category=UserWarning)
-from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
-from saber.sam2 import filtered_automatic_mask_generator as fmask
 from typing import Dict, Any, Optional
-from sam2.build_sam import build_sam2
-from saber import pretrained_weights
+import rich_click as click
 
 # Silence SAM2 loggers
 import logging
 logging.getLogger("sam2").setLevel(logging.ERROR)  # Only show errors
+
+# Decorator to add common options to a Click command.
+def amg_cli():
+    
+    def decorator(f):
+        f = click.option('-cfg', '--sam2-cfg', required=False, default='small', help="SAM2 Model Config",
+                         type=click.Choice(['large', 'base', 'small', 'tiny'], case_sensitive=False))(f)
+        f = click.option('-npts', '--npoints', type=int, default=32, help='Number of points per side')(f)
+        f = click.option('-nbatch', '--points-per-batch', type=int, default=64, help='Number of points per batch')(f)
+        f = click.option('-iou', '--pred-iou-thresh', type=float, default=0.7, help='Prediction IOU threshold')(f)
+        f = click.option('-nlayers', '--crop-n-layers', type=int, default=2, help='Number of crop layers')(f)
+        f = click.option('-box', '--box-nms-thresh', type=float, default=0.7, help='Box NMS threshold')(f)
+        f = click.option('-crop', '--crop-n-points', type=int, default=2, help='Crop N Points Downscale Factor')(f)
+        f = click.option('-m2m', '--use-m2m', type=bool, default=True, help='Use M2M')(f)
+        f = click.option('-multi', '--multimask', type=bool, default=True, help='Multimask Output')(f)
+        return f
+    return decorator
 
 # -----------------------------
 # Default parameters for SAM2 AMG
@@ -37,6 +47,15 @@ def get_default() -> Dict[str, Any]:
 
 
 def build_amg(amg_params: str, min_mask_area: int, device: Optional[str] = 'cpu'):
+
+    # Suppress Warning for Post Processing from SAM2 - 
+    # Explained Here: https://github.com/facebookresearch/sam2/blob/main/INSTALL.md
+    import warnings
+    warnings.filterwarnings("ignore", category=UserWarning)
+    from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
+    from saber.sam2 import filtered_automatic_mask_generator as fmask
+    from sam2.build_sam import build_sam2
+    from saber import pretrained_weights
 
     # Build SAM2 model
     (cfg, checkpoint) = pretrained_weights.get_sam2_checkpoint(amg_params['sam2_cfg'])

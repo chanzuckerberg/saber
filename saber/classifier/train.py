@@ -144,7 +144,7 @@ def train_commands(func):
                     help="Path to the Zarr(s) file. In the format 'file.zarr' or 'file1.zarr,file2.zarr'."),
         click.option("-v", "--validate", type=str, required=False, default=None,
                     help="Path to the Zarr(s) file. In the format 'file.zarr' or 'file1.zarr,file2.zarr'."),
-        click.option("-ne", "--num-epochs", type=int, default=10, 
+        click.option("-ne", "--num-epochs", type=int, default=75, 
                     help="Number of epochs to train for."),
         click.option("-bs", "--batch-size", type=int, default=32, 
                     help="Batch size for training."),

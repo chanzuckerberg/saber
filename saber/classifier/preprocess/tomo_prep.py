@@ -1,3 +1,4 @@
+from saber.sam2.automask import amg_cli as amg
 from saber.classifier import validate_odd
 from saber.utils import slurm_submit
 from saber import cli_context
@@ -85,7 +86,7 @@ def extract_sam2_candidates(
 
 @click.command(context_settings=cli_context, name='prep3d')
 @slurm_submit.copick_commands
-@slurm_submit.sam2_inputs
+@amg()
 @click.option("-o", "--output", type=str, required=False, help="Path to the output Zarr file.", 
               default = 'training.zarr')
 @click.option('--num-slabs', type=int, default=1, callback=validate_odd, 
@@ -95,9 +96,17 @@ def prepare_tomogram_training(
     voxel_size: int, 
     tomo_alg: str, 
     slab_thickness: int,
+    num_slabs: int,
     output: str,
     sam2_cfg: str,
-    num_slabs: int,
+    npoints: int,  
+    points_per_batch: int,  
+    pred_iou_thresh: float, 
+    crop_n_layers: int,
+    box_nms_thresh: float,
+    crop_n_points_downscale_factor: int,
+    use_m2m: bool,
+    multimask_output: bool,
     ):
     """
     Prepare Training Data from Tomograms for a Classifier.
