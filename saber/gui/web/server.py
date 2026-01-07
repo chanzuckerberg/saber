@@ -107,6 +107,11 @@ def apply_rotation(image: np.ndarray, masks: np.ndarray) -> tuple:
     
     return image, masks
 
+def _sanitize_for_log(s: str) -> str:
+    # remove common log-breaking chars + a couple of unicode line separators
+    return (s or "").replace("\r", "").replace("\n", "").replace("\t", "").replace("\u2028", "").replace("\u2029", "")
+
+
 
 def run_server(data_path: str, 
                output_path: str = None,
@@ -122,10 +127,9 @@ def run_server(data_path: str,
     def index():
         """Serve the main HTML interface"""
         try:
-            logger.info(f"Serving index from template_folder: {app.template_folder}")
             return render_template('gui.html')
         except Exception as e:
-            logger.error(f"Error serving index: {e}")
+            logger.error(f"Error serving index: {_sanitize_for_log(str(e))}")
             logger.error(f"Template folder: {app.template_folder}")
             logger.error(f"Template files: {list(Path(app.template_folder).glob('*.html'))}")
             return f"Error: {e}", 500
