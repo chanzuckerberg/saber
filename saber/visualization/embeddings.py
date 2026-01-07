@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import colorsys
 
-def path_features(features, num_channels=16):
+def patch_features(features, num_channels=16):
     """
     Visualize patch features with a distinct color per channel.
 
