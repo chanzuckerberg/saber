@@ -52,9 +52,6 @@ def web(input: str, output: str, port: int, host: str,
         # With output directory
         python main.py --input /data --output /annotations
         
-        # With external Dask cluster
-        python main.py --input /data --dask-scheduler tcp://scheduler:8786
-        
         # Remote access via SSH tunnel
         ssh -L 8080:localhost:8080 user@remote-server
         Then access at http://localhost:8080
