@@ -6,7 +6,7 @@ def light_options(func):
     """Decorator to add shared options for light microscopy commands."""
     options = [
         click.option("-i", "--input", type=str, required=True,
-                      help="Path to Fib or Project, in the case of project provide the file extention (e.g. 'path/*.mrc')"),
+                      help="Path to Fib or Project, in the case of project provide the file extension (e.g. 'path/*.mrc')"),
         click.option("-o", "--output", type=str, required=False, default='masks.npy',
                       help="Path to Output Segmentation Masks"),
         click.option("-d", "--ini_depth", type=int, required=False, default=10,
