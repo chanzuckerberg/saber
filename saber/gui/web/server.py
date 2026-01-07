@@ -134,7 +134,8 @@ def run_server(data_path: str,
     def serve_static(filename):
         """Serve static files (CSS, JS)"""
         try:
-            logger.info(f"Serving static file: {filename} from {base_dir}")
+            safe_filename = filename.replace('\r\n', '').replace('\n', '').replace('\r', '')
+            logger.info(f"Serving static file: {safe_filename} from {base_dir}")
             return send_from_directory(base_dir, filename)
         except Exception as e:
             logger.error(f"Error serving static file {filename}: {e}")
