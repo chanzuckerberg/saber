@@ -3,7 +3,7 @@ from saber import cli_context
 import rich_click as click
 
 def light_options(func):
-    """Decorator to add shared options for fib commands."""
+    """Decorator to add shared options for light microscopy commands."""
     options = [
         click.option("-i", "--input", type=str, required=True,
                       help="Path to Fib or Project, in the case of project provide the file extention (e.g. 'path/*.mrc')"),
