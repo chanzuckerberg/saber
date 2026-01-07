@@ -146,9 +146,9 @@ def run_evaluate(test, model_config, model_weights, beta, output):
             
     # Get Model Checkpoint
     model = common.get_classifier_model(
-        config['model']['backbone'], 
+        'SAM2', 
         config['model']['num_classes'], 
-        config['model']['model_size']  )    
+        config['amg_params']['sam2_cfg']  )    
     model.load_state_dict(torch.load(model_weights, weights_only=True))
 
     # Create the Evaluator

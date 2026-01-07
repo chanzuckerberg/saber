@@ -1,4 +1,5 @@
 from typing import List, Dict, Any
+from scipy import ndimage as ndi
 import numpy as np
 
 def remove_duplicate_masks(masks: List[Dict[str, Any]], 
@@ -83,3 +84,48 @@ def remove_duplicate_masks(masks: List[Dict[str, Any]],
         processed_indices.add(i)
     
     return unique_masks
+
+def separate_masks(combined_mask: np.ndarray, min_mask_area: int = 100) -> np.ndarray:
+    """
+    Minimal 3D connected-components with compact relabeling.
+    - 26-connectivity; touching objects stay merged.
+    - Crops to foreground bbox for speed.
+    - Returns uint32 labels with 0 as background.
+    """
+    m = np.ascontiguousarray(combined_mask.astype(bool))
+    if not m.any():
+        return np.zeros_like(m, dtype=np.uint32)
+
+    # tight bbox
+    z, y, x = np.where(m)
+    z0, z1 = z.min(), z.max() + 1
+    y0, y1 = y.min(), y.max() + 1
+    x0, x1 = x.min(), x.max() + 1
+    sub = m[z0:z1, y0:y1, x0:x1]
+
+    # 26-connectivity
+    structure = ndi.generate_binary_structure(rank=3, connectivity=3)
+    labels_sub, _ = ndi.label(sub, structure=structure)  # 0..N, 0 is bg
+
+    # optional: remove small components (labels >=1 only)
+    min_vol = min_mask_area * 10 # scale up for 3D
+    if min_vol > 1:
+        counts = np.bincount(labels_sub.ravel())
+        small = np.flatnonzero((counts < min_vol) & (np.arange(counts.size) != 0))
+        if small.size:
+            labels_sub[np.isin(labels_sub, small)] = 0
+            counts = np.bincount(labels_sub.ravel())  # recompute after zeroing
+
+    # compact relabel (exclude background from mapping)
+    counts = np.bincount(labels_sub.ravel())
+    keep = counts > 0
+    keep[0] = False  # never remap background
+    new_ids = np.cumsum(keep).astype(np.uint32)         # 0,1,2,3,... over bins
+    remap = np.zeros_like(new_ids, dtype=np.uint32)
+    remap[keep] = new_ids[keep]
+    labels_sub = remap[labels_sub]                      # 0..K, 0 is bg
+
+    # paste back
+    labeled = np.zeros_like(m, dtype=np.uint32)
+    labeled[z0:z1, y0:y1, x0:x1] = labels_sub
+    return labeled

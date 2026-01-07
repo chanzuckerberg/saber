@@ -1,11 +1,11 @@
-from saber.segmenters.general import generalSegmenter
+from saber.segmenters.general import volumeSegmenter
 from saber.utils import preprocessing
+from saber.segmenters import utils
 from tqdm import tqdm
 import numpy as np
 import torch
 
-
-class fibSegmenter(generalSegmenter):
+class propagationSegmenter(volumeSegmenter):
 
     def __init__(self, 
         sam2_cfg: str = 'base', 
@@ -14,11 +14,15 @@ class fibSegmenter(generalSegmenter):
         target_class: int = 1, 
         min_mask_area: int = 100, 
         min_rel_box_size: float = 0.025,
+        light_modality: bool = False,
         ):
         """
-        Initialize the fibSegmenter
+        Initialize the propagationSegmenter
         """
-        super().__init__(sam2_cfg, deviceID, classifier, target_class, min_mask_area, min_rel_box_size)
+        super().__init__(
+            sam2_cfg, deviceID, classifier, target_class, 
+            min_mask_area, min_rel_box_size, light_modality
+        )
         self.ini_depth = 10 # Default spacing between slices to segment
 
     def segment(self, volume: np.ndarray, ini_depth: int, nframes: int = None):
@@ -52,7 +56,7 @@ class fibSegmenter(generalSegmenter):
         final_masks = np.zeros(volume.shape, dtype=np.uint16)
 
         # Main Loop
-        for ii in tqdm(range(self.ini_depth, volume.shape[0], self.ini_depth)):
+        for ii in tqdm(range(2, volume.shape[0], self.ini_depth)):
 
             # Set image and segment
             im = volume[ii]
@@ -74,7 +78,10 @@ class fibSegmenter(generalSegmenter):
             
             # Update final masks with maximum operation (in-place)
             np.maximum(final_masks, masks3d, out=final_masks)
-        
+
+        # Separate the masks to instances
+        final_masks = utils.separate_masks(final_masks)
+
         return final_masks
 
     @torch.inference_mode()
@@ -90,7 +97,7 @@ class fibSegmenter(generalSegmenter):
         max_confidence = np.zeros(volume.shape, dtype=np.float32)
 
         # Main Loop
-        for ii in tqdm(range(self.ini_depth, volume.shape[0], self.ini_depth)):
+        for ii in tqdm(range(2, volume.shape[0], self.ini_depth)):
 
             # Call mask generator directly
             im = volume[ii]
@@ -133,5 +140,5 @@ class fibSegmenter(generalSegmenter):
                     update_mask = mask_region & (confidence > max_confidence)
                     final_masks[update_mask] = class_id
                     max_confidence[update_mask] = confidence
-        
+
         return final_masks

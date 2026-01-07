@@ -6,14 +6,16 @@ SABER Label Converter - Convert JSON annotations to SABER zarr format
 from typing import Dict, List, Optional, Set
 from saber import cli_context
 from pathlib import Path
-from tqdm import tqdm
 import rich_click as click
 
 class SABERLabelConverter:
 
     def __init__(self):
+        from threading import Lock
+
         self.label_to_index = {}
         self.discovered_labels = set()
+        self.zarr_lock = Lock()  # Lock for thread-safe zarr writes
     
     def discover_labels(self, json_path: Path) -> Set[str]:
         import json
@@ -87,61 +89,41 @@ class SABERLabelConverter:
         
         return mask_dict
     
-    def convert(self, 
-               sam2_zarr_path: Path,
-               json_path: Path,
-               output_path: Path,
-               label_mapping: Dict[str, int]):
+    def process_run_id(self, 
+                    run_id: str,
+                    annotations: Dict,
+                    sam2_data,
+                    root,
+                    label_mapping: Dict[str, int],
+                    labels: List[str]) -> Tuple[str, Optional[str]]:
         """
-        Convert JSON annotations to labeled zarr format compatible with SABER dataloader.
+        Process a single run_id. Returns (run_id, error_message).
+        If successful, error_message is None.
         """
         from saber.utils.zarr_writer import add_attributes
-        from saber.utils.progress import _progress
         import numpy as np
-        import json, zarr
-
-        # Load JSON annotations
-        with open(json_path, 'r') as f:
-            frame_labels = json.load(f)
-        labels = list(label_mapping.keys())            
+        import zarr
         
-        # Load SAM2 masks
-        sam2_data = zarr.open(sam2_zarr_path, 'r')
-        
-        # Create output zarr
-        store = zarr.DirectoryStore(str(output_path))
-        root = zarr.group(store=store, overwrite=True)
-
-        # Copy over AMG metadata if present
-        if 'amg' in sam2_data.attrs:
-            root.attrs['amg'] = dict(sam2_data.attrs['amg'])
-        
-        # Process each run_id
-        for run_id in _progress(frame_labels.keys(), description="Adding Annotations"):
-            annotations = frame_labels[run_id]
-            
+        try:
             # Skip empty annotations
             if len(annotations) == 0:
-                continue
+                return (run_id, None)
             
             # Check if run_id exists in SAM2 data
             if run_id not in sam2_data:
-                click.echo(f"⚠️  Warning: Run ID '{run_id}' not found in SAM2 zarr. Skipping.", err=True)
-                continue
+                return (run_id, f"Run ID '{run_id}' not found in SAM2 zarr")
 
             # Get image data
             if '0' in sam2_data[run_id]:
                 image = sam2_data[run_id]['0'][:]
             else:
-                click.echo(f"⚠️  Warning: No image found for run ID '{run_id}'. Skipping.", err=True)
-                continue
+                return (run_id, f"No image found for run ID '{run_id}'")
             
             # Get SAM2 masks
             if 'labels' in sam2_data[run_id] and '0' in sam2_data[run_id]['labels']:
                 sam2_masks = sam2_data[run_id]['labels']['0'][:]
             else:
-                click.echo(f"⚠️  Warning: No masks found for run ID '{run_id}'. Skipping.", err=True)
-                continue
+                return (run_id, f"No masks found for run ID '{run_id}'")
             
             im = sam2_data[run_id]['0'][:]
             (nx, ny) = im.shape
@@ -150,28 +132,29 @@ class SABERLabelConverter:
             masks = np.zeros((len(labels), nx, ny), dtype=np.uint8)
             used_mask_values = set()
 
-            try:
-                # Extract mask values and create mapping
-                mask_value_to_array = self.extract_mask_values(masks0)
+            # Extract mask values and create mapping
+            mask_value_to_array = self.extract_mask_values(masks0)
 
-                for seg_value, label in annotations.items():
-                    # Skip labels that were excluded from the mapping
-                    if label not in label_mapping:
-                        continue
-                    # Add mask to the corresponding class
-                    mask_array = mask_value_to_array[float(seg_value)]
-                    masks[label_mapping[label],] = np.logical_or(
-                            masks[label_mapping[label],], 
-                            mask_array
-                        ).astype(np.uint8)
-                    used_mask_values.add(float(seg_value))
+            for seg_value, label in annotations.items():
+                # Skip labels that were excluded from the mapping
+                if label not in label_mapping:
+                    continue
+                # Add mask to the corresponding class
+                mask_array = mask_value_to_array[float(seg_value)]
+                masks[label_mapping[label],] = np.logical_or(
+                        masks[label_mapping[label],], 
+                        mask_array
+                    ).astype(np.uint8)
+                used_mask_values.add(float(seg_value))
 
-                # Get rejected masks (masks not assigned to any class)
-                rejected_masks = []
-                for mask_value, mask_array in mask_value_to_array.items():
-                    if mask_value not in used_mask_values:
-                        rejected_masks.append(mask_array)
-                
+            # Get rejected masks (masks not assigned to any class)
+            rejected_masks = []
+            for mask_value, mask_array in mask_value_to_array.items():
+                if mask_value not in used_mask_values:
+                    rejected_masks.append(mask_array)
+            
+            # Thread-safe zarr write operation
+            with self.zarr_lock:
                 # Create group for this run_id - Save image
                 group = root.create_group(run_id)
                 group.create_dataset(
@@ -187,7 +170,7 @@ class SABERLabelConverter:
                 if masks.sum() > 0:
                     labels_group = group.create_group('labels')
                     labels_group.create_dataset(
-                        '0',  # Changed from 'labels' to 'masks' to match dataloader
+                        '0',
                         data=masks,
                         dtype=np.uint8,
                         compressor=zarr.Blosc(cname='zstd', clevel=2, shuffle=2)
@@ -209,9 +192,72 @@ class SABERLabelConverter:
                         data=np.array([]),
                         dtype=np.uint8
                     )
-            except Exception as e:
-                click.echo(f"❌ Error processing run ID '{run_id}': {e}", err=True)
-                continue
+            
+            return (run_id, None)
+            
+        except Exception as e:
+            return (run_id, str(e))
+    
+    def convert(self, 
+               sam2_zarr_path: Path,
+               json_path: Path,
+               output_path: Path,
+               label_mapping: Dict[str, int]):
+        """
+        Convert JSON annotations to labeled zarr format compatible with SABER dataloader.
+        
+        Args:
+            sam2_zarr_path: Path to SAM2 zarr file
+            json_path: Path to JSON annotations
+            output_path: Path for output zarr
+            label_mapping: Dictionary mapping labels to indices
+            num_workers: Number of parallel threads (default: 4)
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from saber.utils.progress import _progress
+        import json, os, zarr
+        import numpy as np
+        
+        # Load JSON annotations
+        with open(json_path, 'r') as f:
+            frame_labels = json.load(f)
+        labels = list(label_mapping.keys())            
+        
+        # Load SAM2 masks
+        sam2_data = zarr.open(sam2_zarr_path, 'r')
+        
+        # Create output zarr
+        store = zarr.DirectoryStore(str(output_path))
+        root = zarr.group(store=store, overwrite=True)
+
+        # Copy over AMG metadata if present
+        if 'amg' in sam2_data.attrs:
+            root.attrs['amg'] = dict(sam2_data.attrs['amg'])
+        
+        # Prepare run_ids and annotations
+        run_ids = list(frame_labels.keys())
+        
+        # Process in parallel with progress bar
+        num_workers = min(os.cpu_count() or 4, len(run_ids))
+        with ThreadPoolExecutor(max_workers=num_workers) as executor:
+            # Submit all tasks
+            futures = {
+                executor.submit(
+                    self.process_run_id,
+                    run_id,
+                    frame_labels[run_id],
+                    sam2_data,
+                    root,
+                    label_mapping,
+                    labels
+                ): run_id for run_id in run_ids
+            }
+            
+            # Process results as they complete with progress bar
+            for future in _progress(as_completed(futures), total=len(futures), description="Adding Annotations"):
+                run_id, error = future.result()
+                if error:
+                    click.echo(f"⚠️  Warning: {error}. Skipping.", err=True)
         
         # Save metadata at root level
         root.attrs['labels'] = label_mapping

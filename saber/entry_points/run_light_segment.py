@@ -2,11 +2,11 @@ from saber.utils import slurm_submit
 from saber import cli_context
 import rich_click as click
 
-def fib_options(func):
-    """Decorator to add shared options for fib commands."""
+def light_options(func):
+    """Decorator to add shared options for light microscopy commands."""
     options = [
         click.option("-i", "--input", type=str, required=True,
-                      help="Path to Fib or Project, in the case of project provide the file extention (e.g. 'path/*.mrc')"),
+                      help="Path to Fib or Project, in the case of project provide the file extension (e.g. 'path/*.mrc')"),
         click.option("-o", "--output", type=str, required=False, default='masks.npy',
                       help="Path to Output Segmentation Masks"),
         click.option("-d", "--ini_depth", type=int, required=False, default=10,
@@ -22,10 +22,10 @@ def fib_options(func):
 
 
 @click.command(context_settings=cli_context)
-@fib_options
+@light_options
 @slurm_submit.sam2_inputs
 @slurm_submit.classifier_inputs
-def fib(
+def light(
     input: str,
     output: str,
     ini_depth: int,
@@ -37,17 +37,17 @@ def fib(
     scale_factor: float,
     ):
     """
-    Segment a Fib Volume
-    """
+    Segment features from light microscopy movies (e.g. cells under an optical microscope).
+    """ 
 
-    run_fib_segment(
+    run_light_segment(
         input, output, ini_depth, nframes, 
         sam2_cfg, model_weights, model_config, 
         target_class, scale_factor
     )
 
 
-def run_fib_segment(
+def run_light_segment(
     input: str,
     output: str,
     ini_depth: int,
@@ -59,15 +59,15 @@ def run_fib_segment(
     scale_factor: float,
 ):
     """
-    Segment a Fib Volume
+    Segment a Light Movie
     """
     from saber.visualization.results import export_movie
     from saber.segmenters.propagation import propagationSegmenter
     from saber.classifier.models import common
-    from saber.utils import io 
+    import saber.utils.io as io
     import numpy as np
 
-    print(f'\nStarting Fib Segmentation for the following input: {input}')
+    print(f'\nStarting Light Movie Segmentation for the following input: {input}')
     print(f'Segmentations will be performed every {ini_depth} slices for ±{nframes} frames')
     print(f'Output Masks will be saved to: {output}')
 
@@ -82,7 +82,10 @@ def run_fib_segment(
         sam2_cfg=sam2_cfg,
         classifier=predictor,
         target_class=target_class,
+        light_modality = True,
     )
+    # Assume Mass is Preserved for this type of data
+    segmenter.filter_threshold = -1
 
     # Segment the Volume
     masks = segmenter.segment(volume, ini_depth, nframes)
@@ -92,4 +95,3 @@ def run_fib_segment(
 
     # Export the Masks as a Movie
     export_movie(volume, masks,'segmentation.gif')
-

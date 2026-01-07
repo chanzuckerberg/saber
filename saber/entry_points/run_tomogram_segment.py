@@ -286,6 +286,7 @@ def slab(
     Segment a single slab of a tomogram.
     """
 
+    print('🚀 Running Saber Slab Segmentation...')
     run_slab_seg(
         config, run_id, voxel_size, tomo_alg, slab_thickness, model_weights, model_config, target_class, sam2_cfg
     )
@@ -317,6 +318,7 @@ def tomograms(
     Generate a 3D Segmentation of a tomogram.
     """
 
+    print('🚀 Running Saber Tomogram Segmentation...')
     run_tomo_seg(
         config, run_ids, voxel_size, tomo_alg, seg_name, seg_session_id, slab_thickness, model_config, model_weights, target_class, multi_slab, sam2_cfg
     )

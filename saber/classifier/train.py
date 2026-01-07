@@ -34,10 +34,12 @@ def run(
             amg_params['sam2_cfg'], 
             deviceID=device_id
         )
+    if model_weights: # Load Model Weights
+        model = common.load_model_weights(model, model_weights, True)
     
     # Optimizer and Scheduler
     optimizer = AdamW(model.parameters(), lr=5e-4, weight_decay=0.01)
-    scheduler = CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=1e-7)
+    scheduler = CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=1e-6)
 
     # Create datasets and dataloaders
     print('Loading training data...')
@@ -46,7 +48,7 @@ def run(
     val_loader, _ = get_dataloaders(validate_path, 'val', batch_size)
     
     # Option 2: Initialize MONAI's FocalLoss
-    loss_fn = FocalLoss(gamma=2, alpha=0.5, reduction="mean")
+    loss_fn = FocalLoss(gamma=1, alpha=0.5, reduction="mean")
 
     # Start Training
     if ngpus == 1:
@@ -108,13 +110,30 @@ def get_dataloaders(zarr_path: str, mode: str, batch_size: int):
     else:
         # Single path
         dataset = singleZarrDataset.ZarrSegmentationDataset(zarr_path, mode=mode, transform=transforms)
-    print(f'Dataset length: {len(dataset)}')
     
     # Create dataloader - Only Shuffle for training
-    if mode == 'train': loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=True)
-    else:               loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, drop_last=True)
+    loader = make_loader(dataset, batch_size=batch_size, shuffle=(mode=='train'))
 
     return loader, dataset
+
+def make_loader(dataset, batch_size: int, shuffle: bool):
+    from torch.utils.data import DataLoader
+    import os, torch
+
+    # Heuristic: ~4–8 workers per GPU; keep it simple but hardware-aware
+    ngpu = torch.cuda.device_count() or 1
+    cpu = os.cpu_count() or 4
+    num_workers = max(4, min(8 * ngpu, cpu // ngpu))  # start here, tune empirically    
+
+    return DataLoader(
+        dataset,
+        batch_size=batch_size,           # per-GPU batch size
+        shuffle=shuffle,                # Fabric will swap in DistributedSampler with the same shuffle
+        drop_last=True,
+        num_workers=num_workers,
+        pin_memory=True,
+        persistent_workers=True,         # needs num_workers > 0
+    )
 
 #################################### CLI Commands ####################################
 
@@ -200,11 +219,3 @@ def get_metadata(zarr_path: str):
     amp_params = zfile.attrs['amg']
     # convert to dict
     return labels, amp_params
-
-def load_model(model, model_weights):
-    # Freeze all parameters except classifier
-    model.load_state_dict(torch.load(model_weights, weights_only=True))
-    for name, param in model.named_parameters():
-        if 'classifier' not in name:
-            param.requires_grad = False 
-    return model

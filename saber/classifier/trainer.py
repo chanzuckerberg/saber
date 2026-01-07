@@ -63,6 +63,20 @@ class ClassifierTrainer:
         if self.ema_experiment:
             self.ema_handler = ema.ExponentialMovingAverage(self.model.parameters(), decay=0.99)
 
+    def train_step(self, batch):
+        """
+        Process a training batch.
+        """
+
+        return self.process_batch(batch, mode='train')
+
+    @torch.inference_mode()
+    def val_step(self, batch):
+        """
+        Process a validation batch.
+        """
+        return self.process_batch(batch, mode='val')
+
     def process_batch(self, batch_data, mode=True):
         """
         Process a batch of data.

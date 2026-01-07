@@ -1,6 +1,7 @@
 from saber.entry_points.slurm import tomograms_slurm, micrographs_slurm
 from saber.entry_points.run_tomogram_segment import slab, tomograms
 from saber.entry_points.run_micrograph_segment import micrographs
+from saber.entry_points.run_light_segment import light
 from saber.entry_points.run_fib_segment import fib
 import rich_click as click
 
@@ -13,6 +14,7 @@ methods.add_command(slab)
 methods.add_command(micrographs)
 methods.add_command(tomograms)
 methods.add_command(fib)
+methods.add_command(light)
 
 @click.group(name="segment")
 def cli_methods():

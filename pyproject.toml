@@ -38,12 +38,10 @@ dependencies = [
     "torchmetrics",
     "scikit-learn",    
     "ipywidgets",
-    "umap-learn",
     "torch-ema",
     "copick-utils",
     "flask",
-    "flask-cors",
-    "dask[distributed]"    
+    "flask-cors"
 ]
 
 [project.optional-dependencies]

@@ -17,7 +17,7 @@ class ClassifierTrainerFabrics:
         device=None,              # kept for API symmetry; Fabric manages devices
         beta: float = 1.0,
         include_background: bool = False,
-        precision: str = "bf16-mixed",   # "16-mixed" or "32-true" also fine
+        precision: str = "16-mixed",   # "16-mixed" or "32-true" also fine
         strategy: str = "ddp",
         devices: int | None = None,
         accelerator: str = "gpu",
@@ -81,35 +81,69 @@ class ClassifierTrainerFabrics:
 
     # ---- core ops -------------------------------------------------------------
 
-    def process_batch(self, batch, mode='train', use_autocast=True):
-        images = batch["image"]     # [B, 1, H, W]
-        masks  = batch["mask"]      # [B, 1, H, W]
-        labels = batch["label"]     # [B]
+    def train_step(self, batch):
+        # move once per step
+        batch = self.fabric.to_device(batch)
+
+        images = batch["image"]
+        masks  = batch["mask"]
+        labels = batch["label"]
 
         if labels.max() >= self.num_classes:
             labels = labels.clone()
             labels[labels >= self.num_classes] = 0
 
-        ctx = self.fabric.autocast() if use_autocast else nullcontext()
-        with ctx:
-            if getattr(self.model, "input_mode", None) == 'concatenate':
+        with self.fabric.autocast():
+            if getattr(self.model, "input_mode", None) == "concatenate":
                 roi  = images * masks
                 roni = images * (1 - masks)
-                x = torch.cat([roi, roni], dim=1)  # [B, 2, H, W]
+                x = torch.cat([roi, roni], dim=1)
                 logits = self.model(x)
             else:
                 logits = self.model(images, masks)
 
+            # If using CrossEntropyLoss, prefer index labels (faster than one-hot)
+            # loss = self.loss_fn(logits, labels)
             labels_1h = F.one_hot(labels, num_classes=self.num_classes).float()
             loss = self.loss_fn(logits, labels_1h)
 
-        if mode == 'train':
-            self.optimizer.zero_grad(set_to_none=True)
-            self.fabric.backward(loss)   # DDP/mixed precision aware
-            self.optimizer.step()
+        self.optimizer.zero_grad(set_to_none=True)
+        self.fabric.backward(loss)
+        self.optimizer.step()
 
         preds = torch.argmax(logits, dim=1)
         return float(loss.item()), preds.detach().cpu().tolist(), labels.detach().cpu().tolist()
+
+    @torch.no_grad()
+    def val_step(self, batch):
+        # move once per step
+        batch = self.fabric.to_device(batch)
+
+        images = batch["image"]
+        masks  = batch["mask"]
+        labels = batch["label"]
+
+        if labels.max() >= self.num_classes:
+            labels = labels.clone()
+            labels[labels >= self.num_classes] = 0
+
+        # inference_mode is faster & more memory-efficient than no_grad
+        with torch.inference_mode(), self.fabric.autocast():
+            if getattr(self.model, "input_mode", None) == "concatenate":
+                roi  = images * masks
+                roni = images * (1 - masks)
+                x = torch.cat([roi, roni], dim=1)
+                logits = self.model(x)
+            else:
+                logits = self.model(images, masks)
+
+            # If using CrossEntropyLoss: loss = self.loss_fn(logits, labels)
+            labels_1h = F.one_hot(labels, num_classes=self.num_classes).float()
+            loss = self.loss_fn(logits, labels_1h)
+
+            preds = torch.argmax(logits, dim=1)
+
+        return float(loss.item()), preds.cpu().tolist(), labels.cpu().tolist()
 
     # ---- public API (same as your non-Fabric trainer) -------------------------
 
@@ -142,7 +176,7 @@ class ClassifierTrainerFabrics:
             train_preds, train_labels = [], []
             
             for batch in self.train_loader:
-                loss, preds, labels = self.process_batch(batch, mode='train')
+                loss, preds, labels = self.train_step(batch)
                 train_loss_sum += loss
                 train_preds.extend(preds)
                 train_labels.extend(labels)
@@ -164,7 +198,7 @@ class ClassifierTrainerFabrics:
             
             with torch.no_grad():
                 for batch in self.val_loader:
-                    loss, preds, labels = self.process_batch(batch, mode='val')
+                    loss, preds, labels = self.val_step(batch)
                     val_loss_sum += loss
                     val_preds.extend(preds)
                     val_labels.extend(labels)

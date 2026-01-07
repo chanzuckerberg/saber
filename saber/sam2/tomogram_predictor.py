@@ -12,8 +12,8 @@ class TomogramPreprocessor:
     This class handles tomogram-specific preprocessing without inheriting from SAM2.
     """
     
-    def __init__(self):
-        pass
+    def __init__(self, light_modality: bool = False):
+        self.light_modality = light_modality
     
     def load_img_as_tensor(self, img: np.ndarray, image_size: int) -> Tuple[torch.Tensor, int, int]:
         """
@@ -48,7 +48,7 @@ class TomogramPreprocessor:
         offload_video_to_cpu: bool = False,
         img_mean: Optional[np.ndarray] = None,
         img_std: Optional[np.ndarray] = None,
-        compute_device: torch.device = torch.device("cuda"),
+        compute_device: torch.device = torch.device("cuda")
     ) -> Tuple[torch.Tensor, int, int]:
         """
         Load image frames from a 3D numpy array (tomogram).
@@ -96,9 +96,10 @@ class TomogramPreprocessor:
                 images /= img_std
 
         # This works for light imaging
-        # images = (images - images.min()) / (images.max() - images.min())  # Normalize to [0, 1]
-        # images *= 255
-
+        if self.light_modality:
+            images = (images - images.min()) / (images.max() - images.min())  # Normalize to [0, 1]
+            images *= 255
+        
         return images, video_height, video_width
     
     def normalize_tomogram(self, tomogram: np.ndarray) -> np.ndarray:
@@ -124,7 +125,7 @@ class TomogramSAM2Adapter:
     This uses composition instead of inheritance to avoid license mixing.
     """
     
-    def __init__(self, cfg, checkpoint, device, num_maskmem: int = 2):
+    def __init__(self, cfg, checkpoint, device, light_modality: bool = False, num_maskmem: int = 2):
         """
         Initialize with a SAM2 predictor instance.
         
@@ -149,7 +150,7 @@ class TomogramSAM2Adapter:
             self.predictor.num_maskmem = num_maskmem  
 
         # Initialize Preprocessor
-        self.preprocessor = TomogramPreprocessor()
+        self.preprocessor = TomogramPreprocessor(light_modality)
     
     @torch.inference_mode()
     def create_inference_state_from_tomogram(

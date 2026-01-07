@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def launch_web(input, output, port, host, dask_scheduler, workers, debug):
+def launch_web(input, output, port, host, debug):
     """
     SABER Annotation GUI Web Server
     
@@ -34,18 +34,11 @@ def launch_web(input, output, port, host, dask_scheduler, workers, debug):
     logger.info(f"Output directory: {output or 'Current directory'}")
     logger.info(f"Server: http://{host}:{port}")
     
-    if dask_scheduler:
-        logger.info(f"Using Dask scheduler at: {dask_scheduler}")
-    else:
-        logger.info(f"Starting local Dask cluster with {workers} workers")
-    
     # Run the server
     run_server(
         data_path=input,
         output_path=output,
         host=host,
         port=port,
-        dask_scheduler=dask_scheduler,
-        n_workers=workers,
         debug=debug
     )

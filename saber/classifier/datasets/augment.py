@@ -20,16 +20,9 @@ def get_preprocessing_transforms(random_translations=False):
 
 def get_training_transforms():
     train_transforms = Compose([
-        # RandAffined(
-        #     keys=["image", "mask"],
-        #     prob=0.75,
-        #     translate_range=(30, 30),
-        #     padding_mode="border",
-        #     mode=("bilinear", "nearest")
-        # ),
+        RandRotate90d(keys=["image", "mask"], prob=0.5, spatial_axes=[0, 1], max_k=3),
+        RandFlipd(keys=["image", "mask"], prob=0.5, spatial_axis=0),
         RandomOrder([
-            RandRotate90d(keys=["image", "mask"], prob=0.5, spatial_axes=[0, 1]),
-            RandFlipd(keys=["image", "mask"], prob=0.5, spatial_axis=0),
             RandScaleIntensityd(keys="image", prob=0.5, factors=(0.85, 1.15)),
             RandShiftIntensityd(keys="image", prob=0.5, offsets=(-0.15, 0.15)),
             RandAdjustContrastd(keys="image", prob=0.5, gamma=(0.85, 1.15)),

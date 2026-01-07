@@ -78,13 +78,7 @@ class SAM2Classifier(nn.Module):
             nn.Dropout2d(0.2),            
         )
 
-        # Current issue, we're overfitting since we still have a 64x64 feature map.
-        # We should try to reduce the spatial dimensions of the feature map.
-        # We can do this by adding a MaxPool2d layer after the projection.
-        # Lets reduce the spatial dimensions by 4x. to 8x8 
-
         # Classification head (fully connected layers)
-        # classifier_dims = [256, 128]
         self.classifier = nn.Sequential(
             nn.Linear(projection_dims[1], 64),  #  feature dim
             nn.LayerNorm(64),

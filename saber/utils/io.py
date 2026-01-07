@@ -9,6 +9,37 @@ try:
 except:
     hyperspy_available = False
 
+def read_movie(input: str, scale_factor: float):
+    """
+    Read the Fib Volume from a directory or a single file
+    """
+    from saber.filters.downsample import FourierRescale2D
+    import skimage.io as sio
+    import numpy as np
+    import glob
+
+    # Read the Volume from a directory or a single file
+    if '*' in input:
+        files = glob.glob(input)
+        if len(files) == 0:
+            raise ValueError(f"No files found for pattern: {input}")
+        files.sort()  # Ensure files are in order
+        for ii in range(len(files)):
+            im = sio.imread(files[ii])
+            if ii == 0:
+                volume = np.zeros((len(files), im.shape[0], im.shape[1]))
+            volume[ii, :, :] = im
+    else:
+        volume = sio.imread(input)
+    volume = volume.astype(np.float32) # Convert to float32
+
+    # Downsample if needed
+    if scale_factor > 1:
+        for i in range(volume.shape[0]):
+            volume[i, :, :] = FourierRescale2D.run(volume[i, :, :], scale_factor)
+    
+    return volume
+
 def read_micrograph(fname: str):
     """
     Read a micrograph from a file.

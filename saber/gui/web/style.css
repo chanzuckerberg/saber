@@ -23,6 +23,7 @@ body {
     justify-content: space-between;
     align-items: center;
     height: 50px;
+    z-index: 100;
 }
 
 .header h1 {
@@ -59,6 +60,7 @@ body {
     border-radius: 4px;
     margin-bottom: 4px;
     font-size: 14px;
+    transition: background 0.2s;
 }
 
 .run-item:hover {
@@ -83,6 +85,7 @@ body {
     padding: 10px;
     background: #fafafa;
     position: relative;
+    overflow: hidden;
 }
 
 .canvas-wrapper {
@@ -94,6 +97,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    overflow: hidden;
 }
 
 .canvas-label {
@@ -106,12 +110,14 @@ body {
     border-radius: 4px;
     font-size: 12px;
     z-index: 10;
+    pointer-events: none;
 }
 
 canvas {
     max-width: 100%;
     max-height: 100%;
     cursor: crosshair;
+    image-rendering: pixelated;
 }
 
 .controls {
@@ -157,6 +163,11 @@ canvas {
     font-size: 14px;
 }
 
+.add-class-form input:focus {
+    outline: none;
+    border-color: #4CAF50;
+}
+
 .add-class-form button {
     padding: 6px 12px;
     background: #4CAF50;
@@ -165,6 +176,7 @@ canvas {
     border-radius: 4px;
     cursor: pointer;
     font-size: 14px;
+    transition: background 0.2s;
 }
 
 .add-class-form button:hover {
@@ -177,6 +189,7 @@ canvas {
     border: 1px solid #ddd;
     border-radius: 4px;
     padding: 5px;
+    margin-bottom: 10px;
 }
 
 .class-item {
@@ -186,6 +199,7 @@ canvas {
     cursor: pointer;
     border-radius: 4px;
     margin-bottom: 4px;
+    transition: background 0.2s;
 }
 
 .class-item:hover {
@@ -194,6 +208,7 @@ canvas {
 
 .class-item.active {
     background: #e3f2fd;
+    border: 1px solid #2196F3;
 }
 
 .class-color {
@@ -202,23 +217,27 @@ canvas {
     border-radius: 3px;
     margin-right: 10px;
     border: 1px solid #ddd;
+    flex-shrink: 0;
 }
 
 .class-name {
     flex: 1;
     font-size: 14px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .remove-class-btn {
     width: 100%;
     padding: 8px;
-    margin-top: 10px;
     background: #f44336;
     color: white;
     border: none;
     border-radius: 4px;
     cursor: pointer;
     font-size: 14px;
+    transition: background 0.2s;
 }
 
 .remove-class-btn:disabled {
@@ -272,6 +291,7 @@ canvas {
     font-size: 12px;
     display: flex;
     justify-content: space-between;
+    z-index: 100;
 }
 
 .shortcuts-help {
@@ -283,9 +303,11 @@ canvas {
     padding: 20px;
     border-radius: 8px;
     box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-    z-index: 1000;
+    z-index: 1001;
     display: none;
     max-width: 500px;
+    max-height: 80vh;
+    overflow-y: auto;
 }
 
 .shortcuts-help.show {
@@ -294,16 +316,20 @@ canvas {
 
 .shortcuts-help h3 {
     margin-bottom: 15px;
+    color: #333;
 }
 
 .shortcuts-help h4 {
     font-size: 14px;
     margin-bottom: 8px;
+    margin-top: 15px;
+    color: #555;
 }
 
 .shortcuts-help table {
     width: 100%;
     font-size: 14px;
+    border-collapse: collapse;
 }
 
 .shortcuts-help td {
@@ -313,10 +339,18 @@ canvas {
 .shortcuts-help td:first-child {
     font-weight: bold;
     text-align: right;
+    width: 30%;
+    color: #2196F3;
 }
 
 .shortcuts-help ul {
     margin-left: 20px;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.shortcuts-help li {
+    margin-bottom: 8px;
 }
 
 .overlay {
@@ -326,7 +360,7 @@ canvas {
     right: 0;
     bottom: 0;
     background: rgba(0,0,0,0.5);
-    z-index: 999;
+    z-index: 1000;
     display: none;
 }
 
@@ -341,4 +375,27 @@ canvas {
     transform: translate(-50%, -50%);
     font-size: 18px;
     color: #666;
+}
+
+/* Scrollbar styling */
+.run-list::-webkit-scrollbar,
+.class-list::-webkit-scrollbar {
+    width: 8px;
+}
+
+.run-list::-webkit-scrollbar-track,
+.class-list::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.run-list::-webkit-scrollbar-thumb,
+.class-list::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+}
+
+.run-list::-webkit-scrollbar-thumb:hover,
+.class-list::-webkit-scrollbar-thumb:hover {
+    background: #555;
 }

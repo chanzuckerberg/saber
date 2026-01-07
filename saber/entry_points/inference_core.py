@@ -57,7 +57,6 @@ def segment_tomogram_core(
             save_run=img_name, 
             show_segmentations=display_segmentation)
 
-
     # Check if the segment_mask is None
     if segment_mask is None:
         logger.info(f'No Segmentation Found for {run.name}')
