@@ -150,7 +150,7 @@ def run_micrograph_segment(
         use_m2m = use_m2m, multimask_output = multimask, sam2_cfg = sam2_cfg
     )
 
-    # Get All Files in the Directoryclear
+    # Get All Files in the Directory
     files = glob.glob(input)
     if len(files) == 0:
         raise ValueError(f"No files found in {input}")
