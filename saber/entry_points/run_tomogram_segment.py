@@ -129,16 +129,15 @@ def run_slab_seg(
     from saber.sam2.amg import cfgAMG
     import copick
     
+    # Prepare AMG Config
+    cfg = cfgAMG(
+        npoints = npoints, points_per_batch = points_per_batch, 
+        pred_iou_thresh = pred_iou_thresh, box_nms_thresh = box_nms_thresh, 
+        crop_n_layers = crop_n_layers, crop_n_points_downscale_factor = crop_n_points, 
+        use_m2m = use_m2m, multimask_output = multimask, sam2_cfg = sam2_cfg
+    )
+    
     # Initialize the Domain Expert Classifier   
-    if model_weights is None and model_config is None:
-        cfg = cfgAMG(
-            npoints = npoints, points_per_batch = points_per_batch, 
-            pred_iou_thresh = pred_iou_thresh, box_nms_thresh = box_nms_thresh, 
-            crop_n_layers = crop_n_layers, crop_n_points_downscale_factor = crop_n_points, 
-            use_m2m = use_m2m, multimask_output = multimask, sam2_cfg = sam2_cfg
-        )
-    else:
-        cfg = cfgAMG()
     predictor = common.get_predictor(model_weights, model_config)
 
     # Open Copick Project and Get Run
