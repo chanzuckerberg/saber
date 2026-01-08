@@ -92,31 +92,35 @@ def extract_sam2_candidates(
 @click.option('--num-slabs', type=int, default=1, callback=validate_odd, 
               help="Number of slabs to segment per tomogram.")
 def prepare_tomogram_training(
-    config: str, 
-    voxel_size: int, 
-    tomo_alg: str, 
-    slab_thickness: int,
-    num_slabs: int,
+    config: str, voxel_size: int, tomo_alg: str, 
+    slab_thickness: int, num_slabs: int,
     output: str,
     sam2_cfg: str,
-    npoints: int,  
-    points_per_batch: int,  
-    pred_iou_thresh: float, 
+    npoints: int,
+    points_per_batch: int,
+    pred_iou_thresh: float,
     crop_n_layers: int,
     box_nms_thresh: float,
-    crop_n_points_downscale_factor: int,
+    crop_n_points: int,
     use_m2m: bool,
-    multimask_output: bool,
+    multimask: bool,
     ):
     """
     Prepare Training Data from Tomograms for a Classifier.
     """
 
     print('⚙️  Preparing Tomogram Training Data...')
-    prep3d(config, voxel_size, tomo_alg, slab_thickness, output, sam2_cfg, num_slabs)
+    prep3d(
+        config, voxel_size, tomo_alg, slab_thickness, output, num_slabs, sam2_cfg, 
+        npoints, points_per_batch, pred_iou_thresh, crop_n_layers, 
+        box_nms_thresh, crop_n_points, use_m2m, multimask
+    )
 
 
-def prep3d(config, voxel_size, tomo_alg, slab_thickness, output, sam2_cfg, num_slabs):
+def prep3d(
+        config, voxel_size, tomo_alg, slab_thickness, output, num_slabs, sam2_cfg, npoints, 
+        points_per_batch, pred_iou_thresh, crop_n_layers, box_nms_thresh, crop_n_points, 
+        use_m2m, multimask ):
     """
     Prepare Training Data from Tomograms for a Classifier.
     """ 
@@ -124,8 +128,8 @@ def prep3d(config, voxel_size, tomo_alg, slab_thickness, output, sam2_cfg, num_s
     from saber.segmenters.loaders import base_tomosegmenter
     from saber.visualization import galleries
     from saber.utils import parallelization
+    from saber.sam2.amg import cfgAMG    
     import copick
-
 
     print(f'\nRunning SAM2 Training Data Preparation')
     print(f'Algorithm: {tomo_alg}, Voxel-Size: {voxel_size} Å')
@@ -136,10 +140,18 @@ def prep3d(config, voxel_size, tomo_alg, slab_thickness, output, sam2_cfg, num_s
     run_ids = [run.name for run in root.runs]
     print(f'Processing {len(run_ids)} runs for training data extraction')
 
+    # Prepare AMG Config
+    cfg = cfgAMG(
+        npoints = npoints, points_per_batch = points_per_batch, 
+        pred_iou_thresh = pred_iou_thresh, box_nms_thresh = box_nms_thresh, 
+        crop_n_layers = crop_n_layers, crop_n_points_downscale_factor = crop_n_points, 
+        use_m2m = use_m2m, multimask_output = multimask, sam2_cfg = sam2_cfg
+    )
+
     # Create pool with model pre-loading
     pool = parallelization.GPUPool(
         init_fn=base_tomosegmenter,
-        init_args=(sam2_cfg,),
+        init_args=(cfg,),
         verbose=True
     )
 

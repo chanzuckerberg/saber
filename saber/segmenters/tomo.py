@@ -4,23 +4,24 @@ from saber.filters import masks as mask_filters
 import saber.visualization.results as cryoviz
 import saber.filters.gaussian as gauss
 from saber.segmenters import utils
+from saber.sam2.amg import cfgAMG
 from tqdm import tqdm
 import numpy as np
 import torch
 
 class cryoTomoSegmenter(saber3Dsegmenter):
     def __init__(self,
-        sam2_cfg: str = 'base', 
         deviceID: int = 0,
         classifier = None,
         target_class: int = 1,
+        cfg: cfgAMG = None,        
         min_mask_area: int = 100,
         min_rel_box_size: float = 0.025
     ):      
         """
         Initialize the cryoTomoSegmenter
         """ 
-        super().__init__(sam2_cfg, deviceID, classifier, target_class, min_mask_area)
+        super().__init__(deviceID, classifier, target_class, cfg, min_mask_area)
 
         # Threshold for Certainty Aware Distillation
         self.filter_threshold = 0.5

@@ -49,14 +49,14 @@ def prepare_micrograph_training(
     print('⚙️  Preparing Micrograph Training Data...')
     prep2d(
         input, output, target_resolution, scale_factor, sam2_cfg,
-        npoints, points_per_batch, pred_iou_thresh, box_nms_thresh, 
-        crop_n_points, use_m2m, multimask
+        npoints, points_per_batch, pred_iou_thresh, crop_n_layers,
+        box_nms_thresh, crop_n_points, use_m2m, multimask
     )
 
 def prep2d(
         input, output, target_resolution, scale_factor, sam2_cfg, 
-        npoints, points_per_batch, pred_iou_thresh, box_nms_thresh, 
-        crop_n_points, use_m2m, multimask
+        npoints, points_per_batch, pred_iou_thresh, crop_n_layers,
+        box_nms_thresh, crop_n_points, use_m2m, multimask
     ):
     """
     Prepare Training Data from Micrographs for a Classifier.
@@ -65,15 +65,22 @@ def prep2d(
     from saber.segmenters.loaders import base_microsegmenter
     from saber.utils import parallelization, io
     from saber.visualization import galleries
+    from saber.sam2.amg import cfgAMG    
     from skimage import io as sio
     import glob, os, shutil
-
-    import pdb; pdb.set_trace()
 
 
     # Check to Make Sure Only One of the Inputs is Provided
     if target_resolution is not None and scale_factor is not None:
         raise ValueError("Please provide either target_resolution OR scale_factor input, not both.")
+
+    # Prepare AMG Config
+    cfg = cfgAMG(
+        npoints = npoints, points_per_batch = points_per_batch, 
+        pred_iou_thresh = pred_iou_thresh, box_nms_thresh = box_nms_thresh, 
+        crop_n_layers = crop_n_layers, crop_n_points_downscale_factor = crop_n_points, 
+        use_m2m = use_m2m, multimask_output = multimask, sam2_cfg = sam2_cfg
+    )        
 
     # Get All Files in the Directory
     print(f'\nRunning SAM2 Training Data Preparation\nfor the Following Search Path: {input}')
@@ -97,12 +104,11 @@ def prep2d(
             fname = f'stack/slice_{ii:03d}.tif'
             sio.imsave(fname, image[ii])
             files.append(fname)    
-        
 
     # Create pool with model pre-loading
     pool = parallelization.GPUPool(
         init_fn=base_microsegmenter,
-        init_args=(sam2_cfg,),
+        init_args=(cfg,),
         verbose=True
     )
 

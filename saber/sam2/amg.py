@@ -1,6 +1,35 @@
+from pydantic import BaseModel, Field, field_validator
 from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import torch
+
+class cfgAMG(BaseModel):
+    """Configuration for SAM2 Automatic Mask Generator."""
+    
+    npoints: int = Field(gt=0, default=32, description="Number of points to sample")
+    points_per_batch: int = Field(gt=0, default=64)
+    pred_iou_thresh: float = Field(gt=0, le=1.0, default=0.7)
+    stability_score_thresh: float = Field(ge=0, le=1.0, default=0.92)
+    stability_score_offset: float = Field(default=0.7)
+    crop_n_layers: int = Field(ge=0, default=2)
+    box_nms_thresh: float = Field(gt=0, le=1.0, default=0.7)
+    crop_n_points_downscale_factor: int = Field(gt=0, default=2)
+    use_m2m: bool = Field(default=True)
+    multimask_output: bool = Field(default=True)
+    sam2_cfg: str  = Field(default='small')
+    
+    @field_validator('sam2_cfg')
+    @classmethod
+    def validate_sam2_cfg(cls, v: str) -> str:
+        """Validate SAM2 config string is a known config."""
+        valid_configs = ['tiny', 'small', 'base', 'large']
+        if v not in valid_configs:
+            raise ValueError(f"sam2_cfg must be one of {valid_configs}, got {v}")
+        return v
+    
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for SAM2."""
+        return self.model_dump()
 
 class MaskFilteringUtils:
     """

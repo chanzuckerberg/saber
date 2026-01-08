@@ -4,8 +4,9 @@ from saber.visualization import classifier as viz
 from saber.utils import preprocessing
 import saber.filters.masks as filters
 from saber import pretrained_weights
+from typing import List, Tuple, Any
 from saber.segmenters import utils
-from typing import List, Tuple
+from saber.sam2.amg import cfgAMG
 from saber.utils import io
 from scipy import ndimage
 from tqdm import tqdm
@@ -19,13 +20,13 @@ logger.disabled = True
 
 class saber2Dsegmenter:
     def __init__(self,
-        sam2_cfg: str = 'base', 
+        cfg: cfgAMG = None,    
         deviceID: int = 0,
         classifier = None,
         target_class: int = 1,
         min_mask_area: int = 50,
         window_size: int = 256,
-        overlap_ratio: float = 0.25
+        overlap_ratio: float = 0.25,
     ):
         """
         Class for Segmenting Micrographs or Images using SAM2
@@ -58,9 +59,9 @@ class saber2Dsegmenter:
             self.target_class = None
             self.batchsize = None
 
-            # Use Default AMG Config
-            self.cfg = amg.get_default()
-            self.cfg['sam2_cfg'] = sam2_cfg
+            # Use Default AMG Config if None Provided or Incorrect Type
+            self.cfg = cfg if isinstance(cfg, cfgAMG) else cfgAMG()
+            self.cfg = self.cfg.dict()
 
         # Build SAM2 Automatic Mask Generator
         self.mask_generator = amg.build_amg(
@@ -72,7 +73,7 @@ class saber2Dsegmenter:
 
         # Internal Variable to Let Users Save Segmentations 
         self.save_button = False
-        self.remove_repeating_masks = True        
+        self.remove_repeating_masks = True
 
     @torch.inference_mode()
     def segment_image(self,
@@ -228,15 +229,15 @@ class saber2Dsegmenter:
     
 class saber3Dsegmenter(saber2Dsegmenter):
     def __init__(self,
-        sam2_cfg: str = 'base', 
         deviceID: int = 0,
         classifier = None,
         target_class: int = 1,
+        cfg: cfgAMG = None,        
         min_mask_area: int = 100,
         min_rel_box_size: float = 0.025,
         light_modality: bool = False
     ):  
-        super().__init__(sam2_cfg, deviceID, classifier, target_class, min_mask_area, min_rel_box_size)
+        super().__init__(cfg, deviceID, classifier, target_class, min_mask_area)
 
         # Build Tomogram Predictor (VOS Optimized)
         (cfg, checkpoint) = pretrained_weights.get_sam2_checkpoint(self.cfg['sam2_cfg'])

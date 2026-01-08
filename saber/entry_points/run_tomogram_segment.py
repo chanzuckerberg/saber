@@ -1,4 +1,5 @@
 import saber.utils.slurm_submit as slurm_submit
+from saber.sam2.automask import amg_cli as amg
 from saber import cli_context
 import rich_click as click
 
@@ -16,7 +17,6 @@ def segment_tomogram_interactive(
     model_weights: str,
     model_config: str,
     target_class: int,
-    sam2_cfg: str,
     gpu_id: int = 0
     ):
     """
@@ -38,7 +38,6 @@ def segment_tomogram_interactive(
     if num_slabs > 1:
         print(f'Using Multi-Depth Tomogram Segmenter with {num_slabs} slabs and {delta_z} voxel spacing between slabs.')
         segmenter = multiDepthTomoSegmenter(
-            sam2_cfg=sam2_cfg,
             deviceID=gpu_id,
             classifier=classifier,
             target_class=target_class
@@ -46,7 +45,6 @@ def segment_tomogram_interactive(
     else:
         print(f'Using Single-Depth Tomogram Segmenter.')
         segmenter = cryoTomoSegmenter(
-            sam2_cfg=sam2_cfg,
             deviceID=gpu_id,
             classifier=classifier,
             target_class=target_class
@@ -112,7 +110,15 @@ def run_slab_seg(
     model_weights: str,
     model_config: str,
     target_class: int,
-    sam2_cfg: str
+    sam2_cfg: str,
+    npoints: int,
+    points_per_batch: int,
+    pred_iou_thresh: float,
+    crop_n_layers: int,
+    box_nms_thresh: float,
+    crop_n_points: int,
+    use_m2m: bool,
+    multimask: bool,
     ):
     """
     Segment a single slab of a tomogram.
@@ -120,15 +126,23 @@ def run_slab_seg(
     from saber.segmenters.tomo import cryoTomoSegmenter
     from saber.classifier.models import common
     from copick_utils.io import readers
+    from saber.sam2.amg import cfgAMG
     import copick
     
     # Initialize the Domain Expert Classifier   
+    if model_weights is None and model_config is None:
+        cfg = cfgAMG(
+            npoints = npoints, points_per_batch = points_per_batch, 
+            pred_iou_thresh = pred_iou_thresh, box_nms_thresh = box_nms_thresh, 
+            crop_n_layers = crop_n_layers, crop_n_points_downscale_factor = crop_n_points, 
+            use_m2m = use_m2m, multimask_output = multimask, sam2_cfg = sam2_cfg
+        )
+    else:
+        cfg = cfgAMG()
     predictor = common.get_predictor(model_weights, model_config)
 
-    # Open Copick Project and Query All Available Runs
+    # Open Copick Project and Get Run
     root = copick.from_file(config)
-
-    # Get Run
     run = root.get_run(run_id)
 
     # Get Tomogram
@@ -139,7 +153,7 @@ def run_slab_seg(
 
     # Create an instance of cryoTomoSegmenter
     segmenter = cryoTomoSegmenter(
-        sam2_cfg=sam2_cfg,
+        cfg=cfg,
         classifier=predictor,         # if you have a classifier; otherwise, leave as None
         target_class=target_class     # desired target class if using a classifier
     )
@@ -159,14 +173,13 @@ def run_tomo_seg(   # run_tomograms
     model_config: str,
     model_weights: str,
     target_class: int,
-    multi_slab: str,
-    sam2_cfg: str
+    multi_slab: str
     ):
     """
     Segment a tomogram or multiple tomograms.
     """
-    from saber.utils import parallelization, io
     from saber.segmenters.loaders import tomogram_workflow
+    from saber.utils import parallelization, io
     from saber.visualization import galleries 
     import copick, os, matplotlib
 
@@ -197,7 +210,7 @@ def run_tomo_seg(   # run_tomograms
             slab_thickness, num_slabs, delta_z,
             display_segmentation,
             model_weights, model_config,
-            target_class, sam2_cfg
+            target_class
         )
         return
 
@@ -230,7 +243,7 @@ def run_tomo_seg(   # run_tomograms
     pool = parallelization.GPUPool(
         init_fn=tomogram_workflow,
         approach="threading",
-        init_args=(model_weights, model_config, target_class, sam2_cfg, num_slabs),
+        init_args=(model_weights, model_config, target_class, num_slabs),
         verbose=True
     )
 
@@ -270,7 +283,7 @@ def run_tomo_seg(   # run_tomograms
 @click.option("--run-id", type=str, required=True, 
               help="Path to Copick Config for Processing Data")            
 @slurm_submit.classifier_inputs
-@slurm_submit.sam2_inputs
+@amg()
 def slab(
     config: str,
     run_id: str, 
@@ -280,15 +293,25 @@ def slab(
     model_weights: str,
     model_config: str,
     target_class: int, 
-    sam2_cfg: str
+    sam2_cfg: str,
+    npoints: int,
+    points_per_batch: int,
+    pred_iou_thresh: float,
+    crop_n_layers: int,
+    box_nms_thresh: float,
+    crop_n_points: int,
+    use_m2m: bool,
+    multimask: bool,    
     ):
     """
     Segment a single slab of a tomogram.
     """
 
-    print('🚀 Running Saber Slab Segmentation...')
+    print('🎨 Running Saber Slab Segmentation...')
     run_slab_seg(
-        config, run_id, voxel_size, tomo_alg, slab_thickness, model_weights, model_config, target_class, sam2_cfg
+        config, run_id, voxel_size, tomo_alg, slab_thickness, model_weights, model_config, target_class, 
+        sam2_cfg, npoints, points_per_batch, pred_iou_thresh, crop_n_layers, box_nms_thresh, crop_n_points, 
+        use_m2m, multimask
     )
 
 @click.command(context_settings=cli_context)
@@ -299,7 +322,6 @@ def slab(
 @slurm_submit.classifier_inputs
 @click.option('--multi-slab', type=str, default=1, 
               help="Number of slabs and spacing for multi-slab segmentation provided as thickness or thickness,spacing. (Default spacing is 30 if ignored)")
-@slurm_submit.sam2_inputs
 def tomograms(
     config: str,
     run_ids: str,
@@ -312,7 +334,6 @@ def tomograms(
     model_weights: str,
     target_class: int,
     multi_slab: str,
-    sam2_cfg: str
     ):
     """
     Generate a 3D Segmentation of a tomogram.
@@ -320,5 +341,7 @@ def tomograms(
 
     print('🚀 Running Saber Tomogram Segmentation...')
     run_tomo_seg(
-        config, run_ids, voxel_size, tomo_alg, seg_name, seg_session_id, slab_thickness, model_config, model_weights, target_class, multi_slab, sam2_cfg
+        config, run_ids, voxel_size, tomo_alg, 
+        seg_name, seg_session_id, slab_thickness, 
+        model_config, model_weights, target_class, multi_slab
     )

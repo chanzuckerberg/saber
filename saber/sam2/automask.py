@@ -53,9 +53,9 @@ def build_amg(amg_params: str, min_mask_area: int, device: Optional[str] = 'cpu'
     import warnings
     warnings.filterwarnings("ignore", category=UserWarning)
     from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
-    from saber.sam2 import filtered_automatic_mask_generator as fmask
     from sam2.build_sam import build_sam2
     from saber import pretrained_weights
+    from saber.sam2 import amg as fmask
 
     # Build SAM2 model
     (cfg, checkpoint) = pretrained_weights.get_sam2_checkpoint(amg_params['sam2_cfg'])
