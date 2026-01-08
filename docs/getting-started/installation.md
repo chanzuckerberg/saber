@@ -33,7 +33,31 @@ pip install -e .
 To verify your installation, run:
 
 ```bash
-python -c "import saber; print(saber.__version__)"
+saber
+```
+
+You should see the following output:
+
+```bash
+ SABER ⚔️ -- Segment Anything Based Expert             
+ Recognition.                                                
+╭─ Options ──────────────────────────────────────────╮
+│ --help  -h  Show this message and exit.            │
+╰────────────────────────────────────────────────────╯
+╭─ Commands ─────────────────────────────────────────╮
+│ analysis    Post-processing analysis after         │
+│             segmentation.                          │
+│ classifier  Routines for training and evaluating   │
+│             classifiers.                           │
+│ gui         Saber GUI for annotating SAM2          │
+│             segmentations with custom classes.     │
+│ save        Save organelle coordinates and         │
+│             statistics (size-distribution) from    │
+│             segmentations.                         │
+│ segment     Segment Tomograms and Micrographs with │
+│             SABER.                                 │
+│ web         SABER Annotation GUI Web Server        │
+╰────────────────────────────────────────────────────╯
 ```
 
 ## Next Steps
