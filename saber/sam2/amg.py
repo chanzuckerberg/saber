@@ -27,9 +27,16 @@ class cfgAMG(BaseModel):
             raise ValueError(f"sam2_cfg must be one of {valid_configs}, got {v}")
         return v
     
-    def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for SAM2."""
-        return self.model_dump()
+    def dict(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        """
+        Pydantic-style dict export, backed by model_dump for Pydantic v2.
+        Accepts the same arguments as BaseModel.dict/model_dump.
+        """
+        return self.model_dump(*args, **kwargs)
+    
+    def to_dict(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        """Convert to dictionary for SAM2 (wrapper around .dict())."""
+        return self.dict(*args, **kwargs)
 
 class MaskFilteringUtils:
     """
