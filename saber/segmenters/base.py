@@ -55,8 +55,8 @@ class saber2Dsegmenter:
             # Get AMG Config from Classifier 
             self.cfg = self.classifier.config['amg_params']
         else:
+            self.target_class = 1
             self.classifier = None
-            self.target_class = None
             self.batchsize = None
 
             # Use Default AMG Config if None Provided or Incorrect Type
