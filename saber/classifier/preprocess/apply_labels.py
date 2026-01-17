@@ -104,100 +104,107 @@ class SABERLabelConverter:
         import numpy as np
         import zarr
         
-        try:
-            # Skip empty annotations
-            if len(annotations) == 0:
-                return (run_id, None)
-            
-            # Check if run_id exists in SAM2 data
-            if run_id not in sam2_data:
-                return (run_id, f"Run ID '{run_id}' not found in SAM2 zarr")
+        # Skip empty annotations
+        if len(annotations) == 0:
+            return (run_id, None)
+        
+        # Check if run_id exists in SAM2 data
+        if run_id not in sam2_data:
+            return (run_id, f"Run ID '{run_id}' not found in SAM2 zarr")
 
-            # Get image data
-            if '0' in sam2_data[run_id]:
-                image = sam2_data[run_id]['0'][:]
-            else:
-                return (run_id, f"No image found for run ID '{run_id}'")
-            
-            # Get SAM2 masks
-            if 'labels' in sam2_data[run_id] and '0' in sam2_data[run_id]['labels']:
-                sam2_masks = sam2_data[run_id]['labels']['0'][:]
-            else:
-                return (run_id, f"No masks found for run ID '{run_id}'")
-            
-            im = sam2_data[run_id]['0'][:]
-            (nx, ny) = im.shape
-            masks0 = sam2_data[run_id]['labels']['0'][:]
-            nMasks = masks0.shape[0]
-            masks = np.zeros((len(labels), nx, ny), dtype=np.uint8)
-            used_mask_values = set()
+        # Get image data
+        if '0' in sam2_data[run_id]:
+            image = sam2_data[run_id]['0'][:]
+        else:
+            return (run_id, f"No image found for run ID '{run_id}'")
+        
+        # Get SAM2 masks
+        if 'labels' in sam2_data[run_id] and '0' in sam2_data[run_id]['labels']:
+            sam2_masks = sam2_data[run_id]['labels']['0'][:]
+        else:
+            return (run_id, f"No masks found for run ID '{run_id}'")
+        
+        im = sam2_data[run_id]['0'][:]
+        (nx, ny) = im.shape
+        masks0 = sam2_data[run_id]['labels']['0'][:]
+        masks = np.zeros((len(labels), nx, ny), dtype=np.uint8)
+        used_mask_values = set()
 
-            # Extract mask values and create mapping
-            mask_value_to_array = self.extract_mask_values(masks0)
+        # Extract mask values and create mapping
+        mask_value_to_array = self.extract_mask_values(masks0)
 
-            for seg_value, label in annotations.items():
-                # Skip labels that were excluded from the mapping
-                if label not in label_mapping:
-                    continue
-                # Add mask to the corresponding class
-                mask_array = mask_value_to_array[float(seg_value)]
-                masks[label_mapping[label],] = np.logical_or(
-                        masks[label_mapping[label],], 
-                        mask_array
-                    ).astype(np.uint8)
-                used_mask_values.add(float(seg_value))
+        for seg_value, label in annotations.items():
+            # Skip labels that were excluded from the mapping
+            if label not in label_mapping:
+                continue
 
-            # Get rejected masks (masks not assigned to any class)
-            rejected_masks = []
-            for mask_value, mask_array in mask_value_to_array.items():
-                if mask_value not in used_mask_values:
-                    rejected_masks.append(mask_array)
+            # Per-mask guard: skip bad/missing masks instead of failing the run
+            try:
+                seg_value_f = float(seg_value)
+                mask_array = mask_value_to_array[seg_value_f]
+            except Exception as e:
+                # Examples: KeyError if seg_value not present, ValueError on float conversion, etc.
+                click.echo(
+                    f"⚠️  Warning: run_id={run_id}: skipping mask seg_value={seg_value!r} "
+                    f"(label={label!r}) because {type(e).__name__}: {e}",
+                    err=True,
+                )
+                continue
+
+            masks[label_mapping[label]] = np.logical_or(
+                masks[label_mapping[label]],
+                mask_array
+            ).astype(np.uint8)
+            used_mask_values.add(seg_value_f)
+
+        # Get rejected masks (masks not assigned to any class)
+        rejected_masks = []
+        for mask_value, mask_array in mask_value_to_array.items():
+            if mask_value not in used_mask_values:
+                rejected_masks.append(mask_array)
+        
+        # Thread-safe zarr write operation
+        with self.zarr_lock:
+            # Create group for this run_id - Save image
+            group = root.create_group(run_id)
+            group.create_dataset(
+                '0', 
+                data=image, 
+                dtype=image.dtype, 
+                compressor=zarr.Blosc(cname='zstd', clevel=2, shuffle=2)
+            )
+            pixel_size = sam2_data[run_id].attrs['multiscales'][0]['datasets'][0]['coordinateTransformations'][0]['scale'][0]
+            add_attributes(group, pixel_size, False)
             
-            # Thread-safe zarr write operation
-            with self.zarr_lock:
-                # Create group for this run_id - Save image
-                group = root.create_group(run_id)
-                group.create_dataset(
-                    '0', 
-                    data=image, 
-                    dtype=image.dtype, 
+            # Save class masks
+            if masks.sum() > 0:
+                labels_group = group.create_group('labels')
+                labels_group.create_dataset(
+                    '0',
+                    data=masks,
+                    dtype=np.uint8,
                     compressor=zarr.Blosc(cname='zstd', clevel=2, shuffle=2)
                 )
-                pixel_size = sam2_data[run_id].attrs['multiscales'][0]['datasets'][0]['coordinateTransformations'][0]['scale'][0]
-                add_attributes(group, pixel_size, False)
-                
-                # Save class masks
-                if masks.sum() > 0:
-                    labels_group = group.create_group('labels')
-                    labels_group.create_dataset(
-                        '0',
-                        data=masks,
-                        dtype=np.uint8,
-                        compressor=zarr.Blosc(cname='zstd', clevel=2, shuffle=2)
-                    )
-                    add_attributes(labels_group, pixel_size, True)
-                
-                # Save rejected masks
-                if len(rejected_masks) > 0:
-                    labels_group.create_dataset(
-                        'rejected',
-                        data=rejected_masks,
-                        dtype=np.uint8,
-                        compressor=zarr.Blosc(cname='zstd', clevel=2, shuffle=2)
-                    )
-                else:
-                    # Empty array if no rejected masks
-                    labels_group.create_dataset(
-                        'rejected',
-                        data=np.array([]),
-                        dtype=np.uint8
-                    )
+                add_attributes(labels_group, pixel_size, True)
             
-            return (run_id, None)
-            
-        except Exception as e:
-            return (run_id, str(e))
-    
+            # Save rejected masks
+            if len(rejected_masks) > 0:
+                labels_group.create_dataset(
+                    'rejected',
+                    data=rejected_masks,
+                    dtype=np.uint8,
+                    compressor=zarr.Blosc(cname='zstd', clevel=2, shuffle=2)
+                )
+            else:
+                # Empty array if no rejected masks
+                labels_group.create_dataset(
+                    'rejected',
+                    data=np.array([]),
+                    dtype=np.uint8
+                )
+        
+        return (run_id, None)
+        
     def convert(self, 
                sam2_zarr_path: Path,
                json_path: Path,

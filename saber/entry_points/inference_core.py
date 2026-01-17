@@ -145,5 +145,5 @@ def segment_micrograph_core(
     input = os.path.splitext(os.path.basename(input))[0]
     zwriter.write(
         run_name=input, image=out_image, 
-        masks=masks.astype(np.uint8), pixel_size=pixel_size
+        masks=masks, pixel_size=pixel_size
     )

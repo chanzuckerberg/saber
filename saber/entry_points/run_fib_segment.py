@@ -23,14 +23,12 @@ def fib_options(func):
 
 @click.command(context_settings=cli_context)
 @fib_options
-@slurm_submit.sam2_inputs
 @slurm_submit.classifier_inputs
 def fib(
     input: str,
     output: str,
     ini_depth: int,
     nframes: int,
-    sam2_cfg: str,
     model_weights: str,
     model_config: str,
     target_class: int,
@@ -42,7 +40,7 @@ def fib(
 
     run_fib_segment(
         input, output, ini_depth, nframes, 
-        sam2_cfg, model_weights, model_config, 
+        model_weights, model_config, 
         target_class, scale_factor
     )
 
@@ -52,7 +50,6 @@ def run_fib_segment(
     output: str,
     ini_depth: int,
     nframes: int,
-    sam2_cfg: str,
     model_weights: str,
     model_config: str,
     target_class: int,
@@ -79,7 +76,6 @@ def run_fib_segment(
 
     # Create an instance of fibSegmenter
     segmenter = propagationSegmenter(
-        sam2_cfg=sam2_cfg,
         classifier=predictor,
         target_class=target_class,
     )

@@ -1,3 +1,4 @@
+from saber.sam2.automask import amg_cli as amg
 from saber.utils import slurm_submit
 from saber import cli_context
 import rich_click as click
@@ -25,21 +26,38 @@ def micrograph_options(func):
 
 @click.command(context_settings=cli_context, name='prep2d')
 @micrograph_options
-@slurm_submit.sam2_inputs
+@amg()
 def prepare_micrograph_training(
     input: str, 
     output: str,
     target_resolution: float,
     scale_factor: float,
     sam2_cfg: str,
+    npoints: int,
+    points_per_batch: int,
+    pred_iou_thresh: float,
+    crop_n_layers: int,
+    box_nms_thresh: float,
+    crop_n_points: int,
+    use_m2m: bool,
+    multimask: bool,
     ):
     """
     Prepare Training Data from Micrographs for a Classifier.
     """ 
 
-    prep2d(input, output, target_resolution, scale_factor, sam2_cfg)
+    print('⚙️  Preparing Micrograph Training Data...')
+    prep2d(
+        input, output, target_resolution, scale_factor, sam2_cfg,
+        npoints, points_per_batch, pred_iou_thresh, crop_n_layers,
+        box_nms_thresh, crop_n_points, use_m2m, multimask
+    )
 
-def prep2d(input, output, target_resolution, scale_factor, sam2_cfg):
+def prep2d(
+        input, output, target_resolution, scale_factor, sam2_cfg, 
+        npoints, points_per_batch, pred_iou_thresh, crop_n_layers,
+        box_nms_thresh, crop_n_points, use_m2m, multimask
+    ):
     """
     Prepare Training Data from Micrographs for a Classifier.
     """
@@ -47,6 +65,7 @@ def prep2d(input, output, target_resolution, scale_factor, sam2_cfg):
     from saber.segmenters.loaders import base_microsegmenter
     from saber.utils import parallelization, io
     from saber.visualization import galleries
+    from saber.sam2.amg import cfgAMG    
     from skimage import io as sio
     import glob, os, shutil
 
@@ -54,6 +73,14 @@ def prep2d(input, output, target_resolution, scale_factor, sam2_cfg):
     # Check to Make Sure Only One of the Inputs is Provided
     if target_resolution is not None and scale_factor is not None:
         raise ValueError("Please provide either target_resolution OR scale_factor input, not both.")
+
+    # Prepare AMG Config
+    cfg = cfgAMG(
+        npoints = npoints, points_per_batch = points_per_batch, 
+        pred_iou_thresh = pred_iou_thresh, box_nms_thresh = box_nms_thresh, 
+        crop_n_layers = crop_n_layers, crop_n_points_downscale_factor = crop_n_points, 
+        use_m2m = use_m2m, multimask_output = multimask, sam2_cfg = sam2_cfg
+    )        
 
     # Get All Files in the Directory
     print(f'\nRunning SAM2 Training Data Preparation\nfor the Following Search Path: {input}')
@@ -77,12 +104,11 @@ def prep2d(input, output, target_resolution, scale_factor, sam2_cfg):
             fname = f'stack/slice_{ii:03d}.tif'
             sio.imsave(fname, image[ii])
             files.append(fname)    
-        
 
     # Create pool with model pre-loading
     pool = parallelization.GPUPool(
         init_fn=base_microsegmenter,
-        init_args=(sam2_cfg,),
+        init_args=(cfg,),
         verbose=True
     )
 

@@ -1,22 +1,25 @@
 from saber.filters.downsample import FourierRescale2D
 from saber.segmenters.base import saber2Dsegmenter
+from saber.sam2.amg import cfgAMG
+from typing import Any
 import torch
-
 
 class cryoMicroSegmenter(saber2Dsegmenter):
     def __init__(self,
-        sam2_cfg: str = 'base', 
         deviceID: int = 0,
         classifier = None,
         target_class: int = 1,
         min_mask_area: int = 50,
         window_size: int = 256,
         overlap_ratio: float = 0.25,
+        cfg: cfgAMG = None,
     ):
         """
         Class for Segmenting Micrographs
         """
-        super().__init__(sam2_cfg, deviceID, classifier, target_class, min_mask_area, window_size, overlap_ratio)
+        super().__init__(
+            cfg, deviceID, classifier, target_class, 
+            min_mask_area, window_size, overlap_ratio )
 
         # Max pixels for single inference
         self.max_pixels = 1280

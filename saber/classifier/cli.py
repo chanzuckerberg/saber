@@ -7,6 +7,7 @@ from saber.classifier.preprocess.apply_labels import labeler
 from saber.classifier.train import train, train_slurm
 from saber.classifier.evaluator import evaluate
 import rich_click as click
+from saber import groups
 
 @click.group(name="classifier")
 def classifier_routines():
@@ -21,7 +22,6 @@ classifier_routines.add_command(predict)
 classifier_routines.add_command(prepare_tomogram_training)
 classifier_routines.add_command(prepare_micrograph_training)
 classifier_routines.add_command(evaluate)
-classifier_routines.add_command(class_info)
 classifier_routines.add_command(labeler)
 
 @click.group(name="classifier")
