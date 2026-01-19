@@ -41,6 +41,8 @@ class AutoMaskDataset(Dataset):
         self.transform = transform
         self.keep_fraction = 0.5
         self.shuffle = shuffle
+        self.max_pos_pts = 8
+        self.K_choices = [2, 2, 4, 4, 8]
 
         # Check if both data types are available
         if tomogram_zarr_path is None and fib_zarr_path is None:
@@ -304,7 +306,7 @@ class AutoMaskDataset(Dataset):
         grid_points: np.ndarray,
         shape: tuple[int, int],
         jitter_px: float = 1.0,
-        k_cap: int = 300,
+        k_cap: int = 100,
         boundary_frac: float = 0.35,
     ) -> np.ndarray:
         """
@@ -340,7 +342,7 @@ class AutoMaskDataset(Dataset):
         # target k ~ c * area but capped
         area = float(comp_b.sum())
         k_target = int(
-            min( k_cap, max(24, area * 0.12) )
+            min( k_cap, max(12, area * 0.1) )
         )
 
         kb = int(boundary_frac * k_target)
@@ -416,15 +418,37 @@ class AutoMaskDataset(Dataset):
                 if box is None:
                     continue
 
-                # sample clicks from this component (NOT the full instance)
-                # pts = helper.sample_positive_points(comp, k=self.k_pos)
-                pts = self._sample_points_in_mask(comp, grid_points, shape=(h, w))
-                if pts.shape[0] == 0:
-                    continue
+                K = self.K_choices[self._rng.randint(0, len(self.K_choices))]
+                pts_pos = self._sample_points_in_mask(comp, grid_points, (h, w))
+                if pts_pos.shape[0] < 3:
+                    continue    
+                elif pts_pos.shape[0] > K:
+                    sel = self._rng.choice(pts_pos.shape[0], size=K, replace=False)
+                    pts_pos = pts_pos[sel]
+
+                # negatives just outside this component, but not inside any *other* instance
+                use_negs = (self._rng.rand() < 0.5)
+                if use_negs:
+                    other_inst = ((segmentation > 0) & (~comp.astype(bool)))
+                    neg_ring = self._sample_negative_ring(
+                        comp, other_inst=other_inst, ring=3,
+                        max_neg=min(4, int(0.25 * len(pts_pos))), shape=(h, w)
+                    )
+
+                    pts = np.concatenate([pts_pos, neg_ring], 0)
+                    lbl = np.concatenate([np.ones(len(pts_pos), np.float32),
+                                        np.zeros(len(neg_ring), np.float32)], 0)
+                else:
+                    pts, lbl = pts_pos, np.ones((len(pts_pos),), np.float32)
+
+                # shuffle to avoid positional bias
+                if pts.shape[0] > 1:
+                    order = self._rng.permutation(pts.shape[0])
+                    pts, lbl = pts[order], lbl[order]
 
                 masks_t.append(torch.from_numpy(comp.astype(np.float32)))
                 points_t.append(torch.from_numpy(pts.astype(np.float32)))
-                labels_t.append(torch.from_numpy(np.ones((pts.shape[0],), dtype=np.float32)))
+                labels_t.append(torch.from_numpy(lbl.astype(np.float32)))   # 1=pos, 0=neg
                 boxes_t.append(torch.from_numpy(box.astype(np.float32)))
 
         # fallback to a harmless dummy if nothing was hit by the grid (keeps loader stable)

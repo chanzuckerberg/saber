@@ -312,3 +312,73 @@ def infer_on_single_image(
         gt_masks = torch.stack([torch.as_tensor(m, device=device).float() for m in inst_masks], dim=0)
 
     return prd_masks, prd_scores, gt_masks
+
+@torch.no_grad()
+def _binary_iou(a: torch.Tensor, b: torch.Tensor, eps=1e-6) -> torch.Tensor:
+    # a,b: (N,H,W) boolean/0-1
+    inter = (a & b).float().sum(dim=(1,2))
+    uni   = (a | b).float().sum(dim=(1,2)).clamp_min(eps)
+    return inter / uni
+
+@torch.no_grad()
+def stability_from_logits(mask_logits: torch.Tensor, delta: float = 0.05) -> torch.Tensor:
+    """
+    mask_logits: (K,H,W) raw logits from the decoder.
+    We compute IoU between masks thresholded at 0 and +/- delta in logit-space.
+    Returns: (K,) stability score in [0,1].
+    """
+    # Note: comparing binary maps at thresholds t1 and t2 is enough; no need to sigmoid.
+    m_lo = (mask_logits > -delta)  # t = -delta
+    m_hi = (mask_logits > +delta)  # t = +delta
+    # Using IoU between the two gives the 'stability' used by AMG
+    return _binary_iou(m_lo, m_hi)
+
+@torch.no_grad()
+def dynamic_multimask_predict(
+    predictor,
+    image_batch_entry,
+    points=None, labels=None, box=None, mask_input=None,
+    stability_thresh: float = 0.98,
+    stability_delta: float = 0.05,
+    multimask_k: int = 3,
+):
+    """
+    1) Run single-mask decode (multimask_output=False).
+    2) Compute stability; if stable >= thresh, keep single.
+    3) Otherwise rerun with multimask_output=True to get K candidates.
+
+    Returns:
+      prd_masks: (K,H,W) float logits (not sigmoid) **if multimask**, else (1,H,W)
+      prd_scores: (K,) IoU-head predictions (or (1,))
+      aux: dict with {'stability': tensor}
+    """
+    # First pass: single mask
+    out1 = predictor.predict(
+        image=image_batch_entry,
+        point_coords=points, point_labels=labels,
+        box=box, mask_input=mask_input,
+        multimask_output=False,             # <-- single
+        return_logits=True,                 # <-- to compute stability
+        return_iou_predictions=True,        # <-- IoU head (SAM2)
+    )
+    logits1 = out1["masks_logits"][0]      # (1,H,W)
+    iou1    = out1["iou_predictions"][0]   # (1,)
+    stab1   = stability_from_logits(logits1, delta=stability_delta)  # (1,)
+
+    if stab1[0].item() >= stability_thresh:
+        return logits1, iou1, {"stability": stab1}
+
+    # Not stable -> get multimask
+    outk = predictor.predict(
+        image=image_batch_entry,
+        point_coords=points, point_labels=labels,
+        box=box, mask_input=mask_input,
+        multimask_output=True,              # <-- gated on stability
+        num_multimask_outputs=multimask_k,  # if your API supports it; otherwise ignored
+        return_logits=True,
+        return_iou_predictions=True,
+    )
+    logitsk = outk["masks_logits"][0]      # (K,H,W)
+    iouk    = outk["iou_predictions"][0]   # (K,)
+    stabk   = stability_from_logits(logitsk, delta=stability_delta)  # (K,)
+    return logitsk, iouk, {"stability": stabk}
