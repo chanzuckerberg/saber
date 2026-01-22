@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.10.0](https://github.com/chanzuckerberg/saber/compare/saber-em-v0.9.0...saber-em-v0.10.0) (2026-01-22)
+
+
+### ✨ Features
+
+* add better api calls and lazy loading ([ca34824](https://github.com/chanzuckerberg/saber/commit/ca348244b6d24bbe3768923687e386cdfd4c53a6))
+* add interactive 3d-seg widget ([ca0634c](https://github.com/chanzuckerberg/saber/commit/ca0634c222bc60bf1ded58a763c72b4d3750b84e))
+* add interactive 3d-seg widget ([2b8ebaa](https://github.com/chanzuckerberg/saber/commit/2b8ebaa3e3e2a4be599a4774a4c4afad7a64b389))
+* add multi-threading for pre-processing steps, support for light microscopy ([2f0652a](https://github.com/chanzuckerberg/saber/commit/2f0652a00c54edf496895a29bf8c1ca8eeb431be))
+* add multi-threading for pre-processing steps, support for light… ([3e2384c](https://github.com/chanzuckerberg/saber/commit/3e2384c153a9b1ca276991ff185dc2b068f51179))
+* add tracker for labeling runs ([6fc9813](https://github.com/chanzuckerberg/saber/commit/6fc9813dbda74b496f872715d3e411b746087533))
+* Group Input Parameters ([fd7e851](https://github.com/chanzuckerberg/saber/commit/fd7e8516d5b7c636f470560453c3c349aad98cf1))
+* lazy loading and more api functions ([447ff4a](https://github.com/chanzuckerberg/saber/commit/447ff4a3c5625e824d67e433c408e7a80d832eaf))
+* multi-gpu classifier training, rich-click cli ([fdac1c4](https://github.com/chanzuckerberg/saber/commit/fdac1c49fd573722726c0ce8901ac0bfb8e9d61a))
+
 ## [0.9.0](https://github.com/chanzuckerberg/saber/compare/saber-em-v0.8.0...saber-em-v0.9.0) (2025-11-01)
 
 
