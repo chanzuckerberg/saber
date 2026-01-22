@@ -1,6 +1,7 @@
 from saber.segmenters.general import volumeSegmenter
 from saber.utils import preprocessing
 from saber.segmenters import utils
+from saber.sam2.amg import cfgAMG
 from tqdm import tqdm
 import numpy as np
 import torch
@@ -8,19 +9,19 @@ import torch
 class propagationSegmenter(volumeSegmenter):
 
     def __init__(self, 
-        sam2_cfg: str = 'base', 
         deviceID: int = 0, 
         classifier = None, 
         target_class: int = 1, 
+        cfg: cfgAMG = None,
+        light_modality: bool = False,
         min_mask_area: int = 100, 
         min_rel_box_size: float = 0.025,
-        light_modality: bool = False,
         ):
         """
         Initialize the propagationSegmenter
         """
         super().__init__(
-            sam2_cfg, deviceID, classifier, target_class, 
+            deviceID, classifier, target_class, cfg, 
             min_mask_area, min_rel_box_size, light_modality
         )
         self.ini_depth = 10 # Default spacing between slices to segment

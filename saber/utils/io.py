@@ -1,4 +1,4 @@
-import mrcfile, skimage, torch, yaml, os, copick
+import mrcfile, skimage, torch, yaml, os, copick, zarr
 from skimage import io as skio
 import numpy as np
 
@@ -178,3 +178,20 @@ def save_copick_metadata(config, metadict: dict, output_path: str):
     InlineListDumper.add_representer(list, InlineListDumper.represent_list)
     with open(fname_path, 'w') as f:
         yaml.dump(metadict, f, Dumper=InlineListDumper, default_flow_style=False, sort_keys=False)
+
+def get_metadata(zarr_path: str):
+    """
+    Get the class names from the Zarr file.
+    The class names are stored as a string in the Zarr file.
+    This function converts the string to a dictionary.
+    """
+
+    # Open the Zarr file
+    zfile = zarr.open(zarr_path, mode='r')
+
+    # Get the class names
+    class_names = zfile.attrs['labels']
+    labels = {i: name for i, name in enumerate(class_names)}
+    amp_params = zfile.attrs['amg']
+    # convert to dict
+    return labels, amp_params

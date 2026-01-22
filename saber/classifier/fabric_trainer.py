@@ -2,9 +2,10 @@ from saber.visualization import classifier as visualization
 from contextlib import nullcontext
 import torch.nn.functional as F
 from lightning import Fabric
+from saber.utils import io
 from tqdm import tqdm
+import os, zarr, yaml
 import numpy as np
-import os, zarr
 import torch
 
 class ClassifierTrainerFabrics:
@@ -148,13 +149,20 @@ class ClassifierTrainerFabrics:
     # ---- public API (same as your non-Fabric trainer) -------------------------
 
     def train(self, train_loader, val_loader, num_epochs, best_metric='f1_score'):
+        """
+        Train the classifier using Lightning Fabric.
+        """
+        
+        # Create results directory and Fabrics
         os.makedirs(self.results_path, exist_ok=True)
         self.fabric.seed_everything(42)
         self._fabric_setup(train_loader, val_loader)
 
+        # Print training information
         if self.fabric.is_global_zero:
             print(f'Training with Lightning Fabric... (ngpus: {self.ngpus})')
 
+        # Initialize the progress bar
         pbar = tqdm(
             total=num_epochs,
             desc="Training",
@@ -163,8 +171,11 @@ class ClassifierTrainerFabrics:
             bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]'
         )
 
-        best_metric_value = -1.0
+        # Save model parameters
+        self.save_parameters(num_epochs, self.train_loader.dataset.zarr_path, self.val_loader.dataset.zarr_path)
         
+        # Initialize the best metric value for checkpointing
+        best_metric_value = -1.0
         for epoch in range(num_epochs):
             # Set epoch for distributed sampler
             if hasattr(self.train_loader.sampler, 'set_epoch'):
@@ -351,3 +362,34 @@ class ClassifierTrainerFabrics:
         clean_state_dict = {k.replace('module.', ''): v for k, v in state_dict.items()}
         
         self.fabric.save(path, {"model": clean_state_dict})
+
+    def save_parameters(self, num_epochs, train_path, validate_path):
+        """
+        Save the model parameters to a YAML file.
+        """
+
+        # Get the metadata from the training dataset
+        (labels, amg_params) = io.get_metadata(train_path)
+
+        config = {
+            'model': {
+                'num_classes': self.num_classes,
+                'weights': os.path.abspath(os.path.join(self.results_path, 'best_model.pth')),
+            },
+            'labels': labels,
+            'data': {
+                'train': train_path,
+                'validate': validate_path
+            },
+            'amg_params': amg_params,            
+            'optimizer': {
+                'optimizer': self.optimizer.__class__.__name__,
+                'scheduler': self.scheduler.__class__.__name__,
+                'loss_fn': self.loss_fn.__class__.__name__, 
+                'num_epochs': num_epochs
+            },
+        }
+        
+        os.makedirs(self.results_path, exist_ok=True)
+        with open(os.path.join(self.results_path, 'model_config.yaml'), 'w') as f:
+            yaml.dump(config, f, default_flow_style=False, sort_keys=False, indent=2)    

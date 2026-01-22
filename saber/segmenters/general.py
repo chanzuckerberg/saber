@@ -1,12 +1,13 @@
 from saber.segmenters.base import saber3Dsegmenter
+from saber.sam2.amg import cfgAMG
 import torch
 
 class volumeSegmenter(saber3Dsegmenter):
     def __init__(self,
-        sam2_cfg: str = 'base', 
         deviceID: int = 0,
         classifier = None,
         target_class: int = 1,
+        cfg: cfgAMG = None,
         min_mask_area: int = 100,
         min_rel_box_size: float = 0.025,
         light_modality: bool = False
@@ -15,7 +16,7 @@ class volumeSegmenter(saber3Dsegmenter):
         Initialize the generalSegmenter
         """ 
         super().__init__(
-            sam2_cfg, deviceID, classifier, target_class, 
+            deviceID, classifier, target_class, cfg,
             min_mask_area, min_rel_box_size, light_modality)
 
     @torch.inference_mode()
