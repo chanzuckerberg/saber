@@ -23,7 +23,7 @@ def run(
     import torch, yaml, os
 
     # Get the Model Size from the Train Zarr File and Initialize 
-    (labels, amg_params) = get_metadata(train_path)
+    (labels, amg_params) = io.get_metadata(train_path)
     num_classes = len(labels)
 
     # Initialize trainer and Train
@@ -65,30 +65,6 @@ def run(
 
     # Save results to Zarr
     trainer.save_results(train_path, validate_path)
-
-    # Save Model Config
-    model_config = {
-        'model': {
-            'num_classes': num_classes,
-            'weights': os.path.abspath(os.path.join(trainer.results_path, 'best_model.pth')),
-        },
-        'labels': labels,
-        'data': {
-            'train': train_path,
-            'validate': validate_path
-        },
-        'amg_params': amg_params,
-        'optimizer': {
-            'optimizer': optimizer.__class__.__name__,
-            'scheduler': scheduler.__class__.__name__,
-            'loss_fn': loss_fn.__class__.__name__, 
-            'num_epochs': num_epochs,
-            'batch_size': batch_size
-        },
-    }
-
-    with open(f'results/model_config.yaml', 'w') as f:
-        yaml.dump(model_config, f, default_flow_style=False, sort_keys=False, indent=2)
 
 def get_dataloaders(zarr_path: str, mode: str, batch_size: int):
     from saber.classifier.datasets import singleZarrDataset, multiZarrDataset, augment

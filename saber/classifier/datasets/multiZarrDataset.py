@@ -8,7 +8,7 @@ import torch, os
 class MultiZarrDataset(Dataset):
     def __init__(self, zarr_paths, mode='train', transform=None):
 
-        self.folder_path = zarr_paths
+        self.zarr_path = zarr_paths
         self.transform = transform
         self.mode = mode
 

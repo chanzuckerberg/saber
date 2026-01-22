@@ -1,8 +1,9 @@
 from saber.visualization import classifier as visualization
 from monai.metrics import ConfusionMatrixMetric
 import torch.nn.functional as F
+import torch, zarr, os, yaml
+from saber.utils import io
 import torch_ema as ema
-import torch, zarr, os
 from tqdm import tqdm
 import numpy as np
 
@@ -168,6 +169,9 @@ class ClassifierTrainer:
         # Create results directory
         os.makedirs(self.results_path, exist_ok=True)
 
+        # Save model parameters
+        self.save_parameters(num_epochs, train_loader.dataset.zarr_path, val_loader.dataset.zarr_path)
+
         best_metric_value = -1 
         for epoch in tqdm(range(num_epochs)):
             
@@ -311,3 +315,48 @@ class ClassifierTrainer:
                                        save_path=os.path.join(self.results_path,'metrics.pdf'))
         visualization.plot_per_class_metrics(self.per_class_results, 
                                              save_path=os.path.join(self.results_path,'per_class_metrics.pdf'))
+
+    def save_parameters(self, num_epochs, train_path, validate_path):
+        """
+        Save the model parameters to a YAML file.
+        """
+
+        # Get the metadata from the training dataset
+        if isinstance(train_path, list):
+            # If a list of paths is provided, use the first entry
+            train_file = train_path[0]
+        elif isinstance(train_path, str):
+            # If a comma-separated string of paths is provided, use the first entry
+            if "," in train_path:
+                train_file = train_path.split(",")[0]
+            else:
+                train_file = train_path
+        else:
+            # Fallback: use train_path as-is
+            train_file = train_path
+        
+        # Get the metadata from the training dataset
+        (labels, amg_params) = io.get_metadata(train_file)
+
+        config = {
+            'model': {
+                'num_classes': self.num_classes,
+                'weights': os.path.abspath(os.path.join(self.results_path, 'best_model.pth')),
+            },
+            'labels': labels,
+            'data': {
+                'train': train_path,
+                'validate': validate_path
+            },
+            'amg_params': amg_params,            
+            'optimizer': {
+                'optimizer': self.optimizer.__class__.__name__,
+                'scheduler': self.scheduler.__class__.__name__,
+                'loss_fn': self.loss_fn.__class__.__name__, 
+                'num_epochs': num_epochs
+            },
+        }
+        
+        os.makedirs(self.results_path, exist_ok=True)
+        with open(os.path.join(self.results_path, 'model_config.yaml'), 'w') as f:
+            yaml.dump(config, f, default_flow_style=False, sort_keys=False, indent=2)
