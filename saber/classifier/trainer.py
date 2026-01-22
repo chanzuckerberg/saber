@@ -323,8 +323,16 @@ class ClassifierTrainer:
 
         # Get the metadata from the training dataset
         if isinstance(train_path, list):
-            train_file = train_path.split(',')[0]
+            # If a list of paths is provided, use the first entry
+            train_file = train_path[0]
+        elif isinstance(train_path, str):
+            # If a comma-separated string of paths is provided, use the first entry
+            if "," in train_path:
+                train_file = train_path.split(",")[0]
+            else:
+                train_file = train_path
         else:
+            # Fallback: use train_path as-is
             train_file = train_path
         
         # Get the metadata from the training dataset
