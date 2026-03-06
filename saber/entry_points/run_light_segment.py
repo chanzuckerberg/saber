@@ -21,7 +21,7 @@ def light_options(func):
     return func
 
 
-@click.command(context_settings=cli_context)
+@click.command(context_settings=cli_context, no_args_is_help=True)
 @light_options
 @slurm_submit.classifier_inputs
 def light(

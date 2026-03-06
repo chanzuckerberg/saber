@@ -34,7 +34,7 @@ def refine_membranes_options(func):
         func = option(func)
     return func
 
-@click.command(context_settings=cli_context)
+@click.command(context_settings=cli_context, no_args_is_help=True)
 @refine_membranes_options
 def refine_membranes(
     config: str,

@@ -283,7 +283,7 @@ class SABERLabelConverter:
         click.echo("="*50)
 
 
-@click.command(context_settings=cli_context)
+@click.command(context_settings=cli_context, no_args_is_help=True)
 @click.option('--input', '-i', required=True, type=click.Path(exists=True, path_type=Path),
               help='SAM2 zarr file with masks')
 @click.option('--labels', '-l', default='labels.json', type=click.Path(exists=True, path_type=Path),

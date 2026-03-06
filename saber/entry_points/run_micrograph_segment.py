@@ -74,7 +74,7 @@ def interactive_segment_micrograph(
 # CLI Commands
 ########################################################
 
-@click.command(context_settings=cli_context)
+@click.command(context_settings=cli_context, no_args_is_help=True)
 @micrograph_options
 @amg()
 @slurm_submit.classifier_inputs

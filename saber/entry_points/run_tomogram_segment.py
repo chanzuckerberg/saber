@@ -277,7 +277,7 @@ def run_tomo_seg(   # run_tomograms
 # CLI Commands
 ##########################################################
 
-@click.command(context_settings=cli_context)
+@click.command(context_settings=cli_context, no_args_is_help=True)
 @slurm_submit.copick_commands
 @click.option("--run-id", type=str, required=True, 
               help="Path to Copick Config for Processing Data")            
@@ -313,7 +313,7 @@ def slab(
         use_m2m, multimask
     )
 
-@click.command(context_settings=cli_context)
+@click.command(context_settings=cli_context, no_args_is_help=True)
 @slurm_submit.copick_commands
 @slurm_submit.tomogram_segment_commands
 @click.option("--run-ids", type=str, required=False, default=None,

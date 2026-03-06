@@ -84,7 +84,7 @@ def extract_sam2_candidates(
             run_name=run.name, image=image_seg, 
             masks=masks.astype(np.uint8), pixel_size=voxel_size)
 
-@click.command(context_settings=cli_context, name='prep3d')
+@click.command(context_settings=cli_context, name='prep3d', no_args_is_help=True)
 @slurm_submit.copick_commands
 @amg()
 @click.option("-o", "--output", type=str, required=False, help="Path to the output Zarr file.", 

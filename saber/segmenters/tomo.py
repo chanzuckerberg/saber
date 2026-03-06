@@ -163,17 +163,17 @@ class cryoTomoSegmenter(saber3Dsegmenter):
 
 class multiDepthTomoSegmenter(cryoTomoSegmenter):
     def __init__(self,
-        sam2_cfg: str = 'base', 
         deviceID: int = 0,
         classifier = None,
         target_class: int = 1,
+        cfg: cfgAMG = None,
         min_mask_area: int = 100,
         min_rel_box_size: float = 0.025
     ):
         """
         Initialize the multiDepthTomoSegmenter
         """
-        super().__init__(sam2_cfg, deviceID, classifier, target_class, min_mask_area, min_rel_box_size)
+        super().__init__(deviceID, classifier, target_class, cfg, min_mask_area, min_rel_box_size)
 
         if target_class < 1: 
             print('[Error]: Multi-Depth Tomogram Segmenter only supports Single-Class Segmentation currently.')
