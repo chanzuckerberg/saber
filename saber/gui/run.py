@@ -29,7 +29,7 @@ def gui(input: str):
 # Web GUI Command
 ########################################################
 
-@click.command(context_settings=cli_context)
+@click.command(context_settings=cli_context, no_args_is_help=True)
 @click.option('--input', '-i', type=click.Path(exists=True), required=True,
               help='Path to local input directory containing Zarr files')
 @click.option('--output', '-o', type=click.Path(), default=None,

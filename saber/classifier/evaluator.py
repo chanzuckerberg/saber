@@ -105,7 +105,7 @@ def get_evaluator_class():
 
     return ClassifierEvaluator
 
-@click.command(context_settings=cli_context)
+@click.command(context_settings=cli_context, no_args_is_help=True)
 @click.option('--test', type=str, required=True, help='Path to the Test Zarr File')
 @click.option('--model-config', type=str, required=True, help='Path to the Model Config')
 @click.option('--model-weights', type=str, required=True, help='Path to the Model Weights')
