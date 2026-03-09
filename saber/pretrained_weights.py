@@ -3,13 +3,19 @@ import shutil, click, sys, os, subprocess, saber
 @click.group(name="download")
 @click.pass_context
 def cli(ctx):
-    """Download the pretrained weights of SAM 2.1 and MemBrain."""
+    """Download the pretrained weights of SAM 2.1, SAM 3, and MemBrain."""
     pass
 
 
 @cli.command(context_settings={"show_default": True})
 def sam2_weights():
     download_sam2_weights()
+
+
+@cli.command(context_settings={"show_default": True})
+def sam3_weights():
+    """Download SAM 3 checkpoint from HuggingFace (facebook/sam3)."""
+    download_sam3_weights()
 
 def download_sam2_weights():
     """
@@ -56,8 +62,61 @@ def download_sam2_weights():
             print(f"Failed to download checkpoint from {url}")
             sys.exit(1)
 
-    print("All checkpoints are downloaded successfully.") 
-    
+    print("All checkpoints are downloaded successfully.")
+
+
+def download_sam3_weights():
+    """
+    Download the SAM 3 checkpoint from HuggingFace (facebook/sam3).
+
+    Requires either:
+      - A prior `huggingface-cli login`, or
+      - The HF_TOKEN environment variable set to a valid token.
+
+    The checkpoint is cached in HuggingFace's default cache directory
+    (~/.cache/huggingface/hub) and reused on subsequent calls.
+    """
+    try:
+        from sam3.model_builder import download_ckpt_from_hf
+    except ImportError:
+        print(
+            "sam3 is not installed.  Install it with:\n"
+            "  pip install git+https://github.com/facebookresearch/sam3"
+        )
+        sys.exit(1)
+
+    print("Downloading SAM 3 checkpoint from HuggingFace (facebook/sam3) ...")
+    try:
+        checkpoint_path = download_ckpt_from_hf()
+        print(f"SAM 3 checkpoint cached at: {checkpoint_path}")
+    except Exception as e:
+        print(
+            f"Download failed: {e}\n"
+            "Make sure you are logged in to HuggingFace:\n"
+            "  huggingface-cli login\n"
+            "or set the HF_TOKEN environment variable."
+        )
+        sys.exit(1)
+
+
+def get_sam3_checkpoint():
+    """
+    Return the path to the cached SAM 3 checkpoint.
+
+    SAM 3 manages its own weights via HuggingFace hub; this function is a
+    thin wrapper that returns the cached path (downloading if necessary).
+    Returns None if the checkpoint has not been downloaded yet — in that
+    case pass load_from_HF=True to build_sam3_video_model / build_sam3_image_model
+    and the download will happen automatically.
+    """
+    try:
+        from huggingface_hub import try_to_load_from_cache
+        path = try_to_load_from_cache(repo_id="facebook/sam3", filename="sam3.pt")
+        return path  # None if not cached, str path if cached
+    except Exception:
+        return None
+
+
 def get_sam2_checkpoint(sam2_cfg: str):
     """
     Get the checkpoint path for the SAM 2.1 model based on the provided configuration.

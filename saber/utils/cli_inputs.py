@@ -1,0 +1,85 @@
+import rich_click as click
+
+################################### COMMON CLI COMMANDS ##############################################
+
+def copick_commands(func):
+    """Decorator to add common options to a Click command."""
+    options = [
+    click.option("-c", "--config", type=str, required=True, default="path/to/copick_config.json",
+                 help="Path to Copick Config for Processing Data"),
+    click.option("-vs", "--voxel-size", type=float, required=False, default=10, 
+                 help="Resolution of Desired Tomograms to Process"),
+    click.option("-ta", "--tomo-alg", type=str, required=False, default='denoised', 
+                 help="Reconstrution Algorithm to Query Tomgorams"),    
+    click.option("-st", "--slab-thickness", type=float, required=False, default=10, 
+                 help="Thickness of Slab for Producing Initial Segmentation"),                              
+    ]
+    for option in reversed(options):  # Add options in reverse order to preserve correct order
+        func = option(func)
+    return func
+
+def tomogram_segment_commands(func):
+    """Decorator to add common options to a Click command."""
+    options = [
+    click.option("-sn", "--seg-name", type=str, required=False, default="organelles", 
+                 help="Name of Segmentation Session"),
+    click.option("-sid", "--seg-session-id", type=str, required=False, default="1", 
+                 help="SessionID to Write for Segmentation Mask"),
+    ]
+    for option in reversed(options):  # Add options in reverse order to preserve correct order
+        func = option(func)
+    return func
+
+def compute_commands(func):
+    """Decorator to add common slurm submission compute options to a Click command."""
+    options = [
+        click.option("--num-gpus", type=int, required=False, default=2, callback=validate_num_gpus, 
+                     help="Number of GPUs for Processing"),
+        click.option("--gpu-constraint", required=False, default="h100", 
+                     type=click.Choice(['a6000', 'h200', 'h100', 'a100'], case_sensitive=False), 
+                     help="GPU to Select for Processing)")
+    ]
+    for option in reversed(options):  # Add options in reverse order to preserve correct order
+        func = option(func)
+    return func
+
+def classifier_inputs(func):
+    """Decorator to add common options for the Classifier command."""
+    options = [
+        click.option("-mc", "--model-config", type=str,required=False, default=None,
+                     help="Path to Classifier Model Config"),
+        click.option("-mw", "--model-weights", type=str, required=False, default=None,
+                    help="Path to Classifier model trained weights."),    
+        click.option("-tc", "--target-class", type=int, required=False, default=-1,
+                    help="Target Class for Segmentation. When set to -1, the model performs semantic segmentation.\nWhen set to a positive integer, the model performs instance segmentation for the desired class..")
+    ]
+    for option in reversed(options):  # Add options in reverse order to preserve correct order
+        func = option(func)
+    return func
+
+def sam2_inputs(func):
+    """Decorator to add common options for the SAM2 command."""
+    options = [
+        click.option("-cfg", "--sam2-cfg", required=False, default='small', help="SAM2 Model Config",
+                     type=click.Choice(['large', 'base', 'small', 'tiny'], case_sensitive=False))
+        # click.option("--min-mask-area", type=int, required=False, default=100,
+        #              help="Minimum Area of Mask to Keep"),
+        # click.option("--min-rel-box-size", type=float, required=False, default=0.01,
+        #              help="Minimum Relative Box Size of Mask to Keep")
+    ]
+    for option in reversed(options):  # Add options in reverse order to preserve correct order
+        func = option(func)
+    return func
+
+def validate_num_gpus(ctx, param, value):
+    if value is not None and (value < 1 or value > 4):
+        raise click.BadParameter("Number of GPUs must be between 1 and 4.")
+    return value
+
+# Callback to ensure the --multiple-slabs parameter is an odd integer (and at least 1)
+def validate_odd(ctx, param, value):
+    if value < 0:
+        raise click.BadParameter("The --multiple-slabs parameter must be at least 1.")
+    if value % 2 == 0:
+        raise click.BadParameter("The --multiple-slabs parameter must be an odd number.")
+    return value
