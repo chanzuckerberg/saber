@@ -131,7 +131,7 @@ def train_commands(func):
         func = option(func)
     return func
 
-@click.command(context_settings={"show_default": True})
+@click.command(context_settings={"show_default": True}, no_args_is_help=True)
 @train_commands
 def train(
     train: str,
@@ -145,7 +145,7 @@ def train(
     """
     run(train, validate, num_epochs, batch_size, model_weights)
 
-@click.command(context_settings={"show_default": True})
+@click.command(context_settings={"show_default": True}, no_args_is_help=True)
 @train_commands
 def train_slurm(
     train: str,

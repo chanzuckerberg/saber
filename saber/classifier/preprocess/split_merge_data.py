@@ -238,7 +238,7 @@ def copy_attributes(source, destination):
 # Merge Data Command
 ########################################################
 
-@click.command(context_settings=cli_context)
+@click.command(context_settings=cli_context, no_args_is_help=True)
 @click.option("-i", "--inputs", type=str, required=True, multiple=True,
               help="Path to the Zarr file with an associated session label provided as <session_label>,<path_to_zarr_file>.")
 @click.option("-o", "--output", type=str, required=False, default='labeled.zarr',
@@ -262,7 +262,7 @@ def merge_data(inputs: List[str], output: str):
 # Split Data Command
 ########################################################
 
-@click.command(context_settings=cli_context)
+@click.command(context_settings=cli_context, no_args_is_help=True)
 @click.option("-i", "--input", type=str, required=True, 
               help="Path to the Zarr file.")
 @click.option('-r', "--ratio", type=float, required=False, default=0.8, 

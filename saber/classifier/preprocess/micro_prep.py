@@ -24,7 +24,7 @@ def micrograph_options(func):
         func = option(func)
     return func
 
-@click.command(context_settings=cli_context, name='prep2d')
+@click.command(context_settings=cli_context, name='prep2d', no_args_is_help=True)
 @micrograph_options
 @amg()
 def prepare_micrograph_training(
