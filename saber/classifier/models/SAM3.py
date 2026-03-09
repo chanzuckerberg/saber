@@ -46,9 +46,11 @@ class SAM3Classifier(nn.Module):
 
         # Build SAM3 image model (weights downloaded from HuggingFace automatically)
         from sam3.model_builder import build_sam3_image_model
+        from saber.pretrained_weights import get_sam3_bpe_path
 
         sam3_model = build_sam3_image_model(
             load_from_HF=True,
+            bpe_path=get_sam3_bpe_path(),
             device=str(self.device),
             eval_mode=True,
             enable_segmentation=True,

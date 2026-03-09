@@ -91,6 +91,12 @@ def test_model_loads(bpe_path=None):
     print("=" * 60)
     from sam3.model_builder import build_sam3_image_model
     from sam3.model.sam3_image_processor import Sam3Processor
+    from saber.pretrained_weights import get_sam3_bpe_path
+
+    # Resolve BPE path — downloads from OpenAI CDN if not cached locally
+    if bpe_path is None:
+        bpe_path = get_sam3_bpe_path()
+    print(f"  BPE path   : {bpe_path}")
 
     t0 = time.time()
     model = build_sam3_image_model(bpe_path=bpe_path)
@@ -284,7 +290,7 @@ def main():
     print(f"Device   : {torch.cuda.get_device_name(0)}")
     print()
 
-    # ---- Load model ----
+    # ---- Load model (BPE auto-resolved if not provided) ----
     model, processor = test_model_loads(bpe_path=args.bpe)
     processor.confidence_threshold = args.confidence
 

@@ -99,6 +99,53 @@ def download_sam3_weights():
         sys.exit(1)
 
 
+def get_sam3_bpe_path() -> str:
+    """
+    Return a valid path to the SAM3 BPE vocabulary file.
+
+    Resolution order:
+      1. saber's own checkpoints directory (cached after first download)
+      2. sam3 package's assets directory (works when installed from source
+         with assets bundled correctly)
+      3. Download from OpenAI's public CDN (no authentication required;
+         this is the original CLIP vocabulary file)
+
+    The file is ~1 MB and is cached permanently after the first download.
+    """
+    BPE_FILENAME = "bpe_simple_vocab_16e6.txt.gz"
+    BPE_URL = "https://openaipublic.azureedge.net/clip/bpe_simple_vocab_16e6.txt.gz"
+
+    # 1. Check saber's checkpoints directory first
+    checkpoint_dir = os.path.join(os.path.dirname(saber.__file__), "checkpoints")
+    cached_path = os.path.join(checkpoint_dir, BPE_FILENAME)
+    if os.path.exists(cached_path):
+        return cached_path
+
+    # 2. Try the sam3 package's own assets directory
+    try:
+        import pkg_resources
+        pkg_path = pkg_resources.resource_filename("sam3", f"assets/{BPE_FILENAME}")
+        if os.path.exists(pkg_path):
+            return pkg_path
+    except Exception:
+        pass
+
+    # 3. Download from OpenAI's public CDN and cache in saber's checkpoints
+    print(f"BPE vocabulary not found locally — downloading from OpenAI CDN ...")
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    try:
+        import urllib.request
+        urllib.request.urlretrieve(BPE_URL, cached_path)
+        print(f"BPE vocabulary cached at: {cached_path}")
+        return cached_path
+    except Exception as e:
+        raise RuntimeError(
+            f"Could not download BPE vocabulary: {e}\n"
+            f"Download it manually from:\n  {BPE_URL}\n"
+            f"and pass the path as bpe_path= to build_sam3_image_model()."
+        ) from e
+
+
 def get_sam3_checkpoint():
     """
     Return the path to the cached SAM 3 checkpoint.

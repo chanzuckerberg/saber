@@ -51,11 +51,13 @@ class TomogramSAM3Adapter:
                 instead of [-1, 1]).
         """
         from sam3.model_builder import build_sam3_video_model
+        from saber.pretrained_weights import get_sam3_bpe_path
 
         self.model = (
             build_sam3_video_model(
                 checkpoint_path=checkpoint_path,
                 load_from_HF=load_from_HF,
+                bpe_path=get_sam3_bpe_path(),
             )
             .to(device)
             .eval()
