@@ -68,6 +68,13 @@ class TomogramSAM3Adapter:
         self.inference_state: Optional[Dict[str, Any]] = None
         self._vol_shape: Optional[Tuple[int, int, int]] = None
 
+        # Per-frame metrics populated by segment_volume().
+        # frame_metrics[frame_idx][obj_id] = {
+        #   "logits":           (H, W) float32 numpy — raw mask logits
+        #   "presence_score":   float — sigmoid(obj_score), 1=present, 0=absent
+        # }
+        self.frame_metrics: Dict[int, Dict[int, Dict[str, Any]]] = {}
+
     # ------------------------------------------------------------------
     # Volume setter
     # ------------------------------------------------------------------
@@ -89,6 +96,7 @@ class TomogramSAM3Adapter:
             offload_video_to_cpu: Keep frame tensors in CPU memory to save GPU.
         """
         self._vol_shape = tomogram.shape
+        self.frame_metrics = {}
         self.inference_state = self._create_inference_state(
             tomogram, offload_video_to_cpu
         )
@@ -388,20 +396,33 @@ class TomogramSAM3Adapter:
             )
 
         vol_masks = np.zeros((Z, H, W), dtype=np.uint16)
+        frame_metrics = self.frame_metrics
 
         def _apply(frame_idx: int, obj_ids, video_res_masks, obj_scores) -> None:
             if video_res_masks is None or len(obj_ids) == 0:
                 return
+            if frame_idx not in frame_metrics:
+                frame_metrics[frame_idx] = {}
             for i, obj_id in enumerate(obj_ids):
-                # obj_scores: (batch, 1) logits; sigmoid > 0.5 means object present
-                if obj_scores is not None:
-                    score = float(obj_scores[i].item())
-                    if score < min_score:
-                        continue
-                m = video_res_masks[i]
-                if hasattr(m, "cpu"):
-                    m = m.cpu().numpy()
-                m = np.squeeze(m) > 0.0  # (H, W) bool
+                presence_score = (
+                    float(torch.sigmoid(obj_scores[i]).item())
+                    if obj_scores is not None
+                    else 1.0
+                )
+                # Record metrics regardless of min_score so callers can
+                # inspect all frames and decide their own threshold.
+                logits = video_res_masks[i]
+                if hasattr(logits, "cpu"):
+                    logits = logits.cpu().numpy()
+                logits = np.squeeze(logits).astype(np.float32)  # (H, W)
+                frame_metrics[frame_idx][obj_id] = {
+                    "logits": logits,
+                    "presence_score": presence_score,
+                }
+
+                if obj_scores is not None and float(obj_scores[i].item()) < min_score:
+                    continue
+                m = logits > 0.0  # (H, W) bool
                 if m.shape != (H, W):
                     import skimage.transform
                     m = skimage.transform.resize(
