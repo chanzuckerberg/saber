@@ -334,7 +334,7 @@ class TomogramSAM3Adapter:
         masks=None,
         vol_shape: Optional[Tuple[int, int, int]] = None,
         max_frame_num_to_track: Optional[int] = None,
-        min_score: float = 0.0,
+        min_presence_score: float = 0.5,
         inference_state: Optional[Dict[str, Any]] = None,
     ) -> np.ndarray:
         """
@@ -364,8 +364,10 @@ class TomogramSAM3Adapter:
                 set_volume() if not provided.
             max_frame_num_to_track: Maximum slices per direction.
                 None = propagate to volume boundary.
-            min_score: Minimum object score logit to include in the output.
-                0.0 keeps all detections (sigmoid > 0.5 → positive objects).
+            min_presence_score: Minimum presence score (0–1) to include a
+                slice in the output.  Default 0.5.  Raise to trim slices
+                where the tracker is uncertain (e.g. 0.7 for tighter axial
+                extent).
             inference_state: Override the internal state set by set_volume().
 
         Returns:
@@ -420,7 +422,7 @@ class TomogramSAM3Adapter:
                     "presence_score": presence_score,
                 }
 
-                if obj_scores is not None and float(obj_scores[i].item()) < min_score:
+                if presence_score < min_presence_score:
                     continue
                 m = logits > 0.0  # (H, W) bool
                 if m.shape != (H, W):
