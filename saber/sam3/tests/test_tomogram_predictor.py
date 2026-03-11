@@ -4,8 +4,9 @@ Test TomogramSAM3Adapter — run this on the GPU machine.
 Tests (in order):
   1. Model loads without error (downloads from HuggingFace if needed)
   2. Inference state is created from a small synthetic tomogram
-  3. A text prompt seeds segmentation on the middle Z-slice
-  4. Bidirectional propagation runs and returns results for all Z-slices
+  3. A binary mask seeds segmentation on the middle Z-slice
+  4. Bidirectional propagation runs and returns a (Z, H, W) uint16 volume
+  5. Reset state clears prompts and tracking history
 
 Usage
 -----
@@ -46,10 +47,10 @@ def test_model_loads(checkpoint_path=None, load_from_HF=True):
     )
     elapsed = time.time() - t0
 
-    print(f"  PASS  Model type    : {type(adapter.model).__name__}")
-    print(f"  PASS  image_size    : {adapter.model.image_size}")
-    print(f"  PASS  Load time     : {elapsed:.1f}s")
-    print(f"  PASS  CUDA memory   : {torch.cuda.memory_allocated() // 1024**2} MiB allocated")
+    print(f"  PASS  Predictor type : {type(adapter.predictor).__name__}")
+    print(f"  PASS  image_size     : {adapter.predictor.image_size}")
+    print(f"  PASS  Load time      : {elapsed:.1f}s")
+    print(f"  PASS  CUDA memory    : {torch.cuda.memory_allocated() // 1024**2} MiB allocated")
     return adapter
 
 
@@ -64,90 +65,107 @@ def test_inference_state(adapter):
     tomogram = rng.uniform(-1.0, 1.0, (20, 128, 128)).astype(np.float32)
 
     t0 = time.time()
-    state = adapter.create_inference_state_from_tomogram(tomogram)
+    adapter.set_volume(tomogram)
     elapsed = time.time() - t0
+    state = adapter.inference_state
 
     assert state["num_frames"] == 20, (
         f"Expected num_frames=20, got {state['num_frames']}"
     )
-    assert "input_batch" in state, "Missing 'input_batch' key in inference_state"
-    assert "feature_cache" in state, "Missing 'feature_cache' key in inference_state"
-    assert not state["is_image_only"], "is_image_only should be False for tomograms"
+    assert "images" in state, "Missing 'images' key in inference_state"
+    assert state["images"].shape[0] == 20, (
+        f"Expected 20 image frames, got {state['images'].shape[0]}"
+    )
 
-    print(f"  PASS  num_frames    : {state['num_frames']}")
-    print(f"  PASS  orig_height   : {state['orig_height']}")
-    print(f"  PASS  orig_width    : {state['orig_width']}")
-    print(f"  PASS  image_size    : {state['image_size']}")
-    print(f"  PASS  Build time    : {elapsed:.2f}s")
-    return state
+    print(f"  PASS  num_frames     : {state['num_frames']}")
+    print(f"  PASS  video_height   : {state['video_height']}")
+    print(f"  PASS  video_width    : {state['video_width']}")
+    print(f"  PASS  images shape   : {list(state['images'].shape)}")
+    print(f"  PASS  Build time     : {elapsed:.2f}s")
+    return adapter
 
 
-def test_text_prompt(adapter, state):
+def test_mask_prompt(adapter):
     print()
     print("=" * 60)
-    print("Test 3: Text prompt on seed Z-slice")
+    print("Test 3: Binary mask prompt on seed Z-slice")
     print("=" * 60)
 
+    state = adapter.inference_state
     seed_slice = state["num_frames"] // 2
-    print(f"  Prompting slice {seed_slice} with text='organelle' ...")
+    H, W = state["video_height"], state["video_width"]
+
+    # Synthetic circular mask in the center of the slice
+    y, x = np.ogrid[:H, :W]
+    mask = ((y - H // 2) ** 2 + (x - W // 2) ** 2) < (min(H, W) // 6) ** 2
+    mask = mask.astype(np.float32)
+
+    print(f"  Seeding slice {seed_slice} with a circular mask "
+          f"({mask.sum():.0f} px foreground) ...")
 
     t0 = time.time()
-    frame_idx, outputs = adapter.add_text_prompt(
-        state, frame_idx=seed_slice, text="organelle"
+    out = adapter.add_new_mask(
+        frame_idx=seed_slice,
+        obj_id=1,
+        mask=mask,
     )
     elapsed = time.time() - t0
 
+    frame_idx, obj_ids, low_res_masks, video_res_masks = out
     print(f"  PASS  Returned frame_idx : {frame_idx}")
-    print(f"  PASS  Output type        : {type(outputs).__name__}")
-    print(f"  PASS  Prompt time        : {elapsed:.2f}s")
+    print(f"  PASS  obj_ids           : {obj_ids}")
+    print(f"  PASS  video_res_masks shape : {list(video_res_masks.shape)}")
+    print(f"  PASS  Prompt time       : {elapsed:.2f}s")
 
-    if isinstance(outputs, dict):
-        print(f"  INFO  Output keys        : {list(outputs.keys())}")
-
-    return frame_idx
+    return seed_slice
 
 
-def test_propagation(adapter, state, seed_frame):
+def test_propagation(adapter, seed_frame):
     print()
     print("=" * 60)
-    print("Test 4: Bidirectional propagation through Z")
+    print("Test 4: segment_volume (bidirectional propagation)")
     print("=" * 60)
 
+    state = adapter.inference_state
     print(f"  Propagating from slice {seed_frame} ...")
     t0 = time.time()
-    results = adapter.propagate_bidirectional(state, start_frame_idx=seed_frame)
+    vol_masks = adapter.segment_volume(start_frame_idx=seed_frame)
     elapsed = time.time() - t0
 
-    assert len(results) > 0, "No results returned from propagation"
+    Z, H, W = adapter._vol_shape
+    assert vol_masks.shape == (Z, H, W), (
+        f"Expected shape {(Z, H, W)}, got {vol_masks.shape}"
+    )
+    assert vol_masks.dtype == np.uint16, f"Expected uint16, got {vol_masks.dtype}"
 
-    frames_covered = sorted(results.keys())
-    print(f"  PASS  Frames propagated  : {len(results)} / {state['num_frames']}")
-    print(f"  PASS  Frame range        : {frames_covered[0]} – {frames_covered[-1]}")
-    print(f"  PASS  Propagation time   : {elapsed:.2f}s")
-
-    sample_key = frames_covered[0]
-    sample_out = results[sample_key]
-    print(f"  INFO  Sample output type : {type(sample_out).__name__}")
-    if isinstance(sample_out, dict):
-        print(f"  INFO  Sample output keys : {list(sample_out.keys())}")
-
-    return results
+    nonzero_slices = int((vol_masks > 0).any(axis=(1, 2)).sum())
+    print(f"  PASS  Output shape      : {list(vol_masks.shape)}")
+    print(f"  PASS  Output dtype      : {vol_masks.dtype}")
+    print(f"  PASS  Non-zero slices   : {nonzero_slices} / {Z}")
+    print(f"  PASS  Propagation time  : {elapsed:.2f}s")
+    return vol_masks
 
 
-def test_reset_state(adapter, state):
+def test_reset_state(adapter):
     print()
     print("=" * 60)
     print("Test 5: Reset state clears prompts")
     print("=" * 60)
 
-    adapter.reset_state(state)
-    # After reset, action_history should be empty
-    assert len(state["action_history"]) == 0, "action_history not cleared by reset"
-    assert len(state["tracker_inference_states"]) == 0, (
-        "tracker_inference_states not cleared by reset"
+    # Re-prompt so reset has something to clear
+    state = adapter.inference_state
+    H, W = state["video_height"], state["video_width"]
+    mask = np.ones((H, W), dtype=np.float32) * 0.5
+    adapter.add_new_mask(frame_idx=0, obj_id=99, mask=mask)
+
+    adapter.reset_state()
+
+    state = adapter.inference_state
+    assert len(state["obj_ids"]) == 0 or not state["tracking_has_started"], (
+        "tracking_has_started should be False after reset"
     )
-    print("  PASS  action_history cleared")
-    print("  PASS  tracker_inference_states cleared")
+    print("  PASS  tracking_has_started cleared after reset")
+    print("  PASS  State reset successfully")
 
 
 # ---------------------------------------------------------------------------
@@ -157,7 +175,7 @@ def test_reset_state(adapter, state):
 TESTS = {
     "load": test_model_loads,
     "state": test_inference_state,
-    "prompt": test_text_prompt,
+    "prompt": test_mask_prompt,
     "propagate": test_propagation,
     "reset": test_reset_state,
 }
@@ -201,7 +219,6 @@ def main():
             load_from_HF=not args.no_hf,
         )
     else:
-        # Still need adapter for downstream tests
         from saber.sam3.tomogram_predictor import TomogramSAM3Adapter
         adapter = TomogramSAM3Adapter(
             device="cuda",
@@ -209,27 +226,32 @@ def main():
             load_from_HF=not args.no_hf,
         )
 
+    rng = np.random.default_rng(42)
+    tomogram = rng.uniform(-1.0, 1.0, (20, 128, 128)).astype(np.float32)
+
     if args.test == "state" or args.test is None:
-        state = test_inference_state(adapter)
+        test_inference_state(adapter)
     else:
-        rng = np.random.default_rng(42)
-        state = adapter.create_inference_state_from_tomogram(
-            rng.uniform(-1.0, 1.0, (20, 128, 128)).astype(np.float32)
-        )
+        adapter.set_volume(tomogram)
 
     if args.test == "prompt" or args.test is None:
-        seed_frame = test_text_prompt(adapter, state)
+        seed_frame = test_mask_prompt(adapter)
     else:
-        seed_frame = state["num_frames"] // 2
+        seed_frame = adapter.inference_state["num_frames"] // 2
 
     if args.test == "propagate" or args.test is None:
-        test_propagation(adapter, state, seed_frame)
+        # Need a mask prompt before propagating
+        if args.test == "propagate":
+            state = adapter.inference_state
+            H = state["video_height"]
+            W = state["video_width"]
+            y, x = np.ogrid[:H, :W]
+            mask = ((y - H//2)**2 + (x - W//2)**2 < (min(H,W)//6)**2).astype(np.float32)
+            adapter.add_new_mask(frame_idx=seed_frame, obj_id=1, mask=mask)
+        test_propagation(adapter, seed_frame)
 
     if args.test == "reset" or args.test is None:
-        # Re-prompt first so reset has something to clear
-        if args.test == "reset":
-            adapter.add_text_prompt(state, frame_idx=seed_frame, text="organelle")
-        test_reset_state(adapter, state)
+        test_reset_state(adapter)
 
     print()
     print("=" * 60)
