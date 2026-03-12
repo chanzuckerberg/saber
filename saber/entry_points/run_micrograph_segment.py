@@ -1,5 +1,5 @@
 import saber.utils.slurm_submit as slurm_submit
-from saber.sam2.automask import amg_cli as amg
+from saber.adapters.sam2.automask import amg_cli as amg
 from saber import cli_context
 import rich_click as click
 
@@ -135,7 +135,7 @@ def run_micrograph_segment(
     from saber.segmenters.loaders import micrograph_workflow
     from saber.visualization import galleries 
     from saber.utils import parallelization
-    from saber.sam2.amg import cfgAMG
+    from saber.adapters.sam2.amg import cfgAMG
     import glob
 
     # Check to Make Sure Only One of the Inputs is Provided

@@ -16,6 +16,7 @@ Before starting, ensure you have SABER installed and import the necessary module
 
 ```python
 from saber.segmenters.tomo import cryoTomoSegmenter
+from saber.adapters.base import SAM2AdapterConfig
 from saber.classifier.models import common
 from copick_utils.io import readers
 from saber.utils import io
@@ -39,23 +40,22 @@ The cryoTomoSegmenter class provides SAM2-based 3D segmentation optimized for to
 ```python
 # Create a 3D segmenter with SAM2 video capabilities
 segmenter = cryoTomoSegmenter(
-    sam2_cfg="large",           # SAM2 model size
-    deviceID=0,                 # GPU device ID
-    min_mask_area=100,          # Minimum mask area for 3D
-    min_rel_box_size=0.025      # Minimum relative box size
+    adapter_cfg=SAM2AdapterConfig(cfg="large"),  # Model size: tiny, small, base, large
+    deviceID=0,                                  # GPU device ID
+    min_mask_area=100,                           # Minimum mask area for 3D
+    min_rel_box_size=0.025                       # Minimum relative box size
 )
 ```
 
 ```python
-# Optional: If a trained classifier is available
+# Optional: add a trained classifier to filter false positives
 classifier = common.get_predictor(
     model_weights="path/to/model.pth",
     model_config="path/to/config.yaml"
 )
 
-# Create segmenter with classifier
 segmenter = cryoTomoSegmenter(
-    sam2_cfg="large",
+    adapter_cfg=SAM2AdapterConfig(cfg="large"),
     classifier=classifier,
     target_class=1,  # Class ID for your target organelle
     min_mask_area=100

@@ -1,56 +1,82 @@
-from saber.sam2.tomogram_predictor import TomogramPreprocessor
+from saber.adapters.base import BaseAdapter, SAM3AdapterConfig
+from saber.adapters.preprocessing import TomogramPreprocessor
 from typing import Any, Dict, Iterator, List, Optional, Tuple
-
+from sam3.model_builder import build_sam3_video_model
+from saber.pretrained_weights import get_sam3_bpe_path
 import numpy as np
 import torch
 
 
-class TomogramSAM3Adapter:
+def _to_rgb_float32(image: np.ndarray) -> np.ndarray:
+    """Convert any 2D/3D array to (H, W, 3) float32 in [0, 1]."""
+    if image.ndim == 2:
+        image = np.stack([image, image, image], axis=-1)
+    elif image.ndim == 3 and image.shape[2] == 1:
+        image = np.concatenate([image, image, image], axis=-1)
+    elif image.ndim == 3 and image.shape[2] != 3:
+        raise ValueError(f"Expected (H,W), (H,W,1) or (H,W,3), got shape {image.shape}")
+    image = image.astype(np.float32)
+    if image.max() > 1.0:
+        image = image / 255.0
+    return image
+
+
+def _sam3_output_to_mask_list(
+    output: Dict[str, Any], min_mask_area: int
+) -> List[Dict[str, Any]]:
+    """Convert Sam3Processor output dict to AMG-compatible list of dicts."""
+    masks_tensor = output.get("masks")
+    scores = output.get("scores", None)
+    if masks_tensor is None:
+        return []
+    if hasattr(masks_tensor, "cpu"):
+        masks_np = masks_tensor.cpu().numpy()
+    else:
+        masks_np = np.array(masks_tensor)
+    result = []
+    for i in range(masks_np.shape[0]):
+        mask = np.squeeze(masks_np[i]) > 0.5
+        area = int(mask.sum())
+        if area < min_mask_area:
+            continue
+        entry: Dict[str, Any] = {"segmentation": mask, "area": area}
+        if scores is not None:
+            s = scores[i]
+            entry["predicted_iou"] = float(s.item() if hasattr(s, "item") else s)
+        result.append(entry)
+    return result
+
+
+class SAM3Adapter(BaseAdapter):
     """
     Adapter for running SAM3 segmentation on tomogram data.
 
-    Mirrors the TomogramSAM2Adapter interface so the two can be swapped.
-    Uses SAM3's SAM2-compatible tracker API (Sam3TrackerPredictor) directly,
-    which is the same interface shown in sam3_for_sam2_video_task_example.ipynb.
+    Mirrors the SAM2Adapter interface so the two can be swapped.
+    Uses SAM3's SAM2-compatible tracker API (Sam3TrackerPredictor) directly.
 
     Typical workflow
     ----------------
-    >>> adapter = TomogramSAM3Adapter()
+    >>> adapter = SAM3Adapter(SAM3AdapterConfig(), device="cuda")
     >>> adapter.set_volume(vol)                       # (Z, H, W) numpy array
     >>> adapter.add_new_mask(zSlice, obj_id=1, mask)  # binary (H, W) numpy array
     >>> vol_masks = adapter.segment_volume(zSlice)    # (Z, H, W) uint16
-
-    Or with box/point prompts:
-    >>> adapter.set_volume(vol)
-    >>> adapter.add_box_prompt(zSlice, obj_id=1, box_xyxy_norm=[x0,y0,x1,y1])
-    >>> vol_masks = adapter.segment_volume(zSlice)
     """
 
     def __init__(
         self,
+        config: SAM3AdapterConfig,
         device: str = "cuda",
-        checkpoint_path: Optional[str] = None,
-        load_from_HF: bool = True,
-        light_modality: bool = False,
     ):
         """
         Args:
+            config: SAM3AdapterConfig with checkpoint and loading options.
             device: PyTorch device string (e.g. "cuda", "cuda:1").
-            checkpoint_path: Path to a local SAM3 checkpoint (.pt).
-                If None and load_from_HF is True, downloaded from
-                HuggingFace (facebook/sam3) automatically.
-            load_from_HF: Download weights from HuggingFace when no local
-                checkpoint is provided.  Requires `huggingface-cli login`
-                or the HF_TOKEN environment variable.
-            light_modality: Set True for fluorescence / light microscopy data.
         """
-        from sam3.model_builder import build_sam3_video_model
-        from saber.pretrained_weights import get_sam3_bpe_path
 
         sam3_model = (
             build_sam3_video_model(
-                checkpoint_path=checkpoint_path,
-                load_from_HF=load_from_HF,
+                checkpoint_path=config.checkpoint_path,
+                load_from_HF=config.load_from_HF,
                 bpe_path=get_sam3_bpe_path(),
             )
             .to(device)
@@ -62,18 +88,48 @@ class TomogramSAM3Adapter:
         self.predictor.backbone = sam3_model.detector.backbone
 
         self.device = torch.device(device)
-        self.preprocessor = TomogramPreprocessor(light_modality)
+        self.preprocessor = TomogramPreprocessor(config.light_modality)
+        self._config = config
+        self._processor = None
 
         # Internal state — set by set_volume()
         self.inference_state: Optional[Dict[str, Any]] = None
         self._vol_shape: Optional[Tuple[int, int, int]] = None
 
         # Per-frame metrics populated by segment_volume().
-        # frame_metrics[frame_idx][obj_id] = {
-        #   "logits":           (H, W) float32 numpy — raw mask logits
-        #   "presence_score":   float — sigmoid(obj_score), 1=present, 0=absent
-        # }
         self.frame_metrics: Dict[int, Dict[int, Dict[str, Any]]] = {}
+
+    # ------------------------------------------------------------------
+    # 2D segmentation
+    # ------------------------------------------------------------------
+
+    def segment_image_2d(
+        self,
+        image: np.ndarray,
+        text_prompt: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Run text-prompted 2D segmentation. Lazily builds the Sam3Processor."""
+        prompt = text_prompt or self._config.text_prompt
+        if not prompt:
+            raise ValueError("text_prompt required for SAM3 2D segmentation")
+
+        if self._processor is None:
+            from sam3.model_builder import build_sam3_image_model
+            from sam3.model.sam3_image_processor import Sam3Processor
+            from saber.pretrained_weights import get_sam3_bpe_path
+            self._processor = Sam3Processor(
+                build_sam3_image_model(
+                    checkpoint_path=self._config.checkpoint_path,
+                    load_from_HF=self._config.load_from_HF,
+                    bpe_path=get_sam3_bpe_path(),
+                ),
+                device=str(self.device),
+            )
+
+        image_rgb = _to_rgb_float32(image)
+        state = self._processor.set_image(image_rgb)
+        output = self._processor.set_text_prompt(state, prompt=prompt)
+        return _sam3_output_to_mask_list(output, self._config.min_mask_area)
 
     # ------------------------------------------------------------------
     # Volume setter
@@ -90,10 +146,6 @@ class TomogramSAM3Adapter:
 
         Call this once per volume.  After calling set_volume() you can add
         prompts and run segment_volume() without passing state explicitly.
-
-        Args:
-            tomogram: (Z, H, W) numpy array.  Any numeric dtype accepted.
-            offload_video_to_cpu: Keep frame tensors in CPU memory to save GPU.
         """
         self._vol_shape = tomogram.shape
         self.frame_metrics = {}
@@ -113,12 +165,6 @@ class TomogramSAM3Adapter:
         """
         Normalize (Z, H, W) numpy array → float32 tensor
         (Z, 3, image_size, image_size) in [-1, 1].
-
-        Pipeline:
-          1. Min-max normalize to [0, 1]
-          2. Resize each slice to image_size × image_size
-          3. Repeat grayscale to 3 channels
-          4. Apply 2x - 1  →  [-1, 1]   (same as SAM3's load_video_frames)
         """
         t_min = float(tomogram.min())
         t_max = float(tomogram.max())
@@ -127,7 +173,6 @@ class TomogramSAM3Adapter:
         else:
             norm01 = np.zeros_like(tomogram, dtype=np.float32)
 
-        # load_grayscale_image_array resizes + applies 2x-1 by default
         images, orig_h, orig_w = self.preprocessor.load_grayscale_image_array(
             norm01,
             image_size=self.predictor.image_size,
@@ -144,9 +189,6 @@ class TomogramSAM3Adapter:
     ) -> Dict[str, Any]:
         """
         Build a SAM3 tracker inference state from a tomogram array.
-
-        Uses Sam3TrackerPredictor.init_state() with injected pre-built
-        image tensors instead of reading from a video file on disk.
         """
         Z, H, W = tomogram.shape
         images, _orig_h, _orig_w = self._preprocess_tomogram(
@@ -174,23 +216,7 @@ class TomogramSAM3Adapter:
         mask: np.ndarray,
         inference_state: Optional[Dict[str, Any]] = None,
     ) -> Tuple[int, Any, Any, Any]:
-        """
-        Seed segmentation on a Z-slice using a binary mask.
-
-        This is the preferred prompt type when masks come from an external
-        2D segmenter (e.g. Sam3Processor or the existing cryoTomoSegmenter).
-
-        Args:
-            frame_idx: Z-slice index to seed on.
-            obj_id: Unique integer ID for this object (must be unique per
-                object across the volume).
-            mask: (H, W) boolean or float numpy array.  Any non-zero value
-                is treated as foreground.
-            inference_state: Override the internal state set by set_volume().
-
-        Returns:
-            (frame_idx, obj_ids, low_res_masks, video_res_masks)
-        """
+        """Seed segmentation on a Z-slice using a binary mask."""
         state = inference_state or self.inference_state
         if state is None:
             raise RuntimeError("Call set_volume() before add_new_mask().")
@@ -203,6 +229,25 @@ class TomogramSAM3Adapter:
         )
 
     @torch.inference_mode()
+    def add_new_points_or_box(
+        self,
+        frame_idx: int,
+        obj_id: int,
+        inference_state: Optional[Dict[str, Any]] = None,
+        **kwargs,
+    ) -> Tuple[int, Any, Any, Any]:
+        """Seed segmentation using points or a bounding box."""
+        state = inference_state or self.inference_state
+        if state is None:
+            raise RuntimeError("Call set_volume() before add_new_points_or_box().")
+        return self.predictor.add_new_points_or_box(
+            inference_state=state,
+            frame_idx=frame_idx,
+            obj_id=obj_id,
+            **kwargs,
+        )
+
+    @torch.inference_mode()
     def add_box_prompt(
         self,
         frame_idx: int,
@@ -210,19 +255,7 @@ class TomogramSAM3Adapter:
         box_xyxy_norm: List[float],
         inference_state: Optional[Dict[str, Any]] = None,
     ) -> Tuple[int, Any, Any, Any]:
-        """
-        Seed segmentation on a Z-slice using a bounding box.
-
-        Args:
-            frame_idx: Z-slice index to seed on.
-            obj_id: Unique integer ID for this object.
-            box_xyxy_norm: [x_min, y_min, x_max, y_max] normalized to [0, 1]
-                relative to the slice dimensions.
-            inference_state: Override the internal state set by set_volume().
-
-        Returns:
-            (frame_idx, obj_ids, low_res_masks, video_res_masks)
-        """
+        """Seed segmentation on a Z-slice using a bounding box."""
         state = inference_state or self.inference_state
         if state is None:
             raise RuntimeError("Call set_volume() before add_box_prompt().")
@@ -232,7 +265,6 @@ class TomogramSAM3Adapter:
             frame_idx=frame_idx,
             obj_id=obj_id,
             box=rel_box,
-            # rel_coordinates=True (default): tracker converts [0,1] → image_size coords
         )
 
     @torch.inference_mode()
@@ -244,20 +276,7 @@ class TomogramSAM3Adapter:
         labels: np.ndarray,
         inference_state: Optional[Dict[str, Any]] = None,
     ) -> Tuple[int, Any, Any, Any]:
-        """
-        Seed segmentation on a Z-slice using point clicks.
-
-        Args:
-            frame_idx: Z-slice index to seed on.
-            obj_id: Unique integer ID for this object.
-            points_norm: (N, 2) float array of [x, y] coordinates normalized
-                to [0, 1] relative to the slice dimensions.
-            labels: (N,) int32 array; 1 = positive, 0 = negative click.
-            inference_state: Override the internal state set by set_volume().
-
-        Returns:
-            (frame_idx, obj_ids, low_res_masks, video_res_masks)
-        """
+        """Seed segmentation on a Z-slice using point clicks."""
         state = inference_state or self.inference_state
         if state is None:
             raise RuntimeError("Call set_volume() before add_point_prompt().")
@@ -316,10 +335,8 @@ class TomogramSAM3Adapter:
             masks = masks.cpu().numpy()
 
         if isinstance(masks, np.ndarray) and masks.ndim >= 3:
-            # (N, 1, H, W) or (N, H, W) — batch of masks from the processor
             return [np.squeeze(masks[i]).astype(np.float32) for i in range(masks.shape[0])]
 
-        # Already an iterable of (H, W) arrays / tensors
         out = []
         for m in masks:
             if isinstance(m, torch.Tensor):
@@ -340,35 +357,6 @@ class TomogramSAM3Adapter:
         """
         Propagate bidirectionally from start_frame_idx and return a labeled
         3D volume.  This is the primary segmentation entry point.
-
-        Args:
-            start_frame_idx: Seed Z-slice (must have been prompted first,
-                OR pass initial masks via the ``masks`` argument).
-            masks: Optional seed masks for start_frame_idx.  Accepts:
-
-                * **Sam3Processor format** — a tensor/array of shape
-                  ``(N, 1, H, W)`` or ``(N, H, W)`` as returned by
-                  ``processor.set_text_prompt()``.  Each of the N detections
-                  becomes a separate tracked object (obj_id = 1 … N)::
-
-                      output = processor.set_text_prompt(state, "ribosome")
-                      vol = adapter.segment_volume(z, masks=output["masks"])
-
-                * **List format** — a list of ``(H, W)`` binary numpy arrays
-                  or tensors, one per object.
-
-                If ``None``, prompts must have been added beforehand via
-                ``add_new_mask()`` / ``add_box_prompt()`` / ``add_point_prompt()``.
-
-            vol_shape: (Z, H, W) of the output volume.  Inferred from
-                set_volume() if not provided.
-            max_frame_num_to_track: Maximum slices per direction.
-                None = propagate to volume boundary.
-            min_presence_score: Minimum presence score (0–1) to include a
-                slice in the output.  Default 0.5.  Raise to trim slices
-                where the tracker is uncertain (e.g. 0.7 for tighter axial
-                extent).
-            inference_state: Override the internal state set by set_volume().
 
         Returns:
             vol_masks: (Z, H, W) uint16 numpy array.
@@ -411,8 +399,6 @@ class TomogramSAM3Adapter:
                     if obj_scores is not None
                     else 1.0
                 )
-                # Record metrics regardless of min_score so callers can
-                # inspect all frames and decide their own threshold.
                 logits = video_res_masks[i]
                 if hasattr(logits, "cpu"):
                     logits = logits.cpu().numpy()

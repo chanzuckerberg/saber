@@ -1,4 +1,4 @@
-from saber.sam2.automask import amg_cli as amg
+from saber.adapters.sam2.automask import amg_cli as amg
 from saber.classifier import validate_odd
 from saber.utils import slurm_submit
 from saber import cli_context
@@ -128,7 +128,7 @@ def prep3d(
     from saber.segmenters.loaders import base_tomosegmenter
     from saber.visualization import galleries
     from saber.utils import parallelization
-    from saber.sam2.amg import cfgAMG    
+    from saber.adapters.sam2.amg import cfgAMG    
     import copick
 
     print(f'\nRunning SAM2 Training Data Preparation')

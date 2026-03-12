@@ -1,27 +1,31 @@
 from saber.utils import preprocessing as preprocess
-from saber.segmenters.base import saber3Dsegmenter
+from saber.segmenters.base import saber3D
 from saber.filters import masks as mask_filters
 import saber.visualization.results as cryoviz
 import saber.filters.gaussian as gauss
 from saber.segmenters import utils
-from saber.sam2.amg import cfgAMG
+from saber.adapters.sam2.amg import cfgAMG
+from saber.adapters.base import AdapterConfig
+from typing import Optional
 from tqdm import tqdm
 import numpy as np
 import torch
 
-class cryoTomoSegmenter(saber3Dsegmenter):
+class cryoTomoSegmenter(saber3D):
     def __init__(self,
         deviceID: int = 0,
         classifier = None,
         target_class: int = 1,
-        cfg: cfgAMG = None,        
+        cfg: cfgAMG = None,
         min_mask_area: int = 100,
-        min_rel_box_size: float = 0.025
-    ):      
+        min_rel_box_size: float = 0.025,
+        adapter_cfg: Optional[AdapterConfig] = None,
+    ):
         """
         Initialize the cryoTomoSegmenter
-        """ 
-        super().__init__(deviceID, classifier, target_class, cfg, min_mask_area)
+        """
+        super().__init__(deviceID, classifier, target_class, cfg, min_mask_area,
+                         adapter_cfg=adapter_cfg)
 
         # Threshold for Certainty Aware Distillation
         self.filter_threshold = 0.5
@@ -67,12 +71,12 @@ class cryoTomoSegmenter(saber3Dsegmenter):
         slab_thickness: int,
         zSlice: int = None,
         save_run: str = None, 
-        show_segmentations: bool = False, 
+        display: bool = False, 
     ):
         """
         Segment a 3D tomogram using the Video Predictor
         """
-        return self.segment_vol(vol, slab_thickness, zSlice, save_run, show_segmentations)
+        return self.segment_vol(vol, slab_thickness, zSlice, save_run, display)
 
     @torch.inference_mode()
     def segment_vol(
@@ -81,14 +85,14 @@ class cryoTomoSegmenter(saber3Dsegmenter):
         slab_thickness: int,
         zSlice: int = None,
         save_run: str = None, 
-        show_segmentations: bool = False, 
+        display: bool = False, 
     ):  
         """
         Segment a 3D tomogram using the Video Predictor
         """
 
         # Determine if We Should Show the 2D Segmentations or Show the Segmentations in 3D
-        if show_segmentations:  save_mask = False
+        if display:  save_mask = False
         else:                   save_mask = True
         self.is_tomogram_mode = True        
 
@@ -104,38 +108,27 @@ class cryoTomoSegmenter(saber3Dsegmenter):
             return None
 
         # If A Mask is Found, Follow to 3D Segmentation Propagation
-        # Initialize Video Predictor
-        if self.inference_state is None:
-            self.inference_state = self.video_predictor.create_inference_state_from_tomogram(self.vol)  
-
-        # Set up score capture hook
-        captured_scores, hook_handle = self._setup_score_capture_hook()                  
+        # Initialize Video Predictor via adapter set_volume()
+        if not self._vol_loaded:
+            self.video_predictor.set_volume(self.vol)
+            self._vol_loaded = True
 
         # Get the dimensions of the volume.
-        (nx, ny, nz) = (
-            len(self.inference_state['images']),
+        nx = self.vol.shape[0]
+        ny, nz = (
             self.masks[0]['segmentation'].shape[0],
             self.masks[0]['segmentation'].shape[1]
         )
 
         # Set annotation frame
-        self.ann_frame_idx = zSlice if zSlice is not None else nx // 2 
+        self.ann_frame_idx = zSlice if zSlice is not None else nx // 2
 
-        # Add masks to predictor
-        self._add_masks_to_predictor(self.masks, self.ann_frame_idx, ny)
-
-        # Propagate and filter
+        # Propagate and filter (adapter handles seeding + hook + scoring internally)
         mask_shape = (nx, ny, nz)
-        vol_masks, video_segments = self._propagate_and_filter(
-            self.vol, self.masks, 
-            captured_scores, mask_shape,
-        )
-
-        # Remove hook and Reset Inference State
-        hook_handle.remove()
+        vol_masks = self.propagate(mask_shape)
         
         # Display if requested
-        if show_segmentations:
+        if display:
             cryoviz.view_3d_seg(self.vol, vol_masks)
             
         return vol_masks
@@ -168,12 +161,14 @@ class multiDepthTomoSegmenter(cryoTomoSegmenter):
         target_class: int = 1,
         cfg: cfgAMG = None,
         min_mask_area: int = 100,
-        min_rel_box_size: float = 0.025
+        min_rel_box_size: float = 0.025,
+        adapter_cfg: Optional[AdapterConfig] = None,
     ):
         """
         Initialize the multiDepthTomoSegmenter
         """
-        super().__init__(deviceID, classifier, target_class, cfg, min_mask_area, min_rel_box_size)
+        super().__init__(deviceID, classifier, target_class, cfg, min_mask_area,
+                         min_rel_box_size, adapter_cfg=adapter_cfg)
 
         if target_class < 1: 
             print('[Error]: Multi-Depth Tomogram Segmenter only supports Single-Class Segmentation currently.')
@@ -185,14 +180,14 @@ class multiDepthTomoSegmenter(cryoTomoSegmenter):
         num_slabs: int = 3,
         delta_z: int = 30,
         save_run: str = None, 
-        show_segmentations: bool = False, 
+        display: bool = False, 
     ):
         """
         Segment a 3D tomogram using the Video Predictor
         """
 
         # Store Whether to Show Segmentations
-        self.show_segments = show_segmentations
+        self.show_segments = display
         
         # Determine Segmentation Mode
         if self.target_class > 0 or self.classifier is None:

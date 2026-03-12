@@ -12,16 +12,16 @@ It diagnoses the most common failure in prior prototypes:
 Usage
 -----
     # Minimal test with a synthetic image (no file I/O):
-    python -m saber.sam3.tests.test_sam3_image
+    python -m saber.adapters.sam3.tests.test_sam3_image
 
     # Test on a real image file (TIFF, PNG, JPG):
-    python -m saber.sam3.tests.test_sam3_image --image /path/to/image.tif
+    python -m saber.adapters.sam3.tests.test_sam3_image --image /path/to/image.tif
 
     # Pass a local BPE vocab (if SAM3 pkg_resources lookup fails):
-    python -m saber.sam3.tests.test_sam3_image --bpe /path/to/bpe_simple_vocab_16e6.txt.gz
+    python -m saber.adapters.sam3.tests.test_sam3_image --bpe /path/to/bpe_simple_vocab_16e6.txt.gz
 
     # Save the visualisation to disk (no display needed on HPC):
-    python -m saber.sam3.tests.test_sam3_image --image /path/to/image.tif --save output.png
+    python -m saber.adapters.sam3.tests.test_sam3_image --image /path/to/image.tif --save output.png
 """
 
 import argparse

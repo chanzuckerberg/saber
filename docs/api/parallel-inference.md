@@ -58,25 +58,26 @@ Define a function that initializes your model on a specific GPU. The GPU ID must
 
 ```python
 from saber.segmenters.micro import cryoMicroSegmenter
+from saber.adapters.base import SAM2AdapterConfig
 from saber.classifier.models import common
 
 def initialize_model(
-    gpu_id:int, 
-    model_weights:str, model_config:str, 
+    gpu_id:int,
+    model_weights:str, model_config:str,
     target_class:int, sam2_cfg:str):
     """Load micrograph segmentation models once per GPU"""
-    
+
     torch.cuda.set_device(gpu_id)
-    
+
     # Load models
     predictor = common.get_predictor(model_weights, model_config, gpu_id)
     segmenter = cryoMicroSegmenter(
-        sam2_cfg=sam2_cfg,
+        adapter_cfg=SAM2AdapterConfig(cfg=sam2_cfg),
         deviceID=gpu_id,
         classifier=predictor,
         target_class=target_class
     )
-    
+
     return {
         'predictor': predictor,
         'segmenter': segmenter

@@ -5,7 +5,7 @@ This quickstart guide shows you how to use SABER's API to segment 2D micrographs
 ## 🎯 What You'll Learn
 
 - Load and preprocess micrograph data
-- Initialize SAM2-based segmenters
+- Initialize SAM2 and SAM3-based segmenters
 - Apply domain expert classifiers
 
 ## 🚀 Basic Segmentation
@@ -15,6 +15,7 @@ This quickstart guide shows you how to use SABER's API to segment 2D micrographs
 Before starting, ensure you have SABER installed and import the necessary modules: SABER supports various file formats commonly used in microscopy:
 ```python
 from saber.segmenters.micro import cryoMicroSegmenter
+from saber.adapters.base import SAM2AdapterConfig, SAM3AdapterConfig
 from saber.visualization import classifier as viz
 from saber.classifier.models import common
 from saber.utils import io
@@ -28,31 +29,35 @@ print(f"Image shape: {image.shape}, Pixel size: {pixel_size} Å")
 
 ### Step 2: Initialize the Segmenter and Classifier
 
-The `cryoMicroSegmenter` class provides SAM2-based segmentation optimized for cryo-EM data. We can either pool model sizes ranging from small to large, all of which are available through meta. We can also filter segmentations that can be too small with the `min_mask_area` input. 
+The `cryoMicroSegmenter` class provides SAM2 and SAM3-based segmentation optimized for cryo-EM data. SAM2 supports model sizes ranging from tiny to large; SAM3 uses text prompts with no classifier required. Use `min_mask_area` to filter out small spurious masks.
 
 ```python
-# Create a segmenter with SAM2
+# SAM2 — automatic mask generation
 segmenter = cryoMicroSegmenter(
-    sam2_cfg="large",           # SAM2 model size: tiny, base, large
-    deviceID=0,                 # GPU device ID
-    min_mask_area=50,           # Minimum mask area to keep
+    adapter_cfg=SAM2AdapterConfig(cfg="large"),  # Model size: tiny, small, base, large
+    deviceID=0,                                  # GPU device ID
+    min_mask_area=50,                            # Minimum mask area to keep
 )
 ```
 
 ```python
-# Optional: If a trained classifier is available 
+# Optional: add a trained classifier to filter false positives
 classifier = common.get_predictor(
     model_weights="path/to/model.pth",
     model_config="path/to/config.yaml"
 )
 
-# Create segmenter with classifier
 segmenter = cryoMicroSegmenter(
-    sam2_cfg="large",
+    adapter_cfg=SAM2AdapterConfig(cfg="large"),
     classifier=classifier,
     target_class=1,  # Class ID for your target organelle
     min_mask_area=50
 )
+```
+
+```python
+# SAM3 — text-driven segmentation (no classifier needed)
+segmenter = cryoMicroSegmenter(adapter_cfg=SAM3AdapterConfig())
 ```
 ***Refer to the [Training a Classifier](training.md) page to learn how to train your own domain expert classifier.***
 
@@ -61,11 +66,11 @@ segmenter = cryoMicroSegmenter(
 Execute the segmentation process with a single function call.
 
 ```python
-# Segment the image
-masks = segmenter.segment(
-    image0=image,
-    display_image=True,         # Show results
-)
+# SAM2 with classifier — override target class per call
+masks = segmenter.segment(image0=image, target_class=1, display_image=True)
+
+# SAM3 — text-driven
+masks = segmenter.segment(image0=image, text="ribosome", display_image=True)
 
 print(f"Found {len(masks)} segments")
 ```
@@ -91,7 +96,7 @@ In cases where high-resolution is essential, we can use a sliding window to segm
 ```python
 # Fine-tune SAM2 behavior
 segmenter = cryoMicroSegmenter(
-    sam2_cfg="large",
+    adapter_cfg=SAM2AdapterConfig(cfg="large"),
     min_mask_area=100,          # Larger minimum area
     window_size=512,            # Window Size (Pixels)
     overlap_ratio=0.5           # More overlap

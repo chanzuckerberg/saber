@@ -1,5 +1,5 @@
 """
-Test TomogramSAM3Adapter — run this on the GPU machine.
+Test SAM3Adapter — run this on the GPU machine.
 
 Tests (in order):
   1. Model loads without error (downloads from HuggingFace if needed)
@@ -11,13 +11,13 @@ Tests (in order):
 Usage
 -----
     # Download weights from HuggingFace (requires login or HF_TOKEN env var):
-    python -m saber.sam3.tests.test_tomogram_predictor
+    python -m saber.adapters.sam3.tests.test_tomogram_predictor
 
     # Use a locally cached checkpoint:
-    python -m saber.sam3.tests.test_tomogram_predictor --checkpoint /path/to/sam3.pt
+    python -m saber.adapters.sam3.tests.test_tomogram_predictor --checkpoint /path/to/sam3.pt
 
     # Single test only:
-    python -m saber.sam3.tests.test_tomogram_predictor --test load
+    python -m saber.adapters.sam3.tests.test_tomogram_predictor --test load
 """
 
 import argparse
@@ -37,13 +37,16 @@ def test_model_loads(checkpoint_path=None, load_from_HF=True):
     print("=" * 60)
     print("Test 1: Model loads without error")
     print("=" * 60)
-    from saber.sam3.tomogram_predictor import TomogramSAM3Adapter
+    from saber.adapters.sam3 import SAM3Adapter
+    from saber.adapters.base import SAM3AdapterConfig
 
     t0 = time.time()
-    adapter = TomogramSAM3Adapter(
+    adapter = SAM3Adapter(
+        config=SAM3AdapterConfig(
+            checkpoint_path=checkpoint_path,
+            load_from_HF=load_from_HF,
+        ),
         device="cuda",
-        checkpoint_path=checkpoint_path,
-        load_from_HF=load_from_HF,
     )
     elapsed = time.time() - t0
 
@@ -183,7 +186,7 @@ TESTS = {
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Test TomogramSAM3Adapter on a GPU machine."
+        description="Test SAM3Adapter on a GPU machine."
     )
     parser.add_argument(
         "--checkpoint",
@@ -219,11 +222,14 @@ def main():
             load_from_HF=not args.no_hf,
         )
     else:
-        from saber.sam3.tomogram_predictor import TomogramSAM3Adapter
-        adapter = TomogramSAM3Adapter(
+        from saber.adapters.sam3 import SAM3Adapter
+        from saber.adapters.base import SAM3AdapterConfig
+        adapter = SAM3Adapter(
+            config=SAM3AdapterConfig(
+                checkpoint_path=args.checkpoint,
+                load_from_HF=not args.no_hf,
+            ),
             device="cuda",
-            checkpoint_path=args.checkpoint,
-            load_from_HF=not args.no_hf,
         )
 
     rng = np.random.default_rng(42)

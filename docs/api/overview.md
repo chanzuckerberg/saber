@@ -7,7 +7,7 @@ Welcome to the SABER Python API, your programmatic gateway to high-resolution se
 With SABER's modular and extensible API, you can: 
 
 * **Load and process** tomographic datasets and micrographs
-* **Interface with SAM2** and custom domain expert classifiers
+* **Interface with SAM2 and SAM3** and custom domain expert classifiers
 * **Apply segmentations** in 2D or propagate across 3D volumes
 * **Save, visualize, and evaluate** segmentations with ease
 * **Build custom workflows** for your specific research needs
@@ -23,8 +23,8 @@ The core segmentation engines that handle SAM2 integration and 3D propagation:
 
 - **`cryoMicroSegmenter`** - 2D micrograph segmentation with SAM2
 - **`cryoTomoSegmenter`** - 3D tomogram segmentation with video propagation
-- **`saber2Dsegmenter`** - Base class for 2D segmentation workflows
-- **`saber3Dsegmenter`** - Base class for 3D segmentation workflows
+- **`saber2D`** - Base class for 2D segmentation workflows
+- **`saber3D`** - Base class for 3D segmentation workflows
 
 ### 2. **Entry Points** (`saber.entry_points`)
 High-level functions that provide complete segmentation workflows:
@@ -69,16 +69,24 @@ image, pixel_size = io.read_micrograph("path/to/image.mrc")
 vol = readers.tomogram(run, voxel_size=10, algorithm="denoised")
 ```
 
-### **SAM2 Integration**
+### **SAM2 and SAM3 Integration**
 ```python
-# Direct access to SAM2 models with custom parameters
+# SAM2 — automatic mask generation with optional classifier
 from saber.segmenters.micro import cryoMicroSegmenter
+from saber.adapters.base import SAM2AdapterConfig
 
 segmenter = cryoMicroSegmenter(
-    sam2_cfg="large",  # Model size: tiny, base, large
-    min_mask_area=50,  # Filter small artifacts
-    window_size=256,   # Sliding window for large images
+    adapter_cfg=SAM2AdapterConfig(cfg="large"),  # Model size: tiny, small, base, large
+    min_mask_area=50,                            # Filter small artifacts
+    window_size=256,                             # Sliding window for large images
 )
+masks = segmenter.segment(image, target_class=1)
+
+# SAM3 — text-driven segmentation (no classifier needed)
+from saber.adapters.base import SAM3AdapterConfig
+
+segmenter = cryoMicroSegmenter(adapter_cfg=SAM3AdapterConfig())
+masks = segmenter.segment(image, text="ribosome")
 ```
 
 ### **Domain Expert Classifiers**
@@ -96,8 +104,9 @@ classifier = common.get_predictor(
 ```python
 # Automatic 3D segmentation from 2D annotations
 from saber.segmenters.tomo import cryoTomoSegmenter
+from saber.adapters.base import SAM2AdapterConfig
 
-segmenter = cryoTomoSegmenter(sam2_cfg="large")
+segmenter = cryoTomoSegmenter(adapter_cfg=SAM2AdapterConfig(cfg="large"))
 vol_masks = segmenter.segment(vol, slab_thickness=32)
 ```
 

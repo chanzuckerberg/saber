@@ -1,5 +1,5 @@
 import saber.utils.slurm_submit as slurm_submit
-from saber.sam2.automask import amg_cli as amg
+from saber.adapters.sam2.automask import amg_cli as amg
 from saber import cli_context
 import rich_click as click
 
@@ -126,7 +126,7 @@ def run_slab_seg(
     from saber.segmenters.tomo import cryoTomoSegmenter
     from saber.classifier.models import common
     from copick_utils.io import readers
-    from saber.sam2.amg import cfgAMG
+    from saber.adapters.sam2.amg import cfgAMG
     import copick
     
     # Prepare AMG Config

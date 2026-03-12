@@ -1,8 +1,10 @@
-from saber.segmenters.base import saber3Dsegmenter
-from saber.sam2.amg import cfgAMG
+from saber.segmenters.base import saber3D
+from saber.adapters.sam2.amg import cfgAMG
+from saber.adapters.base import AdapterConfig
+from typing import Optional
 import torch
 
-class volumeSegmenter(saber3Dsegmenter):
+class volumeSegmenter(saber3D):
     def __init__(self,
         deviceID: int = 0,
         classifier = None,
@@ -10,14 +12,16 @@ class volumeSegmenter(saber3Dsegmenter):
         cfg: cfgAMG = None,
         min_mask_area: int = 100,
         min_rel_box_size: float = 0.025,
-        light_modality: bool = False
-    ):  
+        light_modality: bool = False,
+        adapter_cfg: Optional[AdapterConfig] = None,
+    ):
         """
         Initialize the generalSegmenter
-        """ 
+        """
         super().__init__(
             deviceID, classifier, target_class, cfg,
-            min_mask_area, min_rel_box_size, light_modality)
+            min_mask_area, min_rel_box_size, light_modality,
+            adapter_cfg=adapter_cfg)
 
     @torch.inference_mode()
     def segment_3d(
@@ -31,37 +35,23 @@ class volumeSegmenter(saber3Dsegmenter):
         Segment a 3D tomogram using the Video Predictor
         """
 
-        # Create Inference State
-        if self.inference_state is None:
-            self.inference_state = self.video_predictor.create_inference_state_from_tomogram(vol)
+        # Create Inference State via adapter set_volume()
+        if not self._vol_loaded:
+            self.video_predictor.set_volume(vol)
+            self._vol_loaded = True
 
         # Set Masks - Right now this is external
         self.masks = masks
 
-        # Determine if We Should Show the 2D Segmentations or Show the Segmentations in 3D
-        if not show_segmentations:  save_mask = True
-        else:                       save_mask = False
-
-        # Set up score capture hook
-        captured_scores, hook_handle = self._setup_score_capture_hook()
-
         # Get Dimensions
-        nx = len(self.inference_state['images'])
+        nx = vol.shape[0]
         ny, nz = self.masks[0].shape[0], self.masks[0].shape[1]
-        
+
         # Set annotation frame
         self.ann_frame_idx = ann_frame_idx if ann_frame_idx is not None else nx // 2
-        
-        # Add masks to predictor
-        self._add_masks_to_predictor(self.masks, self.ann_frame_idx, ny)
-        
-        # Propagate and filter
-        mask_shape = (nx, ny, nz)
-        vol_masks, video_segments = self._propagate_and_filter(
-            vol, self.masks, captured_scores, mask_shape,
-        )
 
-        # Remove hook and Reset Inference State
-        hook_handle.remove()
+        # Propagate and filter (adapter handles seeding + hook + scoring internally)
+        mask_shape = (nx, ny, nz)
+        vol_masks = self.propagate(mask_shape)
 
         return vol_masks
