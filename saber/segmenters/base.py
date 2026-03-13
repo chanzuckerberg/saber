@@ -103,7 +103,7 @@ class saber2D:
 
         # Normalize to Correct Size
         image = image0.copy()
-        out_rgb = True if self.adapter_cfg == 'sam2' else False
+        out_rgb = True if self.adapter_cfg.model_type == 'sam2' else False
         image = prep.prepare(image, to_rgb=out_rgb)
 
         # Run Segmentation

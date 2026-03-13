@@ -1,5 +1,6 @@
 from saber.adapters.base import BaseAdapter, SAM2AdapterConfig
 from saber.adapters.preprocessing import TomogramPreprocessor
+from saber.utils import preprocessing as prep
 from typing import Optional, Tuple, Any, Dict, Iterator, List
 from sam2.build_sam import build_sam2_video_predictor
 from saber.adapters.sam2.automask import build_amg
@@ -53,7 +54,7 @@ class SAM2Adapter(BaseAdapter):
 
         # Preprocess Image if it is 2D
         if image.ndim == 2:
-            image = self.preprocessor.prepare(image, to_rgb=True)
+            image = prep.prepare(image, to_rgb=True)
 
         # Build Mask Generator if it is not already built
         if self._mask_generator is None:
