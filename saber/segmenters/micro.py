@@ -35,6 +35,7 @@ class cryoMicroSegmenter(saber2D):
         target_class: Optional[int] = None,
         text: Optional[str] = None,
         display: bool = True,
+        threshold: Optional[float] = 0.5,
         use_sliding_window: bool = False,
     ):
         """
@@ -60,7 +61,7 @@ class cryoMicroSegmenter(saber2D):
         return super().segment(
             image0,
             target_class=target_class,
-            text=text,
+            text=text, threshold=threshold,
             display=display,
             use_sliding_window=use_sliding_window
         )

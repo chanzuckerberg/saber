@@ -17,10 +17,10 @@ logger.disabled = True
 
 class saber2D:
     def __init__(self,
-        cfg: AdapterConfig,
         deviceID: int = 0,
+        cfg: Optional[AdapterConfig] = None,
         classifier = None,
-        target_class: int = 1,
+        amg_cfg: Optional[cfgAMG] = None,
         min_mask_area: int = 50,
         window_size: int = 256,
         overlap_ratio: float = 0.25,
@@ -28,6 +28,8 @@ class saber2D:
         """
         Class for Segmenting Micrographs or Images
         """
+        if cfg is None and amg_cfg is None:
+            raise "Either Provide an AdapterConfig or AMG Config!"
 
         # Minimum Mask Area to Ignore
         self.min_mask_area = min_mask_area
@@ -43,12 +45,10 @@ class saber2D:
         # Initialize Domain Expert Classifier for Filtering False Positives
         if classifier:
             self.classifier = classifier
-            self.target_class = target_class
             self.batchsize = 32
             if hasattr(self.classifier, 'eval'):
                 self.classifier.eval()
         else:
-            self.target_class = 1
             self.classifier = None
             self.batchsize = None
 
@@ -76,35 +76,34 @@ class saber2D:
         image: np.ndarray,
         target_class: Optional[int] = None,
         text: Optional[str] = None,
+        threshold: Optional[float] = 0.5,
         display: bool = False,
         use_sliding_window: bool = False,
     ) -> list:
         if target_class is not None:
             self.target_class = target_class
-        return self.segment_image(image, display=display,
-                                  use_sliding_window=use_sliding_window,
-                                  text_prompt=text)
+        return self.segment_image(
+            image, display=display,
+            use_sliding_window=use_sliding_window,
+            text_prompt=text, threshold=threshold 
+        )
 
     @torch.inference_mode()
     def segment_image(self,
-        image0: np.ndarray,
+        image: np.ndarray,
         display: bool = True,
         use_sliding_window: bool = False,
         text_prompt: Optional[str] = None,
+        threshold: Optional[float] = 0.5,
     ):
         """
         Segment image using sliding window approach
         
         Args:
-            image0: Input image
+            image: Input image
             display: Whether to display the result
             use_sliding_window: Whether to use sliding window (True) or single inference (False)
         """
-
-        # Normalize to Correct Size
-        image = image0.copy()
-        out_rgb = True if self.adapter_cfg.model_type == 'sam2' else False
-        image = prep.prepare(image, to_rgb=out_rgb)
 
         # Run Segmentation
         if use_sliding_window:
@@ -122,7 +121,10 @@ class saber2D:
                 window_image = image[y1:y2, x1:x2]
                 
                 # Run inference on window
-                window_masks = self.adapter.segment_image_2d(window_image, text_prompt=text_prompt)
+                window_masks = self.adapter.segment_image_2d(
+                    window_image, text_prompt=text_prompt, 
+                    threshold=threshold 
+                )
                 
                 # Transform masks back to full image coordinates
                 curr_masks = []
@@ -146,14 +148,15 @@ class saber2D:
             
         else:
             # Original single inference
-            self.masks = self.adapter.segment_image_2d(image, text_prompt=text_prompt)
+            self.masks = self.adapter.segment_image_2d(
+                image, text_prompt=text_prompt, threshold=threshold)
 
             # Apply Classifier to Filter False Positives
             self.masks = self._apply_classifier(image, self.masks)
 
         # Optional: Save Save Segmentation to PNG or Plot Segmentation with Matplotlib
         if display:
-            viz.display_mask_list(image0, self.masks, self.save_button)
+            viz.display_mask_list(image, self.masks, self.save_button)
 
         # Return the Masks
         self.image = image
@@ -235,16 +238,18 @@ class saber2D:
     
 class saber3D(saber2D):
     def __init__(self,
-        cfg: AdapterConfig,
+        cfg: AdapterConfig = None,
         deviceID: int = 0,
         classifier = None,
         target_class: int = 1,
+        amg_cfg: cfgAMG = None,
     ):
         super().__init__(
             cfg=cfg,
             deviceID=deviceID,
             classifier=classifier,
             target_class=target_class,
+            amg_cfg=amg_cfg
         )
 
         # Alias for downstream 3D segmentation code

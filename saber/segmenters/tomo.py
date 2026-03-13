@@ -16,35 +16,27 @@ class cryoTomoSegmenter(saber3D):
         deviceID: int = 0,
         classifier = None,
         target_class: int = 1,
-        cfg: cfgAMG = None,
-        min_mask_area: int = 100,
-        min_rel_box_size: float = 0.025,
-        adapter_cfg: Optional[AdapterConfig] = None,
+        cfg: Optional[AdapterConfig] = None,
+        amg_cfg: Optional[cfgAMG] = None,
     ):
         """
         Initialize the cryoTomoSegmenter
         """
-        super().__init__(deviceID, classifier, target_class, cfg, min_mask_area,
-                         adapter_cfg=adapter_cfg)
+        super().__init__(
+            cfg, deviceID, classifier, target_class, 
+            amg_cfg
+        )
 
         # Threshold for Certainty Aware Distillation
         self.filter_threshold = 0.5
 
-    def generate_slab(self, vol, zSlice, slab_thickness):
-        """
-        Generate a Slab of the Tomogram at a Given Depth
-        """
-
-        # Project a Single Slab 
-        self.image0 = preprocess.project_tomogram(vol, zSlice, slab_thickness)
-        self.image0 = preprocess.contrast(self.image0, std_cutoff=3)
-        self.image0 = preprocess.normalize(self.image0)
-        self.image = np.stack([self.image0, self.image0, self.image0], axis=-1)
-
-        return self.image
-
     @torch.inference_mode()
-    def segment_slab(self, vol, slab_thickness, zSlice=None, display_image=True):
+    def segment_slab(self, 
+        vol, 
+        slab_thickness: int = 10, 
+        zSlice: Optional[int] = None, 
+        display: bool = True,
+        text: Optional[str] = None ):
         """
         Segment a 2D image using the Video Predictor
         """
@@ -58,10 +50,10 @@ class cryoTomoSegmenter(saber3D):
             zSlice = int(self.vol.shape[0] // 2)
             
         # Generate Slab
-        self.generate_slab(self.vol, zSlice, slab_thickness)
+        self.image = preprocess.project_tomogram(self.vol, zSlice, slab_thickness)
 
         # Segment Slab 
-        self.segment_image(self.image, display_image = display_image)
+        self.segment_image(self.image, display = display, text_prompt=text)
 
         return self.masks
 
@@ -97,7 +89,7 @@ class cryoTomoSegmenter(saber3D):
         self.is_tomogram_mode = True        
 
         # Segment Initial Slab 
-        self.segment_slab(vol, slab_thickness, zSlice, display_image=False)
+        self.segment_slab(vol, slab_thickness, zSlice, display=False)
 
         # Optional: Save Save Segmentation to PNG or Plot Segmentation with Matplotlib
         if save_mask and save_run is not None:

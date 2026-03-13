@@ -75,6 +75,7 @@ def prepare(image: np.ndarray, to_rgb: bool = False):
 
     image = contrast(image, std_cutoff=3)
     image = normalize(image, rgb=False)
-    if to_rgb:
+    if to_rgb and image.ndim == 2:
         image = np.repeat(image[..., None], 3, axis=2)
+        image = image.astype(np.float32)
     return image

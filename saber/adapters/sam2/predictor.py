@@ -1,9 +1,9 @@
 from saber.adapters.base import BaseAdapter, SAM2AdapterConfig
 from saber.adapters.preprocessing import TomogramPreprocessor
-from saber.utils import preprocessing as prep
 from typing import Optional, Tuple, Any, Dict, Iterator, List
 from sam2.build_sam import build_sam2_video_predictor
 from saber.adapters.sam2.automask import build_amg
+from saber.utils import preprocessing as prep
 from saber.adapters.sam2.amg import cfgAMG
 from saber import pretrained_weights
 from collections import OrderedDict
@@ -45,16 +45,18 @@ class SAM2Adapter(BaseAdapter):
     # 2D segmentation
     # ------------------------------------------------------------------
 
+    @torch.inference_mode()
     def segment_image_2d(
         self,
         image: np.ndarray,
-        text_prompt: Optional[str] = None,
+        text_prompt: str = None,
+        threshold: float = None,
     ) -> List[Dict[str, Any]]:
         """Run AMG-based 2D segmentation. Lazily builds the mask generator."""
 
-        # Preprocess Image if it is 2D
-        if image.ndim == 2:
-            image = prep.prepare(image, to_rgb=True)
+        # Preprocess Image (Return as RGB for SAM2)
+        out_rgb = True if image.ndim == 2 else False
+        image = prep.prepare(image, to_rgb=out_rgb)
 
         # Build Mask Generator if it is not already built
         if self._mask_generator is None:

@@ -1,29 +1,14 @@
 from saber.adapters.base import BaseAdapter, SAM3AdapterConfig
 from saber.adapters.preprocessing import TomogramPreprocessor
 from typing import Any, Dict, Iterator, List, Optional, Tuple
-from sam3.model_builder import build_sam3_video_model
 from saber.pretrained_weights import get_sam3_bpe_path
+from sam3.model_builder import build_sam3_video_model
+from saber.utils import preprocessing as prep
 import numpy as np
 import torch
 
-
-def _to_rgb_float32(image: np.ndarray) -> np.ndarray:
-    """Convert any 2D/3D array to (H, W, 3) float32 in [0, 1]."""
-    if image.ndim == 2:
-        image = np.stack([image, image, image], axis=-1)
-    elif image.ndim == 3 and image.shape[2] == 1:
-        image = np.concatenate([image, image, image], axis=-1)
-    elif image.ndim == 3 and image.shape[2] != 3:
-        raise ValueError(f"Expected (H,W), (H,W,1) or (H,W,3), got shape {image.shape}")
-    image = image.astype(np.float32)
-    if image.max() > 1.0:
-        image = image / 255.0
-    return image
-
-
 def _sam3_output_to_mask_list(
-    output: Dict[str, Any], min_mask_area: int
-) -> List[Dict[str, Any]]:
+    output: Dict[str, Any], min_mask_area: int ) -> List[Dict[str, Any]]:
     """Convert Sam3Processor output dict to AMG-compatible list of dicts."""
     masks_tensor = output.get("masks")
     scores = output.get("scores", None)
@@ -103,10 +88,12 @@ class SAM3Adapter(BaseAdapter):
     # 2D segmentation
     # ------------------------------------------------------------------
 
+    @torch.inference_mode()
     def segment_image_2d(
         self,
         image: np.ndarray,
         text_prompt: Optional[str] = None,
+        threshold: float = 0.5,
     ) -> List[Dict[str, Any]]:
         """Run text-prompted 2D segmentation. Lazily builds the Sam3Processor."""
         prompt = text_prompt or self._config.text_prompt
@@ -126,9 +113,17 @@ class SAM3Adapter(BaseAdapter):
                 device=str(self.device),
             )
 
-        # image_rgb = _to_rgb_float32(image)
+        image = prep.prepare(image) 
         state = self._processor.set_image(image)
         output = self._processor.set_text_prompt(state=state, prompt=prompt)
+        
+        # Apply threshold to filter out low-confidence masks (if scores are available)
+        keep = output['scores'] >= threshold
+        output['masks'] = output['masks'][keep]
+        output['masks_logits'] = output['masks_logits'][keep]
+        output['scores'] = output['scores'][keep]
+
+        # Convert to list of dicts with binary masks and metadata (area, predicted_iou)
         return _sam3_output_to_mask_list(output, self._config.min_mask_area)
 
     # ------------------------------------------------------------------
