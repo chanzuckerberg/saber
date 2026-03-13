@@ -34,7 +34,7 @@ class cryoMicroSegmenter(saber2D):
         image0,
         target_class: Optional[int] = None,
         text: Optional[str] = None,
-        display_image: bool = True,
+        display: bool = True,
         use_sliding_window: bool = False,
     ):
         """
@@ -44,7 +44,7 @@ class cryoMicroSegmenter(saber2D):
             image0: Input image
             target_class: Override the classifier target class for this call
             text: Text prompt for SAM3-based segmentation
-            display_image: Whether to display the result
+            display: Whether to display the result
             use_sliding_window: Whether to use sliding window (True) or single inference (False)
         """
 
@@ -57,8 +57,10 @@ class cryoMicroSegmenter(saber2D):
             print(f'Image is Larger than {self.max_pixels} pixels in at least one dimension.\nCurrent Size: ({nx}, {ny})')
             print('Consider Downsampling or Using Sliding Window Inference.')
 
-        return super().segment(image0,
-                               target_class=target_class,
-                               text=text,
-                               display=display_image,
-                               use_sliding_window=use_sliding_window)
+        return super().segment(
+            image0,
+            target_class=target_class,
+            text=text,
+            display=display,
+            use_sliding_window=use_sliding_window
+        )

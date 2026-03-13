@@ -61,6 +61,7 @@ class saber2D:
                 'cfg': amg_params.get('sam2_cfg', cfg.cfg),
             })
 
+        self.adapter_cfg = cfg
         self.adapter = get_adapter(cfg, self.device)
 
         # Initialize Image and Masks
@@ -86,7 +87,7 @@ class saber2D:
 
     @torch.inference_mode()
     def segment_image(self,
-        image: np.ndarray,
+        image0: np.ndarray,
         display: bool = True,
         use_sliding_window: bool = False,
         text_prompt: Optional[str] = None,
@@ -99,6 +100,11 @@ class saber2D:
             display: Whether to display the result
             use_sliding_window: Whether to use sliding window (True) or single inference (False)
         """
+
+        # Normalize to Correct Size
+        image = image0.copy()
+        out_rgb = True if self.adapter_cfg == 'sam2' else False
+        image = prep.prepare(image, to_rgb=out_rgb)
 
         # Run Segmentation
         if use_sliding_window:
@@ -147,7 +153,7 @@ class saber2D:
 
         # Optional: Save Save Segmentation to PNG or Plot Segmentation with Matplotlib
         if display:
-            viz.display_mask_list(image, self.masks, self.save_button)
+            viz.display_mask_list(image0, self.masks, self.save_button)
 
         # Return the Masks
         self.image = image

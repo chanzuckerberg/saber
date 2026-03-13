@@ -126,9 +126,9 @@ class SAM3Adapter(BaseAdapter):
                 device=str(self.device),
             )
 
-        image_rgb = _to_rgb_float32(image)
-        state = self._processor.set_image(image_rgb)
-        output = self._processor.set_text_prompt(state, prompt=prompt)
+        # image_rgb = _to_rgb_float32(image)
+        state = self._processor.set_image(image)
+        output = self._processor.set_text_prompt(state=state, prompt=prompt)
         return _sam3_output_to_mask_list(output, self._config.min_mask_area)
 
     # ------------------------------------------------------------------
