@@ -1,10 +1,12 @@
 from abc import ABC, abstractmethod
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 from typing import Literal, Optional, Union, Iterator, Tuple, Any, Dict, List
 import numpy as np
 
 
 class SAM2AdapterConfig(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     model_type: Literal["sam2"] = "sam2"
     cfg: str = Field("small", description="tiny / small / base / large")
     checkpoint: Optional[str] = None
@@ -12,6 +14,16 @@ class SAM2AdapterConfig(BaseModel):
     light_modality: bool = False
     amg_cfg: Optional[Any] = None  # cfgAMG instance; None → cfgAMG() defaults
     min_mask_area: int = 50
+    classifier: Optional[Any] = None  # Predictor; auto-fills cfg + amg_cfg when provided
+
+    @model_validator(mode='after')
+    def _derive_from_classifier(self) -> 'SAM2AdapterConfig':
+        if self.classifier is not None and self.amg_cfg is None:
+            from saber.adapters.sam2.amg import cfgAMG
+            amg_params = self.classifier.config['amg_params']
+            self.cfg = amg_params.get('sam2_cfg', self.cfg)
+            self.amg_cfg = cfgAMG(**amg_params)
+        return self
 
     @field_validator("cfg")
     @classmethod

@@ -12,21 +12,19 @@ class propagationSegmenter(volumeSegmenter):
 
     def __init__(self,
         deviceID: int = 0,
-        classifier = None,
+        cfg: Optional[AdapterConfig] = None,
+        amg_cfg: Optional[cfgAMG] = None,
         target_class: int = 1,
-        cfg: cfgAMG = None,
-        light_modality: bool = False,
         min_mask_area: int = 100,
         min_rel_box_size: float = 0.025,
-        adapter_cfg: Optional[AdapterConfig] = None,
     ):
         """
         Initialize the propagationSegmenter
         """
         super().__init__(
-            deviceID, classifier, target_class, cfg,
-            min_mask_area, min_rel_box_size, light_modality,
-            adapter_cfg=adapter_cfg,
+            deviceID=deviceID, cfg=cfg, amg_cfg=amg_cfg,
+            target_class=target_class, min_mask_area=min_mask_area,
+            min_rel_box_size=min_rel_box_size,
         )
         self.ini_depth = 10 # Default spacing between slices to segment
 

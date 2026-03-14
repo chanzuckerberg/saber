@@ -19,7 +19,6 @@ class saber2D:
     def __init__(self,
         deviceID: int = 0,
         cfg: Optional[AdapterConfig] = None,
-        classifier = None,
         amg_cfg: Optional[cfgAMG] = None,
         min_mask_area: int = 50,
         window_size: int = 256,
@@ -30,6 +29,10 @@ class saber2D:
         """
         if cfg is None and amg_cfg is None:
             raise "Either Provide an AdapterConfig or AMG Config!"
+
+        # Wrap bare amg_cfg into a full config
+        if cfg is None:
+            cfg = SAM2AdapterConfig(amg_cfg=amg_cfg, min_mask_area=min_mask_area)
 
         # Minimum Mask Area to Ignore
         self.min_mask_area = min_mask_area
@@ -43,23 +46,14 @@ class saber2D:
         self.deviceID = deviceID
 
         # Initialize Domain Expert Classifier for Filtering False Positives
-        if classifier:
-            self.classifier = classifier
-            self.batchsize = 32
-            if hasattr(self.classifier, 'eval'):
-                self.classifier.eval()
-        else:
+        _classifier = getattr(cfg, 'classifier', None)
+        if _classifier is None:
             self.classifier = None
-            self.batchsize = None
-
-        # When a trained classifier is provided, override AMG params with its training config
-        # (only applies to SAM2 — SAM3 uses text detection regardless)
-        if classifier and isinstance(cfg, SAM2AdapterConfig):
-            amg_params = classifier.config['amg_params']
-            cfg = cfg.model_copy(update={
-                'amg_cfg': cfgAMG(**amg_params),
-                'cfg': amg_params.get('sam2_cfg', cfg.cfg),
-            })
+            self.batchsize = None     
+        else:
+            self.classifier = _classifier
+            self.batchsize = 32
+            self.classifier.eval()       
 
         self.adapter_cfg = cfg
         self.adapter = get_adapter(cfg, self.device)
@@ -80,7 +74,7 @@ class saber2D:
         display: bool = False,
         use_sliding_window: bool = False,
     ) -> list:
-        if target_class is not None:
+        if target_class:
             self.target_class = target_class
         return self.segment_image(
             image, display=display,
@@ -238,18 +232,15 @@ class saber2D:
     
 class saber3D(saber2D):
     def __init__(self,
-        cfg: AdapterConfig = None,
         deviceID: int = 0,
-        classifier = None,
-        target_class: int = 1,
+        cfg: AdapterConfig = None,
         amg_cfg: cfgAMG = None,
+        min_mask_area: int = 50,
     ):
         super().__init__(
-            cfg=cfg,
             deviceID=deviceID,
-            classifier=classifier,
-            target_class=target_class,
-            amg_cfg=amg_cfg
+            cfg=cfg, amg_cfg=amg_cfg,
+            min_mask_area=min_mask_area,
         )
 
         # Alias for downstream 3D segmentation code
@@ -270,7 +261,7 @@ class saber3D(saber2D):
         # Filter Threshold for Confidence
         self.filter_threshold = 0.5
         
-    def propagate(self, mask_shape):
+    def propagate(self, mask_shape, target_class: Optional[int] = 1):
         """Seed masks into the adapter and propagate bidirectionally."""
         if isinstance(self.masks[0], dict):
             mask_arrays = [m['segmentation'] for m in self.masks]

@@ -2,25 +2,24 @@ from saber.segmenters.tomo import cryoTomoSegmenter, multiDepthTomoSegmenter
 from saber.segmenters.micro import cryoMicroSegmenter
 from saber.classifier.models import common
 from saber.adapters.sam2.amg import cfgAMG
-from saber.adapters.base import AdapterConfig
-from typing import Any, Optional
+from saber.adapters.base import SAM2AdapterConfig
 import torch
 
 
 def micrograph_workflow(
     gpu_id:int, cfg:cfgAMG, model_weights:str, model_config:str, target_class:int):
     """Load micrograph segmentation models once per GPU"""
-    
+
     # Load models
     torch.cuda.set_device(gpu_id)
     predictor = common.get_predictor(model_weights, model_config, gpu_id)
+    adapter_cfg = SAM2AdapterConfig(classifier=predictor, amg_cfg=cfg)
     segmenter = cryoMicroSegmenter(
-        cfg=cfg,
+        cfg=adapter_cfg,
         deviceID=gpu_id,
-        classifier=predictor,
-        target_class=target_class
+        target_class=target_class,
     )
-    
+
     return {
         'segmenter': segmenter
     }
@@ -30,28 +29,26 @@ def tomogram_workflow(
     model_weights:str, model_config:str,
     target_class:int,
     num_slabs:int,
-    adapter_cfg: Optional[AdapterConfig] = None,
     ):
     """Load tomogram segmentation models once per GPU"""
 
     # Load models
     torch.cuda.set_device(gpu_id)
     predictor = common.get_predictor(model_weights, model_config, gpu_id)
+    cfg_obj = SAM2AdapterConfig(classifier=predictor)
     if num_slabs > 1:
         segmenter = multiDepthTomoSegmenter(
+            cfg=cfg_obj,
             deviceID=gpu_id,
-            classifier=predictor,
             target_class=target_class,
-            adapter_cfg=adapter_cfg,
         )
     else:
         segmenter = cryoTomoSegmenter(
+            cfg=cfg_obj,
             deviceID=gpu_id,
-            classifier=predictor,
             target_class=target_class,
-            adapter_cfg=adapter_cfg,
         )
-    
+
     return {
         'predictor': predictor,
         'segmenter': segmenter
@@ -62,7 +59,7 @@ def base_microsegmenter(gpu_id:int, cfg:cfgAMG):
 
     # Load models
     torch.cuda.set_device(gpu_id)
-    segmenter = cryoMicroSegmenter( cfg=cfg, deviceID=gpu_id )
+    segmenter = cryoMicroSegmenter(amg_cfg=cfg, deviceID=gpu_id)
     return {
         'segmenter': segmenter
     }
@@ -72,7 +69,7 @@ def base_tomosegmenter(gpu_id:int, cfg:cfgAMG):
 
     # Load models
     torch.cuda.set_device(gpu_id)
-    segmenter = cryoTomoSegmenter( cfg=cfg, deviceID=gpu_id )
+    segmenter = cryoTomoSegmenter(amg_cfg=cfg, deviceID=gpu_id)
     return {
         'segmenter': segmenter
     }

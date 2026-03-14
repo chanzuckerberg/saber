@@ -14,17 +14,16 @@ import torch
 class cryoTomoSegmenter(saber3D):
     def __init__(self,
         deviceID: int = 0,
-        classifier = None,
-        target_class: int = 1,
         cfg: Optional[AdapterConfig] = None,
         amg_cfg: Optional[cfgAMG] = None,
+        min_mask_area: int = 50,
     ):
         """
         Initialize the cryoTomoSegmenter
         """
         super().__init__(
-            cfg, deviceID, classifier, target_class, 
-            amg_cfg
+            deviceID=deviceID, cfg=cfg, amg_cfg=amg_cfg,
+            min_mask_area=min_mask_area,
         )
 
         # Threshold for Certainty Aware Distillation
@@ -36,7 +35,8 @@ class cryoTomoSegmenter(saber3D):
         slab_thickness: int = 10, 
         zSlice: Optional[int] = None, 
         display: bool = True,
-        text: Optional[str] = None ):
+        text: Optional[str] = None,
+        target_class: Optional[int] = 1 ):
         """
         Segment a 2D image using the Video Predictor
         """
@@ -53,7 +53,10 @@ class cryoTomoSegmenter(saber3D):
         self.image = preprocess.project_tomogram(self.vol, zSlice, slab_thickness)
 
         # Segment Slab 
-        self.segment_image(self.image, display = display, text_prompt=text)
+        self.segment_image(
+            self.image, display = display, 
+            text_prompt=text, target_class=target_class,
+        )
 
         return self.masks
 
@@ -149,18 +152,18 @@ class cryoTomoSegmenter(saber3D):
 class multiDepthTomoSegmenter(cryoTomoSegmenter):
     def __init__(self,
         deviceID: int = 0,
-        classifier = None,
+        cfg: Optional[AdapterConfig] = None,
+        amg_cfg: Optional[cfgAMG] = None,
         target_class: int = 1,
-        cfg: cfgAMG = None,
         min_mask_area: int = 100,
         min_rel_box_size: float = 0.025,
-        adapter_cfg: Optional[AdapterConfig] = None,
     ):
         """
         Initialize the multiDepthTomoSegmenter
         """
-        super().__init__(deviceID, classifier, target_class, cfg, min_mask_area,
-                         min_rel_box_size, adapter_cfg=adapter_cfg)
+        self.min_rel_box_size = min_rel_box_size
+        super().__init__(deviceID=deviceID, cfg=cfg, amg_cfg=amg_cfg,
+                         target_class=target_class, min_mask_area=min_mask_area)
 
         if target_class < 1: 
             print('[Error]: Multi-Depth Tomogram Segmenter only supports Single-Class Segmentation currently.')

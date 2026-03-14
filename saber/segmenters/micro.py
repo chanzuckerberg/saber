@@ -1,30 +1,25 @@
 from saber.filters.downsample import FourierRescale2D
 from saber.segmenters.base import saber2D
 from saber.adapters.sam2.amg import cfgAMG
-from saber.adapters.base import AdapterConfig, SAM2AdapterConfig
+from saber.adapters.base import AdapterConfig
 from typing import Any, Optional
 import torch
 
 class cryoMicroSegmenter(saber2D):
     def __init__(self,
         deviceID: int = 0,
-        classifier = None,
-        target_class: int = 1,
+        cfg: Optional[AdapterConfig] = None,
+        amg_cfg: Optional[cfgAMG] = None,
         min_mask_area: int = 50,
         window_size: int = 256,
         overlap_ratio: float = 0.25,
-        cfg: cfgAMG = None,          # kept for backward compatibility
-        adapter_cfg: Optional[AdapterConfig] = None,
     ):
         """
         Class for Segmenting Micrographs
         """
-        # Convert legacy cfg param to adapter_cfg if needed
-        if adapter_cfg is None and cfg is not None:
-            adapter_cfg = SAM2AdapterConfig(
-                min_mask_area=min_mask_area,
-            )
-        super().__init__(cfg=adapter_cfg, deviceID=deviceID, classifier=classifier, target_class=target_class, min_mask_area=min_mask_area, window_size=window_size, overlap_ratio=overlap_ratio)
+        super().__init__(cfg=cfg, amg_cfg=amg_cfg, deviceID=deviceID,
+                         min_mask_area=min_mask_area, window_size=window_size,
+                         overlap_ratio=overlap_ratio)
 
         # Max pixels for single inference
         self.max_pixels = 1280

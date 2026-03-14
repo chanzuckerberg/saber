@@ -7,21 +7,21 @@ import torch
 class volumeSegmenter(saber3D):
     def __init__(self,
         deviceID: int = 0,
-        classifier = None,
+        cfg: Optional[AdapterConfig] = None,
+        amg_cfg: Optional[cfgAMG] = None,
         target_class: int = 1,
-        cfg: cfgAMG = None,
         min_mask_area: int = 100,
         min_rel_box_size: float = 0.025,
-        light_modality: bool = False,
-        adapter_cfg: Optional[AdapterConfig] = None,
     ):
         """
         Initialize the generalSegmenter
         """
+        self.target_class = target_class
+        self.min_rel_box_size = min_rel_box_size
         super().__init__(
-            deviceID, classifier, target_class, cfg,
-            min_mask_area, min_rel_box_size, light_modality,
-            adapter_cfg=adapter_cfg)
+            deviceID=deviceID, cfg=cfg, amg_cfg=amg_cfg,
+            min_mask_area=min_mask_area,
+        )
 
     @torch.inference_mode()
     def segment_3d(
