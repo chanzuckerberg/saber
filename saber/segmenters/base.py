@@ -52,8 +52,7 @@ class saber2D:
             self.batchsize = None     
         else:
             self.classifier = _classifier
-            self.batchsize = 32
-            self.classifier.eval()       
+            self.batchsize = 32 
 
         self.adapter_cfg = cfg
         self.adapter = get_adapter(cfg, self.device)
@@ -74,12 +73,11 @@ class saber2D:
         display: bool = False,
         use_sliding_window: bool = False,
     ) -> list:
-        if target_class:
-            self.target_class = target_class
         return self.segment_image(
             image, display=display,
             use_sliding_window=use_sliding_window,
-            text_prompt=text, threshold=threshold 
+            text_prompt=text, threshold=threshold,
+            target_class=target_class,
         )
 
     @torch.inference_mode()
@@ -89,6 +87,7 @@ class saber2D:
         use_sliding_window: bool = False,
         text_prompt: Optional[str] = None,
         threshold: Optional[float] = 0.5,
+        target_class: Optional[int] = 1,
     ):
         """
         Segment image using sliding window approach
@@ -98,8 +97,9 @@ class saber2D:
             display: Whether to display the result
             use_sliding_window: Whether to use sliding window (True) or single inference (False)
         """
-
+        
         # Run Segmentation
+        self.target_class = target_class
         if use_sliding_window:
 
             # Create Full Mask

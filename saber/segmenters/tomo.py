@@ -63,15 +63,20 @@ class cryoTomoSegmenter(saber3D):
     def segment(
         self, 
         vol,
-        slab_thickness: int,
+        slab_thickness: int = 10,
         zSlice: int = None,
+        text: Optional[str] = None,
+        target_class: Optional[int] = 1,
         save_run: str = None, 
         display: bool = False, 
     ):
         """
         Segment a 3D tomogram using the Video Predictor
         """
-        return self.segment_vol(vol, slab_thickness, zSlice, save_run, display)
+        return self.segment_vol(
+            vol, slab_thickness, zSlice, 
+            text, target_class, save_run, display
+        )
 
     @torch.inference_mode()
     def segment_vol(
@@ -79,6 +84,8 @@ class cryoTomoSegmenter(saber3D):
         vol,
         slab_thickness: int,
         zSlice: int = None,
+        text: Optional[str] = None,
+        target_class: Optional[int] = 1,
         save_run: str = None, 
         display: bool = False, 
     ):  
@@ -92,7 +99,10 @@ class cryoTomoSegmenter(saber3D):
         self.is_tomogram_mode = True        
 
         # Segment Initial Slab 
-        self.segment_slab(vol, slab_thickness, zSlice, display=False)
+        self.segment_slab(
+            vol, slab_thickness, zSlice, display=False,
+            text=text, target_class=target_class
+        )
 
         # Optional: Save Save Segmentation to PNG or Plot Segmentation with Matplotlib
         if save_mask and save_run is not None:
