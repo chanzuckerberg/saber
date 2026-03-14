@@ -23,7 +23,7 @@ def segment_tomogram_interactive(
     Interactive version - loads models fresh and can display results
     """
 
-    from saber.segmenters.tomo import cryoTomoSegmenter, multiDepthTomoSegmenter
+    from saber.segmenters.tomo import tomoSegmenter, multiDepthTomoSegmenter
     from saber.entry_points.inference_core import segment_tomogram_core
     from saber.classifier.models import common
     import torch
@@ -44,7 +44,7 @@ def segment_tomogram_interactive(
         )
     else:
         print(f'Using Single-Depth Tomogram Segmenter.')
-        segmenter = cryoTomoSegmenter(
+        segmenter = tomoSegmenter(
             deviceID=gpu_id,
             classifier=classifier,
             target_class=target_class
@@ -119,11 +119,12 @@ def run_slab_seg(
     crop_n_points: int,
     use_m2m: bool,
     multimask: bool,
+    text_prompt: str = None,
     ):
     """
     Segment a single slab of a tomogram.
     """
-    from saber.segmenters.tomo import cryoTomoSegmenter
+    from saber.segmenters.tomo import tomoSegmenter
     from saber.classifier.models import common
     from copick_utils.io import readers
     from saber.adapters.sam2.amg import cfgAMG
@@ -150,8 +151,8 @@ def run_slab_seg(
     if vol is None: # No Tomogram Found - Cancel Early
         return
 
-    # Create an instance of cryoTomoSegmenter
-    segmenter = cryoTomoSegmenter(
+    # Create an instance of tomoSegmenter
+    segmenter = tomoSegmenter(
         cfg=cfg,
         classifier=predictor,         # if you have a classifier; otherwise, leave as None
         target_class=target_class     # desired target class if using a classifier
@@ -164,7 +165,7 @@ def run_slab_seg(
 def run_tomo_seg(   # run_tomograms
     config: str,
     run_ids: str,
-    voxel_size: float, 
+    voxel_size: float,
     tomo_alg: str,
     seg_name: str,
     seg_session_id: str,
@@ -172,7 +173,8 @@ def run_tomo_seg(   # run_tomograms
     model_config: str,
     model_weights: str,
     target_class: int,
-    multi_slab: str
+    multi_slab: str,
+    text_prompt: str = None,
     ):
     """
     Segment a tomogram or multiple tomograms.
@@ -285,13 +287,13 @@ def run_tomo_seg(   # run_tomograms
 @amg()
 def slab(
     config: str,
-    run_id: str, 
-    voxel_size: int, 
+    run_id: str,
+    voxel_size: int,
     tomo_alg: str,
     slab_thickness: int,
     model_weights: str,
     model_config: str,
-    target_class: int, 
+    target_class: int,
     sam2_cfg: str,
     npoints: int,
     points_per_batch: int,
@@ -300,7 +302,8 @@ def slab(
     box_nms_thresh: float,
     crop_n_points: int,
     use_m2m: bool,
-    multimask: bool,    
+    multimask: bool,
+    text_prompt: str,
     ):
     """
     Segment a single slab of a tomogram.
@@ -308,9 +311,9 @@ def slab(
 
     print('🎨 Running Saber Slab Segmentation...')
     run_slab_seg(
-        config, run_id, voxel_size, tomo_alg, slab_thickness, model_weights, model_config, target_class, 
-        sam2_cfg, npoints, points_per_batch, pred_iou_thresh, crop_n_layers, box_nms_thresh, crop_n_points, 
-        use_m2m, multimask
+        config, run_id, voxel_size, tomo_alg, slab_thickness, model_weights, model_config, target_class,
+        sam2_cfg, npoints, points_per_batch, pred_iou_thresh, crop_n_layers, box_nms_thresh, crop_n_points,
+        use_m2m, multimask, text_prompt
     )
 
 @click.command(context_settings=cli_context, no_args_is_help=True)
@@ -324,7 +327,7 @@ def slab(
 def tomograms(
     config: str,
     run_ids: str,
-    voxel_size: float, 
+    voxel_size: float,
     tomo_alg: str,
     seg_name: str,
     seg_session_id: str,
@@ -333,6 +336,7 @@ def tomograms(
     model_weights: str,
     target_class: int,
     multi_slab: str,
+    text_prompt: str,
     ):
     """
     Generate a 3D Segmentation of a tomogram.
@@ -340,7 +344,7 @@ def tomograms(
 
     print('🚀 Running Saber Tomogram Segmentation...')
     run_tomo_seg(
-        config, run_ids, voxel_size, tomo_alg, 
-        seg_name, seg_session_id, slab_thickness, 
-        model_config, model_weights, target_class, multi_slab
+        config, run_ids, voxel_size, tomo_alg,
+        seg_name, seg_session_id, slab_thickness,
+        model_config, model_weights, target_class, multi_slab, text_prompt
     )

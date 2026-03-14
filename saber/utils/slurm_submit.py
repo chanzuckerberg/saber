@@ -93,9 +93,11 @@ def classifier_inputs(func):
         click.option("-mc", "--model-config", type=str,required=False, default=None,
                      help="Path to Classifier Model Config"),
         click.option("-mw", "--model-weights", type=str, required=False, default=None,
-                    help="Path to Classifier model trained weights."),    
+                    help="Path to Classifier model trained weights."),
         click.option("-tc", "--target-class", type=int, required=False, default=-1,
-                    help="Target Class for Segmentation. When set to -1, the model performs semantic segmentation.\nWhen set to a positive integer, the model performs instance segmentation for the desired class..")
+                    help="Target Class for Segmentation. When set to -1, the model performs semantic segmentation.\nWhen set to a positive integer, the model performs instance segmentation for the desired class.."),
+        click.option("-tp", "--text-prompt", type=str, required=False, default=None,
+                    help="Text description of the target structure (e.g. 'mitochondria'). When provided, segmentation will run with SAM3 using open-vocabulary text-guided detection instead of the classifier with SAM2."),
     ]
     for option in reversed(options):  # Add options in reverse order to preserve correct order
         func = option(func)

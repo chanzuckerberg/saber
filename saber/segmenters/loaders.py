@@ -1,4 +1,4 @@
-from saber.segmenters.tomo import cryoTomoSegmenter, multiDepthTomoSegmenter
+from saber.segmenters.tomo import tomoSegmenter, multiDepthTomoSegmenter
 from saber.segmenters.micro import cryoMicroSegmenter
 from saber.classifier.models import common
 from saber.adapters.sam2.amg import cfgAMG
@@ -43,7 +43,7 @@ def tomogram_workflow(
             target_class=target_class,
         )
     else:
-        segmenter = cryoTomoSegmenter(
+        segmenter = tomoSegmenter(
             cfg=cfg_obj,
             deviceID=gpu_id,
             target_class=target_class,
@@ -69,7 +69,7 @@ def base_tomosegmenter(gpu_id:int, cfg:cfgAMG):
 
     # Load models
     torch.cuda.set_device(gpu_id)
-    segmenter = cryoTomoSegmenter(amg_cfg=cfg, deviceID=gpu_id)
+    segmenter = tomoSegmenter(amg_cfg=cfg, deviceID=gpu_id)
     return {
         'segmenter': segmenter
     }

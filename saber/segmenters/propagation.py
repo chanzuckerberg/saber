@@ -1,4 +1,4 @@
-from saber.segmenters.general import volumeSegmenter
+from saber.segmenters.base import saber3D
 from saber.utils import preprocessing
 from saber.segmenters import utils
 from saber.adapters.sam2.amg import cfgAMG
@@ -8,7 +8,7 @@ from tqdm import tqdm
 import numpy as np
 import torch
 
-class propagationSegmenter(volumeSegmenter):
+class propagationSegmenter(saber3D):
 
     def __init__(self,
         deviceID: int = 0,
@@ -18,28 +18,29 @@ class propagationSegmenter(volumeSegmenter):
         min_mask_area: int = 100,
         min_rel_box_size: float = 0.025,
     ):
-        """
-        Initialize the propagationSegmenter
-        """
+        self.target_class = target_class
+        self.min_rel_box_size = min_rel_box_size
         super().__init__(
             deviceID=deviceID, cfg=cfg, amg_cfg=amg_cfg,
-            target_class=target_class, min_mask_area=min_mask_area,
-            min_rel_box_size=min_rel_box_size,
+            min_mask_area=min_mask_area,
         )
-        self.ini_depth = 10 # Default spacing between slices to segment
+        self.ini_depth = 10
+
+    @torch.inference_mode()
+    def segment_3d(self, vol, masks, ann_frame_idx: int = None, show_segmentations: bool = False):
+        if not self._vol_loaded:
+            self.video_predictor.set_volume(vol)
+            self._vol_loaded = True
+
+        self.masks = masks
+        nx = vol.shape[0]
+        ny, nz = self.masks[0].shape[0], self.masks[0].shape[1]
+        self.ann_frame_idx = ann_frame_idx if ann_frame_idx is not None else nx // 2
+        return self.propagate((nx, ny, nz))
 
     def segment(self, volume: np.ndarray, ini_depth: int, nframes: int = None):
-        """
-        Segment the volume
-
-        Args:
-            volume: The volume to segment
-        """
-        # Update ini_depth and nframes attributes
         self.ini_depth = ini_depth
         self.nframes = nframes
-
-        # Segment the Volume
         if self.target_class > 0 or self.classifier is None:
             return self.single_segment(volume)
         else:
@@ -47,101 +48,44 @@ class propagationSegmenter(volumeSegmenter):
 
     @torch.inference_mode()
     def single_segment(self, volume: np.ndarray):
-        """
-        Segment the volume with a single class or without the classifier
-
-        Args:
-            volume: The volume to segment
-            ini_depth: The spacing between slices to segment
-        """
-
-        # Single 3D array instead of accumulating 4D
         final_masks = np.zeros(volume.shape, dtype=np.uint16)
-
-        # Main Loop
         for ii in tqdm(range(2, volume.shape[0], self.ini_depth)):
-
-            # Set image and segment
-            im = volume[ii]
-            im = self._preprocess(im)            
-            masks = self.segment_image(im, display_image=False)
-            
+            im = preprocessing.prepare(volume[ii], to_rgb=True)
+            masks = self.segment_image(im, display=False)
             if len(masks) == 0:
                 continue
-                
-            # Extract mask list
             mask_list = [m['segmentation'] for m in masks]
-            
-            # 3D propagation
             masks3d = self.segment_3d(volume, mask_list, ann_frame_idx=ii)
-            
-            # Convert to binary if target class specified
             if self.target_class > 0:
                 masks3d = (masks3d > 0).astype(np.uint8)
-            
-            # Update final masks with maximum operation (in-place)
             np.maximum(final_masks, masks3d, out=final_masks)
-
-        # Separate the masks to instances
-        final_masks = utils.separate_masks(final_masks)
-
-        return final_masks
+        return utils.separate_masks(final_masks)
 
     @torch.inference_mode()
     def multiclass_segment(self, volume: np.ndarray):
-        """
-        Segment the volume with multiple classes using the classifier
-
-        Args:
-            volume: The volume to segment
-        """
-        # Instead of 4D array, use 3D for current best class and confidence
         final_masks = np.zeros(volume.shape, dtype=np.uint16)
         max_confidence = np.zeros(volume.shape, dtype=np.float32)
-
-        # Main Loop
         for ii in tqdm(range(2, volume.shape[0], self.ini_depth)):
-
-            # Call mask generator directly
-            im = volume[ii]
-            im = self._preprocess(im)
+            im = preprocessing.prepare(volume[ii], to_rgb=True)
             raw_masks = self.adapter.segment_image_2d(im)
-            
-            # Filter small masks
             raw_masks = [mask for mask in raw_masks if mask['area'] >= self.min_mask_area]
-            
             if len(raw_masks) == 0:
                 continue
-            
-            # Get classifier predictions
             mask_arrays = np.array([m['segmentation'].astype(np.uint8) for m in raw_masks])
             predictions = self.classifier.batch_predict(im[:,:,0], mask_arrays, self.batchsize)
-            
             predicted_classes = np.argmax(predictions, axis=1)
-            
-            # Only process non-background masks
             valid_indices = predicted_classes > 0
             if not np.any(valid_indices):
                 continue
-            
-            # Prepare masks for 3D propagation
             mask_list = [raw_masks[i]['segmentation'] for i, valid in enumerate(valid_indices) if valid]
             valid_predictions = predictions[valid_indices]
             valid_classes = predicted_classes[valid_indices]
-            
-            # 3D propagation: Call the parent's segment through the wrapper
             masks3d = self.segment_3d(volume, mask_list, ann_frame_idx=ii)
-
-            # Calculate frame range
-
-            # Update with maximum confidence approach
             for idx, (probs, class_id) in enumerate(zip(valid_predictions, valid_classes)):
                 mask_region = (masks3d == (idx + 1))
-
                 if np.any(mask_region):
                     confidence = probs[class_id]
                     update_mask = mask_region & (confidence > max_confidence)
                     final_masks[update_mask] = class_id
                     max_confidence[update_mask] = confidence
-
         return final_masks

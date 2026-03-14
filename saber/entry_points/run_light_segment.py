@@ -33,15 +33,16 @@ def light(
     model_config: str,
     target_class: int,
     scale_factor: float,
+    text_prompt: str,
     ):
     """
     Segment features from light microscopy movies (e.g. cells under an optical microscope).
-    """ 
+    """
 
     run_light_segment(
-        input, output, ini_depth, nframes, 
-        model_weights, model_config, 
-        target_class, scale_factor
+        input, output, ini_depth, nframes,
+        model_weights, model_config,
+        target_class, scale_factor, text_prompt
     )
 
 
@@ -54,6 +55,7 @@ def run_light_segment(
     model_config: str,
     target_class: int,
     scale_factor: float,
+    text_prompt: str = None,
 ):
     """
     Segment a Light Movie

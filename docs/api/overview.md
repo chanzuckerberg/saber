@@ -22,7 +22,7 @@ SABER's API is built around three main components:
 The core segmentation engines that handle SAM2 integration and 3D propagation:
 
 - **`cryoMicroSegmenter`** - 2D micrograph segmentation with SAM2
-- **`cryoTomoSegmenter`** - 3D tomogram segmentation with video propagation
+- **`tomoSegmenter`** - 3D tomogram segmentation with video propagation
 - **`saber2D`** - Base class for 2D segmentation workflows
 - **`saber3D`** - Base class for 3D segmentation workflows
 
@@ -103,10 +103,10 @@ classifier = common.get_predictor(
 ### **3D Propagation**
 ```python
 # Automatic 3D segmentation from 2D annotations
-from saber.segmenters.tomo import cryoTomoSegmenter
+from saber.segmenters.tomo import tomoSegmenter
 from saber.adapters.base import SAM2AdapterConfig
 
-segmenter = cryoTomoSegmenter(adapter_cfg=SAM2AdapterConfig(cfg="large"))
+segmenter = tomoSegmenter(adapter_cfg=SAM2AdapterConfig(cfg="large"))
 vol_masks = segmenter.segment(vol, slab_thickness=32)
 ```
 

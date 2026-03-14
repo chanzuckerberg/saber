@@ -95,7 +95,8 @@ def micrographs(
     box_nms_thresh: float,
     crop_n_points: int,
     use_m2m: bool,
-    multimask: bool,    
+    multimask: bool,
+    text_prompt: str,
     ):
     """
     Segment a single micrograph or all micrographs in a folder.
@@ -103,10 +104,10 @@ def micrographs(
 
     print('🎨 Starting micrograph segmentation...')
     run_micrograph_segment(
-        input, output, model_weights, model_config, target_class, 
+        input, output, model_weights, model_config, target_class,
         sliding_window, target_resolution, scale_factor, sam2_cfg,
-        npoints, points_per_batch, pred_iou_thresh, crop_n_layers, 
-        box_nms_thresh, crop_n_points, use_m2m, multimask
+        npoints, points_per_batch, pred_iou_thresh, crop_n_layers,
+        box_nms_thresh, crop_n_points, use_m2m, multimask, text_prompt
     )
 
 def run_micrograph_segment(
@@ -126,7 +127,8 @@ def run_micrograph_segment(
     box_nms_thresh: float,
     crop_n_points: int,
     use_m2m: bool,
-    multimask: bool,    
+    multimask: bool,
+    text_prompt: str = None,
     ):
     """
     Segment a single micrograph or all micrographs in a folder.

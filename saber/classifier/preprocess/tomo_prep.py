@@ -15,7 +15,7 @@ def segment(segmenter, vol, slab_thickness, zSlice):
 
     # Produce Initialial Segmentations with SAM2
     segmenter.segment_slab(
-        vol, slab_thickness, display_image=False, zSlice=zSlice)
+        vol, slab_thickness, display=False, zSlice=zSlice)
     (image0, masks_list) = (segmenter.image0, segmenter.masks)
     masks_list = sorted(masks_list, key=lambda mask: mask['area'], reverse=False)
     
@@ -43,7 +43,7 @@ def extract_sam2_candidates(
 
     # Get the Global Zarr Writer
     zwriter = zarr_writer.get_zarr_writer(output)
-    zwriter.set_dict_attr('amg', segmenter.cfg)
+    zwriter.set_dict_attr('amg', segmenter.adapter_cfg.amg_cfg.to_dict())
 
     # Get Tomogram
     vol = readers.tomogram(run, voxel_size, tomogram_algorithm)

@@ -11,7 +11,7 @@ from tqdm import tqdm
 import numpy as np
 import torch
 
-class cryoTomoSegmenter(saber3D):
+class tomoSegmenter(saber3D):
     def __init__(self,
         deviceID: int = 0,
         cfg: Optional[AdapterConfig] = None,
@@ -19,7 +19,7 @@ class cryoTomoSegmenter(saber3D):
         min_mask_area: int = 50,
     ):
         """
-        Initialize the cryoTomoSegmenter
+        Initialize the tomoSegmenter
         """
         super().__init__(
             deviceID=deviceID, cfg=cfg, amg_cfg=amg_cfg,
@@ -159,7 +159,7 @@ class cryoTomoSegmenter(saber3D):
         self.image = image
 
 
-class multiDepthTomoSegmenter(cryoTomoSegmenter):
+class multiDepthTomoSegmenter(tomoSegmenter):
     def __init__(self,
         deviceID: int = 0,
         cfg: Optional[AdapterConfig] = None,
@@ -226,9 +226,9 @@ class multiDepthTomoSegmenter(cryoTomoSegmenter):
             
             # Segment this slab
             masks3d = self.segment_vol(
-                vol, slab_thickness, 
-                zSlice=slab_center, 
-                show_segmentations=False
+                vol, slab_thickness,
+                zSlice=slab_center,
+                display=False
             )        
             if masks3d is None: # Skip if No Masks Found
                 continue

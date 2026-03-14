@@ -68,7 +68,7 @@ def _to_rgb_float32(image: np.ndarray) -> np.ndarray:
 
 def _preprocess(image: np.ndarray) -> np.ndarray:
     """
-    Apply the same preprocessing used in cryoTomoSegmenter.generate_slab:
+    Apply the same preprocessing used in tomoSegmenter.generate_slab:
       1. Local contrast normalisation (removes background variation)
       2. Min-max normalisation to [0, 1]
       3. Grayscale → RGB

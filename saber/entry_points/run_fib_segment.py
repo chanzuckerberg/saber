@@ -33,15 +33,16 @@ def fib(
     model_config: str,
     target_class: int,
     scale_factor: float,
+    text_prompt: str,
     ):
     """
     Segment a Fib Volume
     """
 
     run_fib_segment(
-        input, output, ini_depth, nframes, 
-        model_weights, model_config, 
-        target_class, scale_factor
+        input, output, ini_depth, nframes,
+        model_weights, model_config,
+        target_class, scale_factor, text_prompt
     )
 
 
@@ -54,6 +55,7 @@ def run_fib_segment(
     model_config: str,
     target_class: int,
     scale_factor: float,
+    text_prompt: str = None,
 ):
     """
     Segment a Fib Volume

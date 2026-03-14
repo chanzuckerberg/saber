@@ -1,6 +1,6 @@
 from saber.segmenters.micro import cryoMicroSegmenter
 from saber.filters.downsample import FourierRescale2D
-from saber.segmenters.tomo import cryoTomoSegmenter
+from saber.segmenters.tomo import tomoSegmenter
 from saber.filters import masks as mask_filters
 from copick_utils.io import writers, readers
 from saber.utils import zarr_writer, io
@@ -54,8 +54,8 @@ def segment_tomogram_core(
     else:
         segment_mask = segmenter.segment(
             vol, slab_thickness,
-            save_run=img_name, 
-            show_segmentations=display_segmentation)
+            save_run=img_name,
+            display=display_segmentation)
 
     # Check if the segment_mask is None
     if segment_mask is None:
@@ -105,7 +105,7 @@ def segment_micrograph_core(
 
     # Get the Global Zarr Writer
     zwriter = zarr_writer.get_zarr_writer(output) 
-    zwriter.set_dict_attr('amg', segmenter.cfg)
+    zwriter.set_dict_attr('amg', segmenter.adapter_cfg.amg_cfg.to_dict())
 
     # Ensure we're on the correct GPU
     torch.cuda.set_device(gpu_id)
@@ -122,7 +122,7 @@ def segment_micrograph_core(
         image = FourierRescale2D.run(image, scale_factor)   
 
     # Produce Initialial Segmentations with SAM2
-    segmenter.segment( image, display_image=False, use_sliding_window=use_sliding_window )
+    segmenter.segment( image, display=False, use_sliding_window=use_sliding_window )
 
     # Convert any numpy array/scalar to Python scalar
     if isinstance(pixel_size, np.ndarray):

@@ -15,7 +15,7 @@ This quickstart guide shows you how to use SABER's API to segment 3D tomograms p
 Before starting, ensure you have SABER installed and import the necessary modules:
 
 ```python
-from saber.segmenters.tomo import cryoTomoSegmenter
+from saber.segmenters.tomo import tomoSegmenter
 from saber.adapters.base import SAM2AdapterConfig
 from saber.classifier.models import common
 from copick_utils.io import readers
@@ -35,11 +35,11 @@ print(f"Volume shape: {vol.shape}")
 ```
 
 ### Step 2:  Initialize the 3D Segmenter and Classifier
-The cryoTomoSegmenter class provides SAM2-based 3D segmentation optimized for tomogram data:
+The tomoSegmenter class provides SAM2-based 3D segmentation optimized for tomogram data:
 
 ```python
 # Create a 3D segmenter with SAM2 video capabilities
-segmenter = cryoTomoSegmenter(
+segmenter = tomoSegmenter(
     adapter_cfg=SAM2AdapterConfig(cfg="large"),  # Model size: tiny, small, base, large
     deviceID=0,                                  # GPU device ID
     min_mask_area=100,                           # Minimum mask area for 3D
@@ -54,7 +54,7 @@ classifier = common.get_predictor(
     model_config="path/to/config.yaml"
 )
 
-segmenter = cryoTomoSegmenter(
+segmenter = tomoSegmenter(
     adapter_cfg=SAM2AdapterConfig(cfg="large"),
     classifier=classifier,
     target_class=1,  # Class ID for your target organelle
