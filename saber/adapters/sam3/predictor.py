@@ -58,24 +58,11 @@ class SAM3Adapter(BaseAdapter):
             device: PyTorch device string (e.g. "cuda", "cuda:1").
         """
 
-        sam3_model = (
-            build_sam3_video_model(
-                checkpoint_path=config.checkpoint_path,
-                load_from_HF=config.load_from_HF,
-                bpe_path=get_sam3_bpe_path(),
-            )
-            .to(device)
-            .eval()
-        )
-
-        # Use the SAM2-compatible tracker directly (as shown in the notebook)
-        self.predictor = sam3_model.tracker
-        self.predictor.backbone = sam3_model.detector.backbone
-
-        self.device = torch.device(device)
         self.preprocessor = TomogramPreprocessor(config.light_modality)
-        self._config = config
+        self.device = torch.device(device)
         self._processor = None
+        self.predictor = None
+        self._config = config
 
         # Internal state — set by set_volume()
         self.inference_state: Optional[Dict[str, Any]] = None
@@ -100,6 +87,7 @@ class SAM3Adapter(BaseAdapter):
         if not prompt:
             raise ValueError("text_prompt required for SAM3 2D segmentation")
 
+        # Build the Sam3Processor if it is not already built
         if self._processor is None:
             from sam3.model_builder import build_sam3_image_model
             from sam3.model.sam3_image_processor import Sam3Processor
@@ -142,6 +130,24 @@ class SAM3Adapter(BaseAdapter):
         Call this once per volume.  After calling set_volume() you can add
         prompts and run segment_volume() without passing state explicitly.
         """
+
+        # Build the SAM3 model if it is not already built
+        if self.predictor is None:
+            sam3_model = (
+                build_sam3_video_model(
+                    checkpoint_path=self._config.checkpoint_path,
+                    load_from_HF=self._config.load_from_HF,
+                    bpe_path=get_sam3_bpe_path(),
+                )
+                .to(self.device)
+                .eval()
+            )
+
+            # Use the SAM2-compatible tracker directly (as shown in the notebook)
+            self.predictor = sam3_model.tracker
+            self.predictor.backbone = sam3_model.detector.backbone
+        
+        # Set the volume shape and frame metrics
         self._vol_shape = tomogram.shape
         self.frame_metrics = {}
         self.inference_state = self._create_inference_state(
