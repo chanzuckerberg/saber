@@ -62,6 +62,7 @@ def run_light_segment(
     """
     from saber.visualization.results import export_movie
     from saber.segmenters.propagation import propagationSegmenter
+    from saber.adapters.base import SAM2AdapterConfig, SAM3AdapterConfig
     from saber.classifier.models import common
     import saber.utils.io as io
     import numpy as np
@@ -76,17 +77,19 @@ def run_light_segment(
     # Load the Classifier Model
     predictor = common.get_predictor(model_weights, model_config)
 
-    # Create an instance of fibSegmenter
-    segmenter = propagationSegmenter(
-        classifier=predictor,
-        target_class=target_class,
-        light_modality = True,
-    )
+    # Build adapter config based on whether text prompt or classifier is used
+    if text_prompt:
+        adapter_cfg = SAM3AdapterConfig(text_prompt=text_prompt)
+    else:
+        adapter_cfg = SAM2AdapterConfig(classifier=predictor, light_modality=True)
+
+    # Create an instance of propagationSegmenter
+    segmenter = propagationSegmenter(cfg=adapter_cfg, target_class=target_class)
     # Assume Mass is Preserved for this type of data
     segmenter.filter_threshold = -1
 
     # Segment the Volume
-    masks = segmenter.segment(volume, ini_depth, nframes)
+    masks = segmenter.segment(volume, ini_depth, nframes, text_prompt=text_prompt)
 
     # (TODO): Save the Masks
     np.save(output, masks)

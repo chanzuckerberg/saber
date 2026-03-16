@@ -14,11 +14,22 @@ class propagationSegmenter(saber3D):
         deviceID: int = 0,
         cfg: Optional[AdapterConfig] = None,
         amg_cfg: Optional[cfgAMG] = None,
-        target_class: int = 1,
         min_mask_area: int = 100,
         min_rel_box_size: float = 0.025,
     ):
-        self.target_class = target_class
+        """
+        Segmenter that combines 2D mask generation with SAM2 3D propagation.
+
+        For each seed slice, generates 2D masks (via classifier or text prompt),
+        then propagates them through the volume using the video predictor.
+
+        Args:
+            deviceID: GPU device index.
+            cfg: Adapter config (SAM2AdapterConfig or SAM3AdapterConfig).
+            amg_cfg: Optional AMG hyperparameters for mask generation.
+            min_mask_area: Minimum pixel area for a mask to be kept.
+            min_rel_box_size: Minimum bounding-box size relative to image width.
+        """
         self.min_rel_box_size = min_rel_box_size
         super().__init__(
             deviceID=deviceID, cfg=cfg, amg_cfg=amg_cfg,
@@ -27,7 +38,20 @@ class propagationSegmenter(saber3D):
         self.ini_depth = 10
 
     @torch.inference_mode()
-    def segment_3d(self, vol, masks, ann_frame_idx: int = None, show_segmentations: bool = False):
+    def segment_3d(self, vol, masks, ann_frame_idx: int = None):
+        """
+        Propagate 2D seed masks through a 3D volume.
+
+        Args:
+            vol: Volume array of shape (nx, ny, nz).
+            masks: List of 2D boolean mask arrays to use as seeds.
+            ann_frame_idx: Slice index where seeds were generated.
+                           Defaults to the middle slice if not provided.
+            display: Unused; reserved for future visualization support.
+
+        Returns:
+            3D mask array of shape (nx, ny, nz) with propagated instance labels.
+        """
         if not self._vol_loaded:
             self.video_predictor.set_volume(vol)
             self._vol_loaded = True
@@ -38,20 +62,53 @@ class propagationSegmenter(saber3D):
         self.ann_frame_idx = ann_frame_idx if ann_frame_idx is not None else nx // 2
         return self.propagate((nx, ny, nz))
 
-    def segment(self, volume: np.ndarray, ini_depth: int, nframes: int = None):
+    def segment(self, volume: np.ndarray, ini_depth: int, nframes: int = None, target_class: int = 1, text_prompt: str = None, display: bool = False):
+        """
+        Top-level entry point for segmenting a volume.
+
+        Routes to single_segment (one target class or text prompt) or
+        multiclass_segment (all classes via classifier, target_class=0).
+
+        Args:
+            volume: 3D array of shape (nx, ny, nz).
+            ini_depth: Stride between seed slices.
+            nframes: Number of frames to propagate around each seed slice.
+            target_class: Class index to keep. 0 retains all non-background classes
+                          (multiclass mode, requires a classifier).
+            text_prompt: Text description used by the SAM3 adapter instead of a classifier.
+
+        Returns:
+            Segmentation mask array of shape (nx, ny, nz).
+        """
         self.ini_depth = ini_depth
         self.nframes = nframes
+        self.target_class = target_class
+        self.display = display
         if self.target_class > 0 or self.classifier is None:
-            return self.single_segment(volume)
+            return self.single_segment(volume, text_prompt=text_prompt)
         else:
             return self.multiclass_segment(volume)
 
     @torch.inference_mode()
-    def single_segment(self, volume: np.ndarray):
+    def single_segment(self, volume: np.ndarray, text_prompt: str = None):
+        """
+        Segment a volume targeting a single class (or any foreground via text prompt).
+
+        For each seed slice, runs segment_image to get 2D masks filtered to
+        target_class, then propagates them through the volume with segment_3d.
+        Results from all seed slices are merged via element-wise max.
+
+        Args:
+            volume: 3D array of shape (nx, ny, nz).
+            text_prompt: Forwarded to segment_image for SAM3-based segmentation.
+
+        Returns:
+            Separated instance mask array of shape (nx, ny, nz).
+        """
         final_masks = np.zeros(volume.shape, dtype=np.uint16)
         for ii in tqdm(range(2, volume.shape[0], self.ini_depth)):
             im = preprocessing.prepare(volume[ii], to_rgb=True)
-            masks = self.segment_image(im, display=False)
+            masks = self.segment_image(im, display=False, target_class=self.target_class, text_prompt=text_prompt)
             if len(masks) == 0:
                 continue
             mask_list = [m['segmentation'] for m in masks]
@@ -63,11 +120,25 @@ class propagationSegmenter(saber3D):
 
     @torch.inference_mode()
     def multiclass_segment(self, volume: np.ndarray):
+        """
+        Segment a volume retaining all predicted classes from the classifier.
+
+        For each seed slice, generates raw 2D masks via the adapter, runs the
+        classifier to predict class labels, keeps all non-background masks, and
+        propagates them with segment_3d. Voxels are assigned the class with the
+        highest confidence across all seed slices.
+
+        Args:
+            volume: 3D array of shape (nx, ny, nz).
+
+        Returns:
+            Multiclass mask array of shape (nx, ny, nz) with class IDs as values.
+        """
         final_masks = np.zeros(volume.shape, dtype=np.uint16)
         max_confidence = np.zeros(volume.shape, dtype=np.float32)
         for ii in tqdm(range(2, volume.shape[0], self.ini_depth)):
             im = preprocessing.prepare(volume[ii], to_rgb=True)
-            raw_masks = self.adapter.segment_image_2d(im)
+            raw_masks = self.adapter.segment_image_2d(im, target_class=self.target_class)
             raw_masks = [mask for mask in raw_masks if mask['area'] >= self.min_mask_area]
             if len(raw_masks) == 0:
                 continue
