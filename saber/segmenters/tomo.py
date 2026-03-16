@@ -50,11 +50,11 @@ class tomoSegmenter(saber3D):
             zSlice = int(self.vol.shape[0] // 2)
             
         # Generate Slab
-        self.image = preprocess.project_tomogram(self.vol, zSlice, slab_thickness)
+        self.image0 = preprocess.project_tomogram(self.vol, zSlice, slab_thickness)
 
         # Segment Slab 
         self.segment_image(
-            self.image, display = display, 
+            self.image0, display = display, 
             text_prompt=text, target_class=target_class,
         )
 
@@ -63,7 +63,7 @@ class tomoSegmenter(saber3D):
     def segment(
         self, 
         vol,
-        slab_thickness: int = 10,
+        thickness: int = 10,
         zSlice: int = None,
         text: Optional[str] = None,
         target_class: Optional[int] = 1,
@@ -74,7 +74,7 @@ class tomoSegmenter(saber3D):
         Segment a 3D tomogram using the Video Predictor
         """
         return self.segment_vol(
-            vol, slab_thickness, zSlice, 
+            vol, thickness, zSlice, 
             text, target_class, save_run, display
         )
 
@@ -82,7 +82,7 @@ class tomoSegmenter(saber3D):
     def segment_vol(
         self, 
         vol,
-        slab_thickness: int,
+        thickness: int,
         zSlice: int = None,
         text: Optional[str] = None,
         target_class: Optional[int] = 1,
@@ -95,12 +95,12 @@ class tomoSegmenter(saber3D):
 
         # Determine if We Should Show the 2D Segmentations or Show the Segmentations in 3D
         if display:  save_mask = False
-        else:                   save_mask = True
+        else:        save_mask = True
         self.is_tomogram_mode = True        
 
         # Segment Initial Slab 
         self.segment_slab(
-            vol, slab_thickness, zSlice, display=False,
+            vol, thickness, zSlice, display=False,
             text=text, target_class=target_class
         )
 
@@ -138,16 +138,16 @@ class tomoSegmenter(saber3D):
             
         return vol_masks
 
-    def generate_multi_slab(self, vol, slab_thickness, zSlice):
+    def generate_multi_slab(self, vol, thickness, zSlice):
         """
         Highly Experimental, Instead of Generating a Slab at a Single Depth,
         Generate 3 Slabs to Provide Z-Context.
         """
         
         # Option 1: Project Multiple Slabs to Provide Z-Context
-        image1 = preprocess.project_tomogram(vol, zSlice - slab_thickness/3, slab_thickness)
-        image2 = preprocess.project_tomogram(vol, zSlice, slab_thickness)
-        image3 = preprocess.project_tomogram(vol, zSlice + slab_thickness/3, slab_thickness)
+        image1 = preprocess.project_tomogram(vol, zSlice - thickness/3, thickness)
+        image2 = preprocess.project_tomogram(vol, zSlice, thickness)
+        image3 = preprocess.project_tomogram(vol, zSlice + thickness/3, thickness)
 
         # # Extend From Grayscale to RGB 
         image = np.stack([image1, image2, image3], axis=-1)
@@ -181,7 +181,7 @@ class multiDepthTomoSegmenter(tomoSegmenter):
 
     def segment(self,
         vol,
-        slab_thickness: int,
+        thickness: int,
         num_slabs: int = 3,
         delta_z: int = 30,
         save_run: str = None, 
@@ -196,13 +196,13 @@ class multiDepthTomoSegmenter(tomoSegmenter):
         
         # Determine Segmentation Mode
         if self.target_class > 0 or self.classifier is None:
-            return self.single_segment(vol, slab_thickness, num_slabs, delta_z)
+            return self.single_segment(vol, thickness, num_slabs, delta_z)
         else:
             print("Multiclass Segmentation is not implemented yet")
-            # return self.multiclass_segment(vol, slab_thickness, num_slabs)
+            # return self.multiclass_segment(vol, thickness, num_slabs)
 
     @torch.inference_mode()
-    def single_segment(self, vol, slab_thickness, num_slabs, delta_z):
+    def single_segment(self, vol, thickness, num_slabs, delta_z):
         """
         Segment a 3D tomogram using the Video Predictor
         """
@@ -226,7 +226,7 @@ class multiDepthTomoSegmenter(tomoSegmenter):
             
             # Segment this slab
             masks3d = self.segment_vol(
-                vol, slab_thickness,
+                vol, thickness,
                 zSlice=slab_center,
                 display=False
             )        
