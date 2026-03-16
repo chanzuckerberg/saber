@@ -74,20 +74,23 @@ def run_fib_segment(
     # Read the Fib Volume
     volume = io.read_movie(input, scale_factor)
 
-    # Load the Classifier Model
-    predictor = common.get_predictor(model_weights, model_config)
-
     # Build adapter config based on whether text prompt or classifier is used
     if text_prompt:
         adapter_cfg = SAM3AdapterConfig(text_prompt=text_prompt)
     else:
+        # Load the Classifier Model
+        predictor = common.get_predictor(model_weights, model_config)
         adapter_cfg = SAM2AdapterConfig(classifier=predictor)
 
     # Create an instance of propagationSegmenter
-    segmenter = propagationSegmenter(cfg=adapter_cfg, target_class=target_class)
+    segmenter = propagationSegmenter(cfg=adapter_cfg)
 
     # Segment the Volume
-    masks = segmenter.segment(volume, ini_depth, nframes, text_prompt=text_prompt)
+    masks = segmenter.segment(
+        volume, ini_depth, nframes, 
+        text_prompt=text_prompt, 
+        target_class=target_class
+    )
 
     # (TODO): Save the Masks
     np.save(output, masks)

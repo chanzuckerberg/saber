@@ -168,8 +168,9 @@ class saber2D:
             # Since Order Doesn't Matter, Sort by Area for Saber GUI. 
             masks = sorted(masks, key=lambda mask: mask['area'], reverse=False)
         else: 
+            gray = image[:, :, 0] if image.ndim == 3 else image
             masks = filters.apply_classifier(
-                image, masks, self.classifier,
+                gray, masks, self.classifier,
                 self.target_class, self.batchsize)
 
         return masks

@@ -107,8 +107,7 @@ class propagationSegmenter(saber3D):
         """
         final_masks = np.zeros(volume.shape, dtype=np.uint16)
         for ii in tqdm(range(2, volume.shape[0], self.ini_depth)):
-            im = preprocessing.prepare(volume[ii], to_rgb=True)
-            masks = self.segment_image(im, display=False, target_class=self.target_class, text_prompt=text_prompt)
+            masks = self.segment_image(volume[ii], display=False, target_class=self.target_class, text_prompt=text_prompt)
             if len(masks) == 0:
                 continue
             mask_list = [m['segmentation'] for m in masks]
@@ -160,3 +159,31 @@ class propagationSegmenter(saber3D):
                     final_masks[update_mask] = class_id
                     max_confidence[update_mask] = confidence
         return final_masks
+
+    @torch.inference_mode()
+    def slice_by_slice(self, volume: np.ndarray, text_prompt: str):
+        """
+        Segment a volume by applying 2D segmentation to each slice independently.
+
+        This is a fallback method that does not use any temporal propagation.
+        It applies segment_image to each slice and merges results via element-wise max.
+
+        Args:
+            volume: 3D array of shape (nx, ny, nz).
+            text_prompt: Forwarded to segment_image for SAM3-based segmentation.
+
+        Returns:
+            Separated instance mask array of shape (nx, ny, nz).
+        """
+        final_masks = np.zeros(volume.shape, dtype=np.uint16)
+        masks3d = np.zeros(volume.shape[1:], dtype=np.uint16)
+        for ii in tqdm(range(volume.shape[0])):
+            masks = self.segment_image(volume[ii], display=False, text_prompt=text_prompt)
+            if len(masks) == 0:
+                continue
+            mask_list = [m['segmentation'] for m in masks]
+            for idx, mask in enumerate(mask_list):
+                masks3d[mask] = idx + 1
+            np.maximum(final_masks[ii], masks3d, out=final_masks[ii])
+            masks3d[:] = 0
+        return utils.separate_masks(final_masks)
