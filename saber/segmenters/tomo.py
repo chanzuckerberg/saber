@@ -172,8 +172,9 @@ class multiDepthTomoSegmenter(tomoSegmenter):
         Initialize the multiDepthTomoSegmenter
         """
         self.min_rel_box_size = min_rel_box_size
+        self.target_class = target_class
         super().__init__(deviceID=deviceID, cfg=cfg, amg_cfg=amg_cfg,
-                         target_class=target_class, min_mask_area=min_mask_area)
+                         min_mask_area=min_mask_area)
 
         if target_class < 1: 
             print('[Error]: Multi-Depth Tomogram Segmenter only supports Single-Class Segmentation currently.')

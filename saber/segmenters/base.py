@@ -91,13 +91,13 @@ class saber2D:
     ):
         """
         Segment image using sliding window approach
-        
+
         Args:
             image: Input image
             display: Whether to display the result
             use_sliding_window: Whether to use sliding window (True) or single inference (False)
         """
-        
+
         # Run Segmentation
         self.target_class = target_class
         if use_sliding_window:

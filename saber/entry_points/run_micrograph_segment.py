@@ -34,8 +34,10 @@ def interactive_segment_micrograph(
     scale_factor: float = None,
     display_image: bool = False,
     use_sliding_window: bool = False,
+    text_prompt: str = None,
     ):
     from saber.segmenters.micro import cryoMicroSegmenter
+    from saber.adapters.base import SAM2AdapterConfig, SAM3AdapterConfig
     from saber.filters.downsample import FourierRescale2D
     from saber.classifier.models import common
     import saber.utils.io as io
@@ -44,13 +46,14 @@ def interactive_segment_micrograph(
     Segment a single micrograph using SABER.
     """
 
-    # Initialize the Domain Expert Classifier   
-    predictor = common.get_predictor(model_weights, model_config)
+    # Build adapter config based on whether text prompt or classifier is used
+    if text_prompt:
+        adapter_cfg = SAM3AdapterConfig(text_prompt=text_prompt)
+    else:
+        predictor = common.get_predictor(model_weights, model_config)
+        adapter_cfg = SAM2AdapterConfig(classifier=predictor, amg_cfg=cfg)
 
-    segmenter = cryoMicroSegmenter(
-            cfg=cfg,
-            classifier=predictor,         # if you have a classifier; otherwise, leave as None
-            target_class=target_class )   # desired target class if using a classifier
+    segmenter = cryoMicroSegmenter(cfg=adapter_cfg)
 
     # Let Users Save Segmentations when interactively segmenting
     if display_image:
@@ -67,8 +70,12 @@ def interactive_segment_micrograph(
     elif scale_factor is not None:
         image = FourierRescale2D.run(image, scale_factor)
 
-    # Produce Initialial Segmentations with SAM2
-    segmenter.segment( image, display_image=True, use_sliding_window=use_sliding_window )
+    # Produce Segmentations with SAM2 or SAM3
+    segmenter.segment( 
+        image, target_class=target_class, 
+        text=text_prompt, display=True, 
+        use_sliding_window=use_sliding_window 
+    )
 
 ########################################################
 # CLI Commands
@@ -161,8 +168,9 @@ def run_micrograph_segment(
         # Load the Model 
         interactive_segment_micrograph(
             files[0], cfg, model_weights, model_config, target_class,
-            display_image=True, use_sliding_window=sliding_window, 
-            target_resolution=target_resolution, scale_factor=scale_factor
+            display_image=True, use_sliding_window=sliding_window,
+            target_resolution=target_resolution, scale_factor=scale_factor,
+            text_prompt=text_prompt
             )
         return
     print(f'\nRunning SABER Segmentations\nfor the Following Search Path: {input}')   

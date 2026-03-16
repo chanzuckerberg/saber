@@ -17,7 +17,8 @@ def segment_tomogram_core(
     num_slabs: int, delta_z: int,
     display_segmentation: bool,
     segmenter,  # Pre-loaded or newly created segmenter
-    gpu_id: int = 0  # Default GPU ID
+    gpu_id: int = 0,  # Default GPU ID
+    target_class: int = 1,
     ):
     """
     Core segmentation function that both interactive and parallel versions call.
@@ -54,6 +55,7 @@ def segment_tomogram_core(
     else:
         segment_mask = segmenter.segment(
             vol, slab_thickness,
+            target_class=target_class,
             save_run=img_name,
             display=display_segmentation)
 
@@ -121,8 +123,9 @@ def segment_micrograph_core(
     elif scale_factor is not None:
         image = FourierRescale2D.run(image, scale_factor)   
 
-    # Produce Initialial Segmentations with SAM2
-    segmenter.segment( image, display=False, use_sliding_window=use_sliding_window )
+    # Produce Segmentations with SAM2 or SAM3
+    target_class = models.get('target_class', -1)
+    segmenter.segment( image, target_class=target_class, display=False, use_sliding_window=use_sliding_window )
 
     # Convert any numpy array/scalar to Python scalar
     if isinstance(pixel_size, np.ndarray):

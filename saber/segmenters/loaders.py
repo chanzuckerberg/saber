@@ -14,14 +14,11 @@ def micrograph_workflow(
     torch.cuda.set_device(gpu_id)
     predictor = common.get_predictor(model_weights, model_config, gpu_id)
     adapter_cfg = SAM2AdapterConfig(classifier=predictor, amg_cfg=cfg)
-    segmenter = cryoMicroSegmenter(
-        cfg=adapter_cfg,
-        deviceID=gpu_id,
-        target_class=target_class,
-    )
+    segmenter = cryoMicroSegmenter(cfg=adapter_cfg, deviceID=gpu_id)
 
     return {
-        'segmenter': segmenter
+        'segmenter': segmenter,
+        'target_class': target_class,
     }
 
 def tomogram_workflow(
@@ -37,21 +34,14 @@ def tomogram_workflow(
     predictor = common.get_predictor(model_weights, model_config, gpu_id)
     cfg_obj = SAM2AdapterConfig(classifier=predictor)
     if num_slabs > 1:
-        segmenter = multiDepthTomoSegmenter(
-            cfg=cfg_obj,
-            deviceID=gpu_id,
-            target_class=target_class,
-        )
+        segmenter = multiDepthTomoSegmenter(cfg=cfg_obj, deviceID=gpu_id, target_class=target_class)
     else:
-        segmenter = tomoSegmenter(
-            cfg=cfg_obj,
-            deviceID=gpu_id,
-            target_class=target_class,
-        )
+        segmenter = tomoSegmenter(cfg=cfg_obj, deviceID=gpu_id)
 
     return {
         'predictor': predictor,
-        'segmenter': segmenter
+        'segmenter': segmenter,
+        'target_class': target_class,
     }
 
 def base_microsegmenter(gpu_id:int, cfg:cfgAMG):
