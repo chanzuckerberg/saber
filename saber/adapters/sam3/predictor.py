@@ -1,11 +1,18 @@
 from saber.adapters.base import BaseAdapter, SAM3AdapterConfig
 from saber.adapters.preprocessing import TomogramPreprocessor
 from typing import Any, Dict, Iterator, List, Optional, Tuple
-from saber.pretrained_weights import get_sam3_bpe_path
+from saber.pretrained_weights import get_sam3_bpe_path, get_sam3_checkpoint
 from sam3.model_builder import build_sam3_video_model
 from saber.utils import preprocessing as prep
 import numpy as np
 import torch
+
+_SAM3_WEIGHTS_MISSING_MSG = (
+    "SAM3 weights not found. To download them:\n"
+    "  1. Request access at https://huggingface.co/facebook/sam3\n"
+    "  2. Log in:  huggingface-cli login\n"
+)
+
 
 def _sam3_output_to_mask_list(
     output: Dict[str, Any], min_mask_area: int ) -> List[Dict[str, Any]]:
@@ -91,11 +98,15 @@ class SAM3Adapter(BaseAdapter):
         if self._processor is None:
             from sam3.model_builder import build_sam3_image_model
             from sam3.model.sam3_image_processor import Sam3Processor
-            from saber.pretrained_weights import get_sam3_bpe_path
+            local_ckpt = get_sam3_checkpoint()
+            ckpt_path = self._config.checkpoint_path or local_ckpt
+            use_hf = self._config.load_from_HF and (ckpt_path is None)
+            if ckpt_path is None and not use_hf:
+                raise RuntimeError(_SAM3_WEIGHTS_MISSING_MSG)
             self._processor = Sam3Processor(
                 build_sam3_image_model(
-                    checkpoint_path=self._config.checkpoint_path,
-                    load_from_HF=self._config.load_from_HF,
+                    checkpoint_path=ckpt_path,
+                    load_from_HF=use_hf,
                     bpe_path=get_sam3_bpe_path(),
                 ),
                 device=str(self.device),
@@ -133,10 +144,15 @@ class SAM3Adapter(BaseAdapter):
 
         # Build the SAM3 model if it is not already built
         if self.predictor is None:
+            local_ckpt = get_sam3_checkpoint()
+            ckpt_path = self._config.checkpoint_path or local_ckpt
+            use_hf = self._config.load_from_HF and (ckpt_path is None)
+            if ckpt_path is None and not use_hf:
+                raise RuntimeError(_SAM3_WEIGHTS_MISSING_MSG)
             sam3_model = (
                 build_sam3_video_model(
-                    checkpoint_path=self._config.checkpoint_path,
-                    load_from_HF=self._config.load_from_HF,
+                    checkpoint_path=ckpt_path,
+                    load_from_HF=use_hf,
                     bpe_path=get_sam3_bpe_path(),
                 )
                 .to(self.device)

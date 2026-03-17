@@ -88,13 +88,15 @@ def download_sam3_weights():
     print("Downloading SAM 3 checkpoint from HuggingFace (facebook/sam3) ...")
     try:
         checkpoint_path = download_ckpt_from_hf()
-        print(f"SAM 3 checkpoint cached at: {checkpoint_path}")
+        dest = os.path.join(os.path.dirname(saber.__file__), "checkpoints", "sam3.pt")
+        shutil.copy2(checkpoint_path, dest)
+        print(f"SAM 3 checkpoint saved to: {dest}")
     except Exception as e:
         print(
-            f"Download failed: {e}\n"
-            "Make sure you are logged in to HuggingFace:\n"
-            "  huggingface-cli login\n"
-            "or set the HF_TOKEN environment variable."
+            f"Download failed: {e}\n\n"
+            "To download SAM3 weights you must first request access:\n"
+            "  1. Go to https://huggingface.co/facebook/sam3 and request access\n"
+            "  2. Log in:  huggingface-cli login\n"
         )
         sys.exit(1)
 
@@ -150,16 +152,21 @@ def get_sam3_checkpoint():
     """
     Return the path to the cached SAM 3 checkpoint.
 
-    SAM 3 manages its own weights via HuggingFace hub; this function is a
-    thin wrapper that returns the cached path (downloading if necessary).
-    Returns None if the checkpoint has not been downloaded yet — in that
-    case pass load_from_HF=True to build_sam3_video_model / build_sam3_image_model
-    and the download will happen automatically.
+    Resolution order:
+      1. saber/checkpoints/sam3.pt (copied here by download_sam3_weights)
+      2. HuggingFace hub cache (~/.cache/huggingface/hub)
+
+    Returns None if the checkpoint is not available locally.
     """
+    # 1. Check saber's local checkpoints directory first
+    local = os.path.join(os.path.dirname(saber.__file__), "checkpoints", "sam3.pt")
+    if os.path.exists(local):
+        return local
+
+    # 2. Fall back to HF cache
     try:
         from huggingface_hub import try_to_load_from_cache
-        path = try_to_load_from_cache(repo_id="facebook/sam3", filename="sam3.pt")
-        return path  # None if not cached, str path if cached
+        return try_to_load_from_cache(repo_id="facebook/sam3", filename="sam3.pt")
     except Exception:
         return None
 
