@@ -288,7 +288,7 @@ def run_tomo_seg(   # run_tomograms
 
 @click.command(context_settings=cli_context, no_args_is_help=True)
 @slurm_submit.copick_commands
-@click.option("--run-id", type=str, required=True, 
+@click.option("--run-id", "-run", type=str, required=True, 
               help="Path to Copick Config for Processing Data")            
 @slurm_submit.classifier_inputs
 @amg()
@@ -326,7 +326,7 @@ def slab(
 @click.command(context_settings=cli_context, no_args_is_help=True)
 @slurm_submit.copick_commands
 @slurm_submit.tomogram_segment_commands
-@click.option("--run-ids", type=str, required=False, default=None,
+@click.option("--run-id", "-run", type=str, required=False, default=None,
               help="(Optional) RunIDs to Process. If more than one is provided, results will be displayed immediately. If None, all runs in the copick project will be processed.")
 @slurm_submit.classifier_inputs
 @click.option('--multi-slab', type=str, default=1, 

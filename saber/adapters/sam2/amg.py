@@ -1,7 +1,5 @@
 from pydantic import BaseModel, Field, field_validator
 from typing import Any, Dict, List, Optional, Tuple
-import numpy as np
-import torch
 
 class cfgAMG(BaseModel):
     """Configuration for SAM2 Automatic Mask Generator."""
@@ -143,6 +141,7 @@ class FilteredSAM2MaskGenerator:
     MIT Licensed wrapper that enhances any automatic mask generator with additional
     filtering capabilities. Uses composition to avoid license mixing.
     """
+    import numpy as np
 
     def __init__(
         self,
