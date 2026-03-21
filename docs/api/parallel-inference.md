@@ -15,7 +15,7 @@ GPUPool manages the distribution of tasks across available GPUs and handles the 
 As a high overview, here is an complete example of applying parallel inference of SABER on 2D data with `GPUPool`.
 
 ```python
-from saber.entry_points import parallelization
+from saber.utils import parallelization
 import glob
 
 # Get all micrograph files
@@ -23,6 +23,7 @@ files = glob.glob("path/to/micrographs/*.mrc")
 
 # Create processing pool
 pool = parallelization.GPUPool(
+    approach="threading",
     init_fn=initialize_model,
     init_args=("large", model_weights, model_config, target_class),
     verbose=True
@@ -72,15 +73,14 @@ def initialize_model(
     # Load models
     predictor = common.get_predictor(model_weights, model_config, gpu_id)
     segmenter = cryoMicroSegmenter(
-        adapter_cfg=SAM2AdapterConfig(cfg=sam2_cfg),
+        cfg=SAM2AdapterConfig(cfg=sam2_cfg, classifier=predictor),
         deviceID=gpu_id,
-        classifier=predictor,
-        target_class=target_class
     )
 
     return {
         'predictor': predictor,
-        'segmenter': segmenter
+        'segmenter': segmenter,
+        'target_class': target_class,
     }
 ```
 ### 3. **Create Processing Function**
@@ -95,7 +95,8 @@ def process_task(
     zwriter = zarr_writer.get_zarr_writer(output)
 
     # Use pre-loaded segmenter
-    segmenter = models['segmenter']        
+    segmenter = models['segmenter']
+    target_class = models['target_class']
 
     # Ensure we're on the correct GPU
     torch.cuda.set_device(gpu_id)
@@ -108,7 +109,7 @@ def process_task(
     image = FourierRescale2D.run(image, scale_factor)   
 
     # Produce Initialial Segmentations with SAM2
-    segmenter.segment( image, display_image=False )
+    segmenter.segment( image, target_class=target_class, display=False )
     (image0, masks_list) = (segmenter.image0, segmenter.masks)
 
     # Convert Masks to Numpy Array
@@ -124,12 +125,11 @@ def process_task(
 ### Initialization
 ```python
 GPUPool(
-    init_fn,                # Function to initialize model on each GPU
-    init_args=None,         # Arguments passed to init_fn
-    init_kwargs=None,       # Keyword arguments passed to init_fn
-    gpu_ids=None,           # Specific GPU IDs to use (defaults to all available)
-    num_workers=None,       # Number of worker processes (defaults to number of GPUs)
-    verbose=False           # Enable/disable verbose output
+    approach="threading",   # "threading" (shared models) or "multiprocessing" (isolated models)
+    init_fn=None,           # Function to initialize model on each GPU
+    init_args=(),           # Positional arguments passed to init_fn
+    init_kwargs={},         # Keyword arguments passed to init_fn
+    verbose=True            # Enable/disable verbose output
 )
 ```
 

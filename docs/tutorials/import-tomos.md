@@ -1,124 +1,75 @@
-# Cryo-ET Data Import Guide
+# Importing Volumes
 
-SABER leverages [copick](https://github.com/copick/copick) to provide a flexible and unified interface for accessing tomographic data, whether it's stored locally or remotely on HPC servers or on our [CryoET Data Portal](https://cryoetdataportal.czscience.com). This guide explains how to work with both data sources.
+SABER uses [Copick](https://github.com/copick/copick) to manage tomographic data. Copick provides a unified interface for accessing volumes whether they're stored locally, on an HPC cluster, or on the [CryoET Data Portal](https://cryoetdataportal.czscience.com).
 
-## Getting Started
+---
 
-If you need help creating configuration files, detailed tutorials are available:
+## Setting Up a Copick Project
 
-- [Copick Quickstart](https://copick.github.io/copick/quickstart/) - Basic configuration and setup 
-- [Data Portal Tutorial](https://copick.github.io/copick/examples/tutorials/data_portal/) - Working with CryoET Data Portal
+=== "New Project (Local Files)"
 
-## Starting a New Copick Project
+    Create a config pointing to a local directory where results will be written:
 
-The copick configuration file points to a directory that stores all tomograms, coordinates, and segmentations in an overlay root. Generate a config file using the command line:
+    ```bash
+    copick config filesystem \
+        --overlay-root /path/to/overlay
+    ```
 
-```bash 
-copick config filesystem --overlay-root /path/to/overlay
-```
+    To define biological objects at creation time (useful for particle picking workflows):
 
-For cryo-ET workflows involving protein 3D coordinate annotation, you can define biological objects during project creation:
+    ```bash
+    copick config filesystem \
+        --overlay-root /path/to/overlay \
+        --objects ribosome,True,130,6QZP \
+        --objects apoferritin,True,65 \
+        --objects membrane,False
+    ```
 
-```bash
-copick config filesystem \
-    --overlay-root /path/to/overlay \
-    --objects ribosome,True,130,6QZP \
-    --objects apoferritin,True,65 \
-    --objects membrane,False
-```
+    ??? example "What the generated config.json looks like"
 
-This structure supports both particle picking for sub-tomogram averaging and broader 3D segmentation tasks. Our deep learning platform [Octopi 🐙](https://github.com/chanzuckerberg/octopi) is designed to train models from copick projects for:
-
-- Object 3D localization and particle picking
-- Volumetric segmentation of cellular structures
-- General 3D dataset annotation and analysis
-
-**Directory Structure:**
-
-- **Overlay root:** Writable directory where new results can be added, modified, or deleted
-- **Static root:** Read-only directory that never gets manipulated (frozen data)
-
-<details markdown="1">
-<summary><strong>💡 Example Copick Config File (config.json)</strong></summary>
-
-The resulting `config.json` file would look like this:
-
-```json
-{
-    "name": "test",
-    "description": "A test project description.",
-    "version": "1.0.0",
-
-    "pickable_objects": [
+        ```json
         {
-            "name": "ribosome",
-            "is_particle": true,
-            "label": 1,
-            "radius": 130,
-            "pdb_id": "6QZP"
-        },
-        {
-            "name": "apoferritin",
-            "is_particle": true,
-            "label": 2,
-            "radius": 65            
-        },
-        {
-            "name": "membrane",
-            "is_particle": false,
-            "label": 3
+            "name": "my_project",
+            "description": "A test project.",
+            "version": "1.0.0",
+
+            "pickable_objects": [
+                { "name": "ribosome",   "is_particle": true,  "label": 1, "radius": 130, "pdb_id": "6QZP" },
+                { "name": "apoferritin","is_particle": true,  "label": 2, "radius": 65 },
+                { "name": "membrane",   "is_particle": false, "label": 3 }
+            ],
+
+            "overlay_root": "local:///path/to/overlay",
+            "overlay_fs_args": { "auto_mkdir": true },
+
+            "static_root": "local:///path/to/static",
+            "static_fs_args": { "auto_mkdir": true }
         }
-    ],
+        ```
 
-    "overlay_root": "local:///path/to/overlay",
-    "overlay_fs_args": {
-        "auto_mkdir": true
-    },
+        !!! note "Overlay vs. Static root"
+            The **overlay root** is writable — SABER writes segmentations, coordinates, and metadata here. The **static root** is read-only, intended for the original tomogram files that you never want to accidentally overwrite.
 
-    "static_root": "local:///path/to/static",
-    "static_fs_args": {
-        "auto_mkdir": true
-    }    
-}
-```
+=== "CryoET Data Portal"
 
-**Path Types:**
+    Link a project to a public dataset from the [CryoET Data Portal](https://cryoetdataportal.czscience.com):
 
-- **Local paths:** `local:///path/to/directory`
-- **Remote paths:** `ssh://server/path/to/directory`
+    ```bash
+    copick config dataportal \
+        --dataset-id DATASET_ID \
+        --overlay-root /path/to/local/overlay
+    ```
 
-The `copick config filesystem` command assumes local paths, but you can edit the config file to specify remote locations.
+    Pickable objects are automatically populated from the portal dataset. You only need to provide the dataset ID and a local path for writing results.
 
-</details>
+    !!! tip "Finding your dataset ID"
+        Browse datasets at [cryoetdataportal.czscience.com](https://cryoetdataportal.czscience.com) and copy the numeric ID from the dataset URL.
 
-## Starting a Copick Project Linked to the Data Portal
-
-Create a copick project that automatically syncs with the [CryoET Data Portal](https://cryoetdataportal.czscience.com):
-
-```bash
-copick config dataportal --dataset-id DATASET_ID --overlay-root /path/to/overlay
-```
-
-This command generates a config file that syncs data from the portal with local or remote repositories. You only need to specify the dataset ID and the overlay or static path - pickable objects will automatically be populated from the dataset.
-
-**Benefits:**
-
-- Automatically populates pickable objects from the dataset
-- Seamless integration with portal data
-- Combines remote portal data with local overlay storage
+---
 
 ## Importing Local MRC Files
 
-### Prerequisites
-
-This workflow assumes:
-
-- All tomogram files are in a flat directory structure (single folder)
-- Files are in MRC format (`*.mrc`)
-
-### Import Command
-
-If you have tomograms stored locally in `*.mrc` format (e.g., from Warp, IMOD, or AreTomo), you can import them into a copick project:
+If you have tomograms processed with Warp, IMOD, AreTomo, or any other reconstruction pipeline, import them into Copick with:
 
 ```bash
 copick add tomogram \
@@ -129,22 +80,49 @@ copick add tomogram \
     'path/to/volumes/*.mrc'
 ```
 
-<details markdown="1">
-<summary><strong>Import Parameters Explained</strong></summary>
+| Parameter | Description |
+|-----------|-------------|
+| `--tomo-type` | Tag for this reconstruction (`denoised`, `wbp`, `filtered`) |
+| `--voxel-size` | Voxel size in Å — SABER uses this for downsampling |
+| `--no-create-pyramid` | Skip multi-resolution pyramid (faster import) |
 
-- `--config config.json`: Path to your copick configuration file
-- `--tomo-type denoised`: Specifies the tomogram type (options: `raw`, `denoised`, `filtered`)
-- `--voxel-size 10`: Sets voxel size in Ångströms (10 Å = 1 nm recommended)
-- `--no-create-pyramid`: Skips pyramid generation for faster import
-- `'path/to/volumes/*.mrc'`: Path to your MRC file(s) - supports wildcards
+!!! warning "Flat directory required"
+    This command expects all `.mrc` files in a single flat directory. If your files are in nested subdirectories, see the [Advanced Import](../api/import-tomos.md) guide.
 
-</details>
+---
 
-## Advanced Import Options
+## Verifying Your Project
 
-If your data doesn't meet the standard requirements (flat directory structure + MRC format), please refer to our [Advanced Import Workflows](../api/import-tomos.md) documentation, which covers:
+After import, confirm that Copick can see your tomograms:
 
-- Nested directory structures
-- Different file formats (TIFF, HDF5, etc.)
-- Custom import scripts
-- Batch processing workflows
+```python
+import copick
+
+root = copick.from_file("config.json")
+print(f"Found {len(root.runs)} runs")
+
+# Inspect the first run
+run = root.runs[0]
+print(run.name)
+print([t.voxel_size for t in run.tomograms])
+```
+
+---
+
+## Next Steps
+
+<div class="grid cards" markdown>
+
+-   [:octicons-arrow-right-24: **Pre-processing**](preprocessing.md)
+
+    Generate SAM2 segmentations and annotate them in the GUI.
+
+-   [:octicons-arrow-right-24: **Advanced Import**](../api/import-tomos.md)
+
+    Non-MRC formats, nested directories, and custom import scripts.
+
+-   [:octicons-arrow-right-24: **Copick Documentation**](https://copick.github.io/copick/)
+
+    Full Copick reference including remote filesystem setup.
+
+</div>
