@@ -24,6 +24,7 @@ classifiers = [
 ]
 dependencies = [
     "sam2",
+    "sam3",
     "tqdm",
     "monai",
     "kornia",
@@ -40,6 +41,7 @@ dependencies = [
     "ipywidgets",
     "torch-ema",
     "copick-utils",
+    "imagecodecs",
     "flask",
     "flask-cors"
 ]
