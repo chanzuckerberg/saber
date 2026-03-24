@@ -1,5 +1,5 @@
 import saber.utils.slurm_submit as slurm_submit
-from saber.sam2.automask import amg_cli as amg
+from saber.adapters.sam2.automask import amg_cli as amg
 from saber import cli_context
 import rich_click as click
 
@@ -34,8 +34,10 @@ def interactive_segment_micrograph(
     scale_factor: float = None,
     display_image: bool = False,
     use_sliding_window: bool = False,
+    text_prompt: str = None,
     ):
     from saber.segmenters.micro import cryoMicroSegmenter
+    from saber.adapters.base import SAM2AdapterConfig, SAM3AdapterConfig
     from saber.filters.downsample import FourierRescale2D
     from saber.classifier.models import common
     import saber.utils.io as io
@@ -44,13 +46,14 @@ def interactive_segment_micrograph(
     Segment a single micrograph using SABER.
     """
 
-    # Initialize the Domain Expert Classifier   
-    predictor = common.get_predictor(model_weights, model_config)
+    # Build adapter config based on whether text prompt or classifier is used
+    if text_prompt:
+        adapter_cfg = SAM3AdapterConfig(text_prompt=text_prompt)
+    else:
+        predictor = common.get_predictor(model_weights, model_config)
+        adapter_cfg = SAM2AdapterConfig(classifier=predictor, amg_cfg=cfg)
 
-    segmenter = cryoMicroSegmenter(
-            cfg=cfg,
-            classifier=predictor,         # if you have a classifier; otherwise, leave as None
-            target_class=target_class )   # desired target class if using a classifier
+    segmenter = cryoMicroSegmenter(cfg=adapter_cfg)
 
     # Let Users Save Segmentations when interactively segmenting
     if display_image:
@@ -67,8 +70,12 @@ def interactive_segment_micrograph(
     elif scale_factor is not None:
         image = FourierRescale2D.run(image, scale_factor)
 
-    # Produce Initialial Segmentations with SAM2
-    segmenter.segment( image, display_image=True, use_sliding_window=use_sliding_window )
+    # Produce Segmentations with SAM2 or SAM3
+    segmenter.segment( 
+        image, target_class=target_class, 
+        text=text_prompt, display=True, 
+        use_sliding_window=use_sliding_window 
+    )
 
 ########################################################
 # CLI Commands
@@ -95,7 +102,8 @@ def micrographs(
     box_nms_thresh: float,
     crop_n_points: int,
     use_m2m: bool,
-    multimask: bool,    
+    multimask: bool,
+    text_prompt: str,
     ):
     """
     Segment a single micrograph or all micrographs in a folder.
@@ -103,10 +111,10 @@ def micrographs(
 
     print('🎨 Starting micrograph segmentation...')
     run_micrograph_segment(
-        input, output, model_weights, model_config, target_class, 
+        input, output, model_weights, model_config, target_class,
         sliding_window, target_resolution, scale_factor, sam2_cfg,
-        npoints, points_per_batch, pred_iou_thresh, crop_n_layers, 
-        box_nms_thresh, crop_n_points, use_m2m, multimask
+        npoints, points_per_batch, pred_iou_thresh, crop_n_layers,
+        box_nms_thresh, crop_n_points, use_m2m, multimask, text_prompt
     )
 
 def run_micrograph_segment(
@@ -126,7 +134,8 @@ def run_micrograph_segment(
     box_nms_thresh: float,
     crop_n_points: int,
     use_m2m: bool,
-    multimask: bool,    
+    multimask: bool,
+    text_prompt: str = None,
     ):
     """
     Segment a single micrograph or all micrographs in a folder.
@@ -135,7 +144,7 @@ def run_micrograph_segment(
     from saber.segmenters.loaders import micrograph_workflow
     from saber.visualization import galleries 
     from saber.utils import parallelization
-    from saber.sam2.amg import cfgAMG
+    from saber.adapters.sam2.amg import cfgAMG
     import glob
 
     # Check to Make Sure Only One of the Inputs is Provided
@@ -159,8 +168,9 @@ def run_micrograph_segment(
         # Load the Model 
         interactive_segment_micrograph(
             files[0], cfg, model_weights, model_config, target_class,
-            display_image=True, use_sliding_window=sliding_window, 
-            target_resolution=target_resolution, scale_factor=scale_factor
+            display_image=True, use_sliding_window=sliding_window,
+            target_resolution=target_resolution, scale_factor=scale_factor,
+            text_prompt=text_prompt
             )
         return
     print(f'\nRunning SABER Segmentations\nfor the Following Search Path: {input}')   

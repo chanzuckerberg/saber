@@ -60,6 +60,30 @@ You should see the following output:
 ╰────────────────────────────────────────────────────╯
 ```
 
+## Troubleshooting
+
+### HuggingFace Authentication Error (GatedRepoError)
+
+If you see the following error when running Saber:
+
+```
+GatedRepoError: 401 Client Error.
+Cannot access gated repo for url https://huggingface.co/facebook/sam3/resolve/main/config.json.
+Access to model facebook/sam3 is restricted. You must have access to it and be authenticated to access it. Please log in.
+```
+
+This means the SAM3 model weights are hosted in a gated HuggingFace repository that requires you to explicitly request access. To fix this:
+
+1. Create or log in to your [HuggingFace account](https://huggingface.co).
+2. Visit the [facebook/sam3](https://huggingface.co/facebook/sam3) model page and request access.
+3. Once access is granted, authenticate your local environment:
+   ```bash
+   pip install huggingface_hub
+   hf auth login
+   ```
+   When prompted, enter your HuggingFace access token (available at [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)).
+4. Re-run your Saber command — the model weights will now download automatically.
+
 ## Next Steps
 
 - [Import Tomograms](import-tomos.md) - Learn how to import your tomograms into a copick project.

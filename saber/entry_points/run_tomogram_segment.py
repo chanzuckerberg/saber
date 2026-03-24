@@ -1,5 +1,5 @@
 import saber.utils.slurm_submit as slurm_submit
-from saber.sam2.automask import amg_cli as amg
+from saber.adapters.sam2.automask import amg_cli as amg
 from saber import cli_context
 import rich_click as click
 
@@ -17,38 +17,36 @@ def segment_tomogram_interactive(
     model_weights: str,
     model_config: str,
     target_class: int,
-    gpu_id: int = 0
+    gpu_id: int = 0,
+    text_prompt: str = None,
     ):
     """
     Interactive version - loads models fresh and can display results
     """
 
-    from saber.segmenters.tomo import cryoTomoSegmenter, multiDepthTomoSegmenter
+    from saber.segmenters.tomo import tomoSegmenter, multiDepthTomoSegmenter
+    from saber.adapters.base import SAM2AdapterConfig, SAM3AdapterConfig
     from saber.entry_points.inference_core import segment_tomogram_core
     from saber.classifier.models import common
     import torch
-    
+
     print(f"Processing {run.name} on GPU {gpu_id}")
-    
-    # Load models fresh for interactive use
+
+    # Build adapter config based on whether text prompt or classifier is used
     torch.cuda.set_device(gpu_id)
-    classifier = common.get_predictor(model_weights, model_config, gpu_id)
+    if text_prompt:
+        cfg_obj = SAM3AdapterConfig(text_prompt=text_prompt)
+    else:
+        classifier = common.get_predictor(model_weights, model_config, gpu_id)
+        cfg_obj = SAM2AdapterConfig(classifier=classifier)
 
     # Create segmenter based on number of slabs
     if num_slabs > 1:
         print(f'Using Multi-Depth Tomogram Segmenter with {num_slabs} slabs and {delta_z} voxel spacing between slabs.')
-        segmenter = multiDepthTomoSegmenter(
-            deviceID=gpu_id,
-            classifier=classifier,
-            target_class=target_class
-        )
+        segmenter = multiDepthTomoSegmenter(cfg=cfg_obj, deviceID=gpu_id, target_class=target_class)
     else:
         print(f'Using Single-Depth Tomogram Segmenter.')
-        segmenter = cryoTomoSegmenter(
-            deviceID=gpu_id,
-            classifier=classifier,
-            target_class=target_class
-        )
+        segmenter = tomoSegmenter(cfg=cfg_obj, deviceID=gpu_id)
     
     # Call core function
     segment_tomogram_core(
@@ -62,9 +60,10 @@ def segment_tomogram_interactive(
         delta_z=delta_z,
         display_segmentation=display_segmentation,
         segmenter=segmenter,
-        gpu_id=gpu_id
+        gpu_id=gpu_id,
+        target_class=target_class,
     )
-    
+
 # Segment Tomograms with GPUPool
 def segment_tomogram_parallel(
     run,
@@ -86,7 +85,8 @@ def segment_tomogram_parallel(
     
     # Use pre-loaded segmenter
     segmenter = models['segmenter']
-    
+    target_class = models.get('target_class', 1)
+
     # Call core function
     segment_tomogram_core(
         run=run,
@@ -98,7 +98,8 @@ def segment_tomogram_parallel(
         num_slabs=num_slabs, delta_z=delta_z,
         display_segmentation=display_segmentation,
         segmenter=segmenter,
-        gpu_id=gpu_id
+        gpu_id=gpu_id,
+        target_class=target_class,
     )
 
 def run_slab_seg(
@@ -119,26 +120,25 @@ def run_slab_seg(
     crop_n_points: int,
     use_m2m: bool,
     multimask: bool,
+    text_prompt: str = None,
     ):
     """
     Segment a single slab of a tomogram.
     """
-    from saber.segmenters.tomo import cryoTomoSegmenter
+    from saber.segmenters.tomo import tomoSegmenter
+    from saber.adapters.base import SAM2AdapterConfig
     from saber.classifier.models import common
     from copick_utils.io import readers
-    from saber.sam2.amg import cfgAMG
+    from saber.adapters.sam2.amg import cfgAMG
     import copick
-    
+
     # Prepare AMG Config
     cfg = cfgAMG(
-        npoints = npoints, points_per_batch = points_per_batch, 
-        pred_iou_thresh = pred_iou_thresh, box_nms_thresh = box_nms_thresh, 
-        crop_n_layers = crop_n_layers, crop_n_points_downscale_factor = crop_n_points, 
+        npoints = npoints, points_per_batch = points_per_batch,
+        pred_iou_thresh = pred_iou_thresh, box_nms_thresh = box_nms_thresh,
+        crop_n_layers = crop_n_layers, crop_n_points_downscale_factor = crop_n_points,
         use_m2m = use_m2m, multimask_output = multimask, sam2_cfg = sam2_cfg
     )
-    
-    # Initialize the Domain Expert Classifier   
-    predictor = common.get_predictor(model_weights, model_config)
 
     # Open Copick Project and Get Run
     root = copick.from_file(config)
@@ -150,21 +150,29 @@ def run_slab_seg(
     if vol is None: # No Tomogram Found - Cancel Early
         return
 
-    # Create an instance of cryoTomoSegmenter
-    segmenter = cryoTomoSegmenter(
-        cfg=cfg,
-        classifier=predictor,         # if you have a classifier; otherwise, leave as None
-        target_class=target_class     # desired target class if using a classifier
-    )
+    # Build adapter config based on whether text prompt or classifier is used
+    if text_prompt:
+        from saber.adapters.base import SAM3AdapterConfig
+        adapter_cfg = SAM3AdapterConfig(text_prompt=text_prompt)
+    else:
+        predictor = common.get_predictor(model_weights, model_config)
+        adapter_cfg = SAM2AdapterConfig(classifier=predictor, amg_cfg=cfg)
+
+    # Create an instance of tomoSegmenter
+    segmenter = tomoSegmenter(cfg=adapter_cfg)
     segmenter.save_button = True
 
-    # For 2D segmentation, call segment_image
-    segmenter.segment_slab(vol, slab_thickness, display_image=True)
+    # For 2D segmentation, call segment_slab
+    segmenter.segment_slab(
+        vol, slab_thickness, 
+        text=text_prompt, display=True,
+        target_class=target_class
+    )
 
 def run_tomo_seg(   # run_tomograms
     config: str,
     run_ids: str,
-    voxel_size: float, 
+    voxel_size: float,
     tomo_alg: str,
     seg_name: str,
     seg_session_id: str,
@@ -172,7 +180,8 @@ def run_tomo_seg(   # run_tomograms
     model_config: str,
     model_weights: str,
     target_class: int,
-    multi_slab: str
+    multi_slab: str,
+    text_prompt: str = None,
     ):
     """
     Segment a tomogram or multiple tomograms.
@@ -209,7 +218,7 @@ def run_tomo_seg(   # run_tomograms
             slab_thickness, num_slabs, delta_z,
             display_segmentation,
             model_weights, model_config,
-            target_class
+            target_class, text_prompt=text_prompt
         )
         return
 
@@ -279,19 +288,19 @@ def run_tomo_seg(   # run_tomograms
 
 @click.command(context_settings=cli_context, no_args_is_help=True)
 @slurm_submit.copick_commands
-@click.option("--run-id", type=str, required=True, 
+@click.option("--run-id", "-run", type=str, required=True, 
               help="Path to Copick Config for Processing Data")            
 @slurm_submit.classifier_inputs
 @amg()
 def slab(
     config: str,
-    run_id: str, 
-    voxel_size: int, 
+    run_id: str,
+    voxel_size: int,
     tomo_alg: str,
     slab_thickness: int,
     model_weights: str,
     model_config: str,
-    target_class: int, 
+    target_class: int,
     sam2_cfg: str,
     npoints: int,
     points_per_batch: int,
@@ -300,7 +309,8 @@ def slab(
     box_nms_thresh: float,
     crop_n_points: int,
     use_m2m: bool,
-    multimask: bool,    
+    multimask: bool,
+    text_prompt: str,
     ):
     """
     Segment a single slab of a tomogram.
@@ -308,15 +318,15 @@ def slab(
 
     print('🎨 Running Saber Slab Segmentation...')
     run_slab_seg(
-        config, run_id, voxel_size, tomo_alg, slab_thickness, model_weights, model_config, target_class, 
-        sam2_cfg, npoints, points_per_batch, pred_iou_thresh, crop_n_layers, box_nms_thresh, crop_n_points, 
-        use_m2m, multimask
+        config, run_id, voxel_size, tomo_alg, slab_thickness, model_weights, model_config, target_class,
+        sam2_cfg, npoints, points_per_batch, pred_iou_thresh, crop_n_layers, box_nms_thresh, crop_n_points,
+        use_m2m, multimask, text_prompt
     )
 
 @click.command(context_settings=cli_context, no_args_is_help=True)
 @slurm_submit.copick_commands
 @slurm_submit.tomogram_segment_commands
-@click.option("--run-ids", type=str, required=False, default=None,
+@click.option("--run-id", "-run", type=str, required=False, default=None,
               help="(Optional) RunIDs to Process. If more than one is provided, results will be displayed immediately. If None, all runs in the copick project will be processed.")
 @slurm_submit.classifier_inputs
 @click.option('--multi-slab', type=str, default=1, 
@@ -324,7 +334,7 @@ def slab(
 def tomograms(
     config: str,
     run_ids: str,
-    voxel_size: float, 
+    voxel_size: float,
     tomo_alg: str,
     seg_name: str,
     seg_session_id: str,
@@ -333,6 +343,7 @@ def tomograms(
     model_weights: str,
     target_class: int,
     multi_slab: str,
+    text_prompt: str,
     ):
     """
     Generate a 3D Segmentation of a tomogram.
@@ -340,7 +351,7 @@ def tomograms(
 
     print('🚀 Running Saber Tomogram Segmentation...')
     run_tomo_seg(
-        config, run_ids, voxel_size, tomo_alg, 
-        seg_name, seg_session_id, slab_thickness, 
-        model_config, model_weights, target_class, multi_slab
+        config, run_ids, voxel_size, tomo_alg,
+        seg_name, seg_session_id, slab_thickness,
+        model_config, model_weights, target_class, multi_slab, text_prompt
     )

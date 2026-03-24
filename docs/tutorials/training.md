@@ -1,30 +1,14 @@
-# Training a Classifier
+# Training a Domain Expert Classifier
 
-Once you've completed the preprocessing and annotation steps, it's time to train your domain expert classifier. This classifier learns to map SAM2's generic segmentations to your specific biological classes, creating an intelligent system that can automatically identify structures in new data.
+The classifier is what turns SAM2's generic mask proposals into organelle-specific segmentations. It is a lightweight neural network trained on your annotated data that scores each SAM2 candidate — keeping lysosomes, discarding carbon contamination, and ignoring everything else you didn't label.
 
 ---
 
-## 📊 Preparing Your Training Data
+## Step 1: Prepare Training Data
 
-### Working with Multiple Data Sources
+### Merging Multiple Datasets
 
-In many research scenarios, you'll have annotated data from multiple sources - different experimental acquisitions, various imaging conditions, or separate copick projects. SABER allows you to combine these datasets for robust classifier training.
-
-<details markdown="1">
-<summary><strong>Why merge multiple datasets?</strong></summary>
-
-Combining annotations from multiple data sources creates a more robust and generalizable classifier by:
-
-- **Increasing data diversity**: Different experimental conditions and imaging parameters
-- **Improving generalization**: Reduces overfitting to specific acquisition settings
-- **Enhancing coverage**: More examples of edge cases and rare structures
-- **Building robustness**: Better performance across different imaging modalities
-
-</details>
-
-### Merging Annotated Datasets
-
-If you have multiple annotated zarr files from different sources, combine them into a single training dataset:
+If you have annotations from multiple experiments, merge them before training. More diverse training data leads to a classifier that generalizes better across imaging sessions and conditions.
 
 ```bash
 saber classifier merge-data \
@@ -34,69 +18,81 @@ saber classifier merge-data \
     --output merged_training.zarr
 ```
 
-**Input format**: Each `--inputs` flag takes a comma-separated pair: `experiment_id,zarr_file_path`. This preserves the source information while creating a unified dataset.
+??? note "`saber classifier merge-data` Parameters"
+    | Parameter | Description |
+    |-----------|-------------|
+    | `--inputs` | Comma-separated `experiment_id,zarr_file_path` pair. Repeat for each source. |
+    | `--output` | Output merged Zarr file path |
 
-### Creating Training and Validation Splits
+??? question "When should I merge datasets?"
+    Merging is beneficial when:
 
-Split your dataset (merged or single) into training and validation sets for proper model evaluation:
+    - You have data from **different imaging sessions** (grid preparations, microscopes)
+    - Your target structures vary in **size or density** across experiments
+    - You want to reduce overfitting to a single acquisition
+
+    Merging is *not* needed if all your data comes from a single, homogeneous experiment.
+
+### Splitting into Train / Validation
 
 ```bash
 saber classifier split-data \
     --input merged_training.zarr \
-    --ratio 0.8  # 80% training, 20% validation
+    --ratio 0.8
 ```
 
-**Output**: This creates two files:
+This creates `merged_training_train.zarr` (80%) and `merged_training_val.zarr` (20%). The split is done at the run level so no single tomogram or micrograph appears in both sets.
 
-- `merged_training_train.zarr` - Training data (80%)
-- `merged_training_val.zarr` - Validation data (20%)
+??? note "`saber classifier split-data` Parameters"
+    | Parameter | Description | Default |
+    |-----------|-------------|---------|
+    | `--input` | Labeled Zarr to split | required |
+    | `--ratio` | Fraction of data used for training | `0.8` |
 
 ---
 
-## 🧠 Training Your Domain Expert Classifier
-
-### Core Training Command
-
-With your data prepared, train the classifier that will learn to identify your specific biological structures:
+## Step 2: Train the Classifier
 
 ```bash
 saber classifier train \
     --input merged_training_train.zarr \
     --validate merged_training_val.zarr \
-    --num-classes 3  # Number of your biological classes + background
+    --num-classes 3
 ```
 
-**Class counting**: The `--num-classes` should be your number of biological classes plus one for the background. For example:
+??? note "`saber classifier train` Parameters"
+    | Parameter | Description | Default |
+    |-----------|-------------|---------|
+    | `--input` | Training Zarr | required |
+    | `--validate` | Validation Zarr | required |
+    | `--num-classes` | Number of biological classes **+ 1** for background | required |
+    | `--num-epochs` | Number of training epochs | `75` |
 
-- Binary classification → `--num-classes 2` (1 class + background)
-- Multi-Classification: `carbon,lysosome,artifacts` → `--num-classes 4` (3 classes + background)
+### Training Outputs
 
-### Training Process
+All results are saved to `results/`:
 
-<details markdown="1">
-<summary><strong>What happens during training?</strong></summary>
+| File | Contents |
+|------|----------|
+| `best_model.pth` | Model weights at the best validation epoch |
+| `model_config.yaml` | Architecture, hyperparameters, and AMG settings |
+| `metrics.pdf` | Loss and accuracy curves across training |
+| `per_class_metrics.pdf` | Per-class precision, recall, and F1 |
 
-The training process involves:
+!!! tip "The config YAML carries everything"
+    When you later pass `model_config.yaml` to a segmenter, it automatically sets the SAM2 model size and AMG parameters that were used during preprocessing. You don't need to re-specify them at inference time.
 
-1. **Feature extraction**: Using SAM2's pre-trained embeddings as rich feature representations
-2. **Classifier learning**: A lightweight neural network learns to map these features to your biological classes
-3. **Validation monitoring**: Performance is continuously evaluated on the validation set
-4. **Model checkpointing**: Best-performing models are saved based on validation metrics
-5. **Early stopping**: Training stops if performance plateaus to prevent overfitting
+??? note "What happens during training?"
+    1. SAM2 image embeddings are extracted for each mask crop (no fine-tuning of SAM2 itself)
+    2. A lightweight classification head learns to map embeddings to your class labels
+    3. Validation loss is monitored every epoch; the best checkpoint is saved
+    4. Training stops early if validation performance plateaus
 
-</details>
+---
 
-**Training outputs**: All results are saved in the `results/` directory:
+## Step 3: Evaluate Your Classifier
 
-- `best_model.pth` - Best performing model weights
-- `model_config.yaml` - Model configuration and hyperparameters
-- `metrics.pdf` and `per_class_metrics.pdf` - Plots of average and per class metrics during training.
-
-## 🔍 Testing Your Trained Model
-
-### Generate Predictions and Visual Gallery
-
-Test your trained classifier and create a visual gallery to assess performance:
+Generate predictions on a held-out Zarr to visually inspect results before running full inference:
 
 ```bash
 saber classifier predict \
@@ -106,57 +102,47 @@ saber classifier predict \
     --output training1_predictions.zarr
 ```
 
-**What this produces**:
+??? note "`saber classifier predict` Parameters"
+    | Parameter | Description |
+    |-----------|-------------|
+    | `--model-weights` | Path to `best_model.pth` |
+    | `--model-config` | Path to `model_config.yaml` |
+    | `--input` | Zarr to run predictions on |
+    | `--output` | Output Zarr for predicted labels |
 
-- **Prediction masks**: Semantic segmentation results stored in zarr format
-- **Visual gallery**: HTML gallery with segmentations overlaid on original images
-- **Class-specific colors**: Each biological class gets a unique color for easy identification
+This produces a Zarr with predicted class labels and an HTML gallery with masks overlaid on the original images, color-coded by class.
 
-### Evaluating Results
+## Step 3: Share or Reuse Your Model
 
-The prediction output includes:
-- **Quantitative metrics**: Accuracy, precision, recall, and F1-scores per class
-- **Visual assessment**: Side-by-side comparisons of predictions vs. annotations
-- **Error analysis**: Identification of common failure modes and edge cases
+Your trained model is fully portable — the `results/` directory contains everything needed to run inference on any machine:
 
-<details markdown="1">
-<summary><strong>Interpreting your results</strong></summary>
+```bash
+# Share with a collaborator or copy to your compute cluster
+rsync -r results/ user@cluster:/path/to/results/
+```
 
-**Good signs**:
+To use on a new machine:
 
-- High accuracy (>85%) on validation data
-- Consistent performance across different experimental conditions
-- Clear, well-defined segmentation boundaries
-- Accurate classification of challenging cases
-
-**Warning signs**:
-
-- Large gap between training and validation accuracy (overfitting)
-- Poor performance on certain classes (class imbalance)
-- Inconsistent results across different image types
-- Blurry or imprecise segmentation boundaries
-
-**Next steps if results are poor**:
-
-- Add more diverse training examples
-- Balance your class distribution
-- Adjust training hyperparameters
-- Consider additional data augmentation
-
-</details>
-
-
-## 🚀 What's Next?
-
-Your trained classifier is now ready for production use! You can:
-
-- [**Apply to new data**:](inference.md) Use your model for automated segmentation
-- **Scale your analysis**: Process large datasets efficiently
-- **Share your model**: Export for use by collaborators
-- **Iterate and improve**: Add new data and retrain for better performance
-
-**Model portability**: Your trained weights (`best_model.pth`) and configuration (`model_config.yaml`) can be shared with colleagues or used across different computing environments.
+```bash
+saber segment tomograms \
+    --config config.json \
+    --model-weights results/best_model.pth \
+    --model-config results/model_config.yaml \
+    --target-class 1
+```
 
 ---
 
-_Ready for production? Check out the [Inference & Segmentation](inference.md) tutorial to learn how to apply your trained model to new datasets!_
+## Next Steps
+
+<div class="grid cards" markdown>
+
+-   [:octicons-arrow-right-24: **Run Inference**](inference.md)
+
+    Apply your trained classifier to new 2D and 3D datasets.
+
+-   [:octicons-arrow-right-24: **API: Training Guide**](../api/training.md)
+
+    Customize the training loop programmatically — custom architectures, loss functions, and data augmentation.
+
+</div>

@@ -1,4 +1,4 @@
-from saber.sam2.automask import amg_cli as amg
+from saber.adapters.sam2.automask import amg_cli as amg
 from saber.utils import slurm_submit
 from saber import cli_context
 import rich_click as click
@@ -65,7 +65,7 @@ def prep2d(
     from saber.segmenters.loaders import base_microsegmenter
     from saber.utils import parallelization, io
     from saber.visualization import galleries
-    from saber.sam2.amg import cfgAMG    
+    from saber.adapters.sam2.amg import cfgAMG
     from skimage import io as sio
     import glob, os, shutil
 

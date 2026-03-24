@@ -1,46 +1,42 @@
 from saber.utils import preprocessing as preprocess
-from saber.segmenters.base import saber3Dsegmenter
+from saber.segmenters.base import saber3D
 from saber.filters import masks as mask_filters
 import saber.visualization.results as cryoviz
 import saber.filters.gaussian as gauss
 from saber.segmenters import utils
-from saber.sam2.amg import cfgAMG
+from saber.adapters.sam2.amg import cfgAMG
+from saber.adapters.base import AdapterConfig
+from typing import Optional
 from tqdm import tqdm
 import numpy as np
 import torch
 
-class cryoTomoSegmenter(saber3Dsegmenter):
+class tomoSegmenter(saber3D):
     def __init__(self,
         deviceID: int = 0,
-        classifier = None,
-        target_class: int = 1,
-        cfg: cfgAMG = None,        
-        min_mask_area: int = 100,
-        min_rel_box_size: float = 0.025
-    ):      
+        cfg: Optional[AdapterConfig] = None,
+        amg_cfg: Optional[cfgAMG] = None,
+        min_mask_area: int = 50,
+    ):
         """
-        Initialize the cryoTomoSegmenter
-        """ 
-        super().__init__(deviceID, classifier, target_class, cfg, min_mask_area)
+        Initialize the tomoSegmenter
+        """
+        super().__init__(
+            deviceID=deviceID, cfg=cfg, amg_cfg=amg_cfg,
+            min_mask_area=min_mask_area,
+        )
 
         # Threshold for Certainty Aware Distillation
         self.filter_threshold = 0.5
 
-    def generate_slab(self, vol, zSlice, slab_thickness):
-        """
-        Generate a Slab of the Tomogram at a Given Depth
-        """
-
-        # Project a Single Slab 
-        self.image0 = preprocess.project_tomogram(vol, zSlice, slab_thickness)
-        self.image0 = preprocess.contrast(self.image0, std_cutoff=3)
-        self.image0 = preprocess.normalize(self.image0)
-        self.image = np.stack([self.image0, self.image0, self.image0], axis=-1)
-
-        return self.image
-
     @torch.inference_mode()
-    def segment_slab(self, vol, slab_thickness, zSlice=None, display_image=True):
+    def segment_slab(self, 
+        vol, 
+        slab_thickness: int = 10, 
+        zSlice: Optional[int] = None, 
+        display: bool = True,
+        text: Optional[str] = None,
+        target_class: Optional[int] = 1 ):
         """
         Segment a 2D image using the Video Predictor
         """
@@ -54,46 +50,59 @@ class cryoTomoSegmenter(saber3Dsegmenter):
             zSlice = int(self.vol.shape[0] // 2)
             
         # Generate Slab
-        self.generate_slab(self.vol, zSlice, slab_thickness)
+        self.image0 = preprocess.project_tomogram(self.vol, zSlice, slab_thickness)
 
         # Segment Slab 
-        self.segment_image(self.image, display_image = display_image)
+        self.segment_image(
+            self.image0, display = display, 
+            text_prompt=text, target_class=target_class,
+        )
 
         return self.masks
 
     def segment(
         self, 
         vol,
-        slab_thickness: int,
+        thickness: int = 10,
         zSlice: int = None,
+        text: Optional[str] = None,
+        target_class: Optional[int] = 1,
         save_run: str = None, 
-        show_segmentations: bool = False, 
+        display: bool = False, 
     ):
         """
         Segment a 3D tomogram using the Video Predictor
         """
-        return self.segment_vol(vol, slab_thickness, zSlice, save_run, show_segmentations)
+        return self.segment_vol(
+            vol, thickness, zSlice, 
+            text, target_class, save_run, display
+        )
 
     @torch.inference_mode()
     def segment_vol(
         self, 
         vol,
-        slab_thickness: int,
+        thickness: int,
         zSlice: int = None,
+        text: Optional[str] = None,
+        target_class: Optional[int] = 1,
         save_run: str = None, 
-        show_segmentations: bool = False, 
+        display: bool = False, 
     ):  
         """
         Segment a 3D tomogram using the Video Predictor
         """
 
         # Determine if We Should Show the 2D Segmentations or Show the Segmentations in 3D
-        if show_segmentations:  save_mask = False
-        else:                   save_mask = True
+        if display:  save_mask = False
+        else:        save_mask = True
         self.is_tomogram_mode = True        
 
         # Segment Initial Slab 
-        self.segment_slab(vol, slab_thickness, zSlice, display_image=False)
+        self.segment_slab(
+            vol, thickness, zSlice, display=False,
+            text=text, target_class=target_class
+        )
 
         # Optional: Save Save Segmentation to PNG or Plot Segmentation with Matplotlib
         if save_mask and save_run is not None:
@@ -104,52 +113,41 @@ class cryoTomoSegmenter(saber3Dsegmenter):
             return None
 
         # If A Mask is Found, Follow to 3D Segmentation Propagation
-        # Initialize Video Predictor
-        if self.inference_state is None:
-            self.inference_state = self.video_predictor.create_inference_state_from_tomogram(self.vol)  
-
-        # Set up score capture hook
-        captured_scores, hook_handle = self._setup_score_capture_hook()                  
+        # Initialize Video Predictor via adapter set_volume()
+        if not self._vol_loaded:
+            self.video_predictor.set_volume(self.vol)
+            self._vol_loaded = True
 
         # Get the dimensions of the volume.
-        (nx, ny, nz) = (
-            len(self.inference_state['images']),
+        nx = self.vol.shape[0]
+        ny, nz = (
             self.masks[0]['segmentation'].shape[0],
             self.masks[0]['segmentation'].shape[1]
         )
 
         # Set annotation frame
-        self.ann_frame_idx = zSlice if zSlice is not None else nx // 2 
+        self.ann_frame_idx = zSlice if zSlice is not None else nx // 2
 
-        # Add masks to predictor
-        self._add_masks_to_predictor(self.masks, self.ann_frame_idx, ny)
-
-        # Propagate and filter
+        # Propagate and filter (adapter handles seeding + hook + scoring internally)
         mask_shape = (nx, ny, nz)
-        vol_masks, video_segments = self._propagate_and_filter(
-            self.vol, self.masks, 
-            captured_scores, mask_shape,
-        )
-
-        # Remove hook and Reset Inference State
-        hook_handle.remove()
+        vol_masks = self.propagate(mask_shape)
         
         # Display if requested
-        if show_segmentations:
+        if display:
             cryoviz.view_3d_seg(self.vol, vol_masks)
             
         return vol_masks
 
-    def generate_multi_slab(self, vol, slab_thickness, zSlice):
+    def generate_multi_slab(self, vol, thickness, zSlice):
         """
         Highly Experimental, Instead of Generating a Slab at a Single Depth,
         Generate 3 Slabs to Provide Z-Context.
         """
         
         # Option 1: Project Multiple Slabs to Provide Z-Context
-        image1 = preprocess.project_tomogram(vol, zSlice - slab_thickness/3, slab_thickness)
-        image2 = preprocess.project_tomogram(vol, zSlice, slab_thickness)
-        image3 = preprocess.project_tomogram(vol, zSlice + slab_thickness/3, slab_thickness)
+        image1 = preprocess.project_tomogram(vol, zSlice - thickness/3, thickness)
+        image2 = preprocess.project_tomogram(vol, zSlice, thickness)
+        image3 = preprocess.project_tomogram(vol, zSlice + thickness/3, thickness)
 
         # # Extend From Grayscale to RGB 
         image = np.stack([image1, image2, image3], axis=-1)
@@ -161,19 +159,22 @@ class cryoTomoSegmenter(saber3Dsegmenter):
         self.image = image
 
 
-class multiDepthTomoSegmenter(cryoTomoSegmenter):
+class multiDepthTomoSegmenter(tomoSegmenter):
     def __init__(self,
         deviceID: int = 0,
-        classifier = None,
+        cfg: Optional[AdapterConfig] = None,
+        amg_cfg: Optional[cfgAMG] = None,
         target_class: int = 1,
-        cfg: cfgAMG = None,
         min_mask_area: int = 100,
-        min_rel_box_size: float = 0.025
+        min_rel_box_size: float = 0.025,
     ):
         """
         Initialize the multiDepthTomoSegmenter
         """
-        super().__init__(deviceID, classifier, target_class, cfg, min_mask_area, min_rel_box_size)
+        self.min_rel_box_size = min_rel_box_size
+        self.target_class = target_class
+        super().__init__(deviceID=deviceID, cfg=cfg, amg_cfg=amg_cfg,
+                         min_mask_area=min_mask_area)
 
         if target_class < 1: 
             print('[Error]: Multi-Depth Tomogram Segmenter only supports Single-Class Segmentation currently.')
@@ -181,28 +182,28 @@ class multiDepthTomoSegmenter(cryoTomoSegmenter):
 
     def segment(self,
         vol,
-        slab_thickness: int,
+        thickness: int,
         num_slabs: int = 3,
         delta_z: int = 30,
         save_run: str = None, 
-        show_segmentations: bool = False, 
+        display: bool = False, 
     ):
         """
         Segment a 3D tomogram using the Video Predictor
         """
 
         # Store Whether to Show Segmentations
-        self.show_segments = show_segmentations
+        self.show_segments = display
         
         # Determine Segmentation Mode
         if self.target_class > 0 or self.classifier is None:
-            return self.single_segment(vol, slab_thickness, num_slabs, delta_z)
+            return self.single_segment(vol, thickness, num_slabs, delta_z)
         else:
             print("Multiclass Segmentation is not implemented yet")
-            # return self.multiclass_segment(vol, slab_thickness, num_slabs)
+            # return self.multiclass_segment(vol, thickness, num_slabs)
 
     @torch.inference_mode()
-    def single_segment(self, vol, slab_thickness, num_slabs, delta_z):
+    def single_segment(self, vol, thickness, num_slabs, delta_z):
         """
         Segment a 3D tomogram using the Video Predictor
         """
@@ -226,9 +227,9 @@ class multiDepthTomoSegmenter(cryoTomoSegmenter):
             
             # Segment this slab
             masks3d = self.segment_vol(
-                vol, slab_thickness, 
-                zSlice=slab_center, 
-                show_segmentations=False
+                vol, thickness,
+                zSlice=slab_center,
+                display=False
             )        
             if masks3d is None: # Skip if No Masks Found
                 continue

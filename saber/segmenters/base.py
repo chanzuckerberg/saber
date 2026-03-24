@@ -1,14 +1,11 @@
-import saber.filters.estimate_thickness as estimate_thickness
-from saber.sam2 import tomogram_predictor, automask as amg
 from saber.visualization import classifier as viz
-from saber.utils import preprocessing
 import saber.filters.masks as filters
-from saber import pretrained_weights
-from typing import List, Tuple, Any
+from saber.adapters.base import AdapterConfig, SAM2AdapterConfig, get_adapter
+from saber.utils import preprocessing as prep
+from saber.adapters.sam2.amg import cfgAMG
+from typing import List, Tuple, Optional
 from saber.segmenters import utils
-from saber.sam2.amg import cfgAMG
 from saber.utils import io
-from scipy import ndimage
 from tqdm import tqdm
 import numpy as np
 import torch
@@ -18,21 +15,26 @@ import logging
 logger = logging.getLogger()
 logger.disabled = True
 
-class saber2Dsegmenter:
+class saber2D:
     def __init__(self,
-        cfg: cfgAMG = None,    
         deviceID: int = 0,
-        classifier = None,
-        target_class: int = 1,
+        cfg: Optional[AdapterConfig] = None,
+        amg_cfg: Optional[cfgAMG] = None,
         min_mask_area: int = 50,
         window_size: int = 256,
         overlap_ratio: float = 0.25,
     ):
         """
-        Class for Segmenting Micrographs or Images using SAM2
+        Class for Segmenting Micrographs or Images
         """
+        if cfg is None and amg_cfg is None:
+            raise "Either Provide an AdapterConfig or AMG Config!"
 
-        # Minimum Mask Area to Ignore 
+        # Wrap bare amg_cfg into a full config
+        if cfg is None:
+            cfg = SAM2AdapterConfig(amg_cfg=amg_cfg, min_mask_area=min_mask_area)
+
+        # Minimum Mask Area to Ignore
         self.min_mask_area = min_mask_area
 
         # Sliding window parameters
@@ -44,57 +46,60 @@ class saber2Dsegmenter:
         self.deviceID = deviceID
 
         # Initialize Domain Expert Classifier for Filtering False Positives
-        if classifier:
-            self.classifier = classifier
-            self.target_class = target_class
-            self.batchsize = 32
-            # Also set classifier to eval mode
-            if hasattr(self.classifier, 'eval'):
-                self.classifier.eval()
-
-            # Get AMG Config from Classifier 
-            self.cfg = self.classifier.config['amg_params']
-        else:
-            self.target_class = 1
+        _classifier = getattr(cfg, 'classifier', None)
+        if _classifier is None:
             self.classifier = None
-            self.batchsize = None
+            self.batchsize = None     
+        else:
+            self.classifier = _classifier
+            self.batchsize = 32 
 
-            # Use Default AMG Config if None Provided or Incorrect Type
-            self.cfg = cfg if isinstance(cfg, cfgAMG) else cfgAMG()
-            self.cfg = self.cfg.dict()
-
-        # Build SAM2 Automatic Mask Generator
-        self.mask_generator = amg.build_amg(
-            self.cfg, self.min_mask_area, device=self.device
-        )
+        self.adapter_cfg = cfg
+        self.adapter = get_adapter(cfg, self.device)
 
         # Initialize Image and Masks
         self.image = None
 
-        # Internal Variable to Let Users Save Segmentations 
+        # Internal Variable to Let Users Save Segmentations
         self.save_button = False
         self.remove_repeating_masks = True
+
+    def segment(
+        self,
+        image: np.ndarray,
+        target_class: Optional[int] = None,
+        text: Optional[str] = None,
+        threshold: Optional[float] = 0.5,
+        display: bool = False,
+        use_sliding_window: bool = False,
+    ) -> list:
+        return self.segment_image(
+            image, display=display,
+            use_sliding_window=use_sliding_window,
+            text_prompt=text, threshold=threshold,
+            target_class=target_class,
+        )
 
     @torch.inference_mode()
     def segment_image(self,
         image: np.ndarray,
-        display_image: bool = True,
-        use_sliding_window: bool = False
+        display: bool = True,
+        use_sliding_window: bool = False,
+        text_prompt: Optional[str] = None,
+        threshold: Optional[float] = 0.5,
+        target_class: Optional[int] = 1,
     ):
         """
         Segment image using sliding window approach
-        
+
         Args:
-            image0: Input image
-            display_image: Whether to display the result
+            image: Input image
+            display: Whether to display the result
             use_sliding_window: Whether to use sliding window (True) or single inference (False)
         """
 
-        # Preprocess image if it is 2D
-        if image.ndim == 2:
-            image = self._preprocess(image)
-
         # Run Segmentation
+        self.target_class = target_class
         if use_sliding_window:
 
             # Create Full Mask
@@ -110,7 +115,10 @@ class saber2Dsegmenter:
                 window_image = image[y1:y2, x1:x2]
                 
                 # Run inference on window
-                window_masks = self.mask_generator.generate(window_image)
+                window_masks = self.adapter.segment_image_2d(
+                    window_image, text_prompt=text_prompt, 
+                    threshold=threshold 
+                )
                 
                 # Transform masks back to full image coordinates
                 curr_masks = []
@@ -134,13 +142,14 @@ class saber2Dsegmenter:
             
         else:
             # Original single inference
-            self.masks = self.mask_generator.generate(image)
+            self.masks = self.adapter.segment_image_2d(
+                image, text_prompt=text_prompt, threshold=threshold)
 
             # Apply Classifier to Filter False Positives
             self.masks = self._apply_classifier(image, self.masks)
 
         # Optional: Save Save Segmentation to PNG or Plot Segmentation with Matplotlib
-        if display_image:
+        if display:
             viz.display_mask_list(image, self.masks, self.save_button)
 
         # Return the Masks
@@ -159,8 +168,9 @@ class saber2Dsegmenter:
             # Since Order Doesn't Matter, Sort by Area for Saber GUI. 
             masks = sorted(masks, key=lambda mask: mask['area'], reverse=False)
         else: 
+            gray = image[:, :, 0] if image.ndim == 3 else image
             masks = filters.apply_classifier(
-                image, masks, self.classifier,
+                gray, masks, self.classifier,
                 self.target_class, self.batchsize)
 
         return masks
@@ -193,12 +203,6 @@ class saber2Dsegmenter:
                 windows.append((y1, x1, y2, x2))
                 
         return windows
-    
-    def _preprocess(self, image: np.ndarray):
-        image = preprocessing.contrast(image, std_cutoff=3)
-        image = preprocessing.normalize(image, rgb=False)
-        image = np.repeat(image[..., None], 3, axis=2)
-        return image
 
     def _to_global_bbox(self, local_bbox, y0, x0):
         # SAM-style bbox = [x, y, w, h]
@@ -227,231 +231,50 @@ class saber2Dsegmenter:
             disp.append(m2)
         return disp
     
-class saber3Dsegmenter(saber2Dsegmenter):
+class saber3D(saber2D):
     def __init__(self,
         deviceID: int = 0,
-        classifier = None,
-        target_class: int = 1,
-        cfg: cfgAMG = None,        
-        min_mask_area: int = 100,
-        min_rel_box_size: float = 0.025,
-        light_modality: bool = False
-    ):  
-        super().__init__(cfg, deviceID, classifier, target_class, min_mask_area)
+        cfg: AdapterConfig = None,
+        amg_cfg: cfgAMG = None,
+        min_mask_area: int = 50,
+    ):
+        super().__init__(
+            deviceID=deviceID,
+            cfg=cfg, amg_cfg=amg_cfg,
+            min_mask_area=min_mask_area,
+        )
 
-        # Build Tomogram Predictor (VOS Optimized)
-        (cfg, checkpoint) = pretrained_weights.get_sam2_checkpoint(self.cfg['sam2_cfg'])
-        self.video_predictor = tomogram_predictor.TomogramSAM2Adapter(
-            cfg, checkpoint, self.device, light_modality=light_modality
-        )  
-        
-        # Initialize Inference State
-        self.inference_state = None
+        # Alias for downstream 3D segmentation code
+        self.video_predictor = self.adapter
+
+        # Track whether volume has been loaded into the adapter
+        self._vol_loaded = False
 
         # Minimum Logits Threshold for Confidence
-        self.min_logits = 0.5        
+        self.min_logits = 0.5
 
         # Flag to Plot the Z-Slice Confidence Estimations
         self.confidence_debug = False
 
         # Default to full volume propagation
-        self.nframes = None 
+        self.nframes = None
 
         # Filter Threshold for Confidence
         self.filter_threshold = 0.5
         
-    @torch.inference_mode()
-    def propagate_segementation(
-        self,
-        mask_shape: Tuple[int, int, int],
-    ):
-        """
-        Propagate Segmentation in 3D with Video Predictor
-        """
-
-        # middle_frame = int( mask_shape[0] // 2 )
-        start_frame = self.ann_frame_idx
-
-        # Pull out Masks for Multiple Classes
-        nMasks = len(self.masks )
-        vol_mask = np.zeros( [mask_shape[0], mask_shape[1], mask_shape[2]], dtype=np.uint8)
-
-        # run propagation throughout the video and collect the results in a dict
-        video_segments1 = {}  # video_segments contains the per-frame segmentation results
-        for out_frame_idx, out_obj_ids, out_mask_logits in self.video_predictor.propagate_in_video(
-            self.inference_state, start_frame_idx= start_frame, max_frame_num_to_track = self.nframes, reverse=False ):
-
-            # Update current frame
-            self.current_frame = out_frame_idx
-            video_segments1[out_frame_idx] = {
-                out_obj_id: (out_mask_logits[i] > self.min_logits).cpu().numpy() for i, out_obj_id in enumerate(out_obj_ids)
-            }
-
-        # run propagation throughout the video and collect the results in a dict
-        video_segments2 = {}  # video_segments contains the per-frame segmentation results
-        for out_frame_idx, out_obj_ids, out_mask_logits in self.video_predictor.propagate_in_video(
-            self.inference_state, start_frame_idx= start_frame-1, max_frame_num_to_track = self.nframes, reverse=True ):
-
-            # Update current frame
-            self.current_frame = out_frame_idx
-            video_segments2[out_frame_idx] = {
-                out_obj_id: (out_mask_logits[i] > self.min_logits).cpu().numpy() for i, out_obj_id in enumerate(out_obj_ids)
-            }
-
-        # Merge Video Segments to Return for Visualization / Analysis    
-        video_segments = video_segments1 | video_segments2   
-        vol_mask = filters.segments_to_mask(video_segments, vol_mask, mask_shape)
-
-        return vol_mask, video_segments
-
-    def _setup_score_capture_hook(self):
-        """
-        Set up hook to capture object score logits from mask decoder.
-        Returns: (captured_scores dict, hook_handle)
-        """
-        captured_scores = {}
-        self.current_frame = None
-        
-        def mask_decoder_hook(module, inputs, output):
-            """Capture object score logits from SAM mask decoder output."""
-            logits = output[3].detach().cpu().to(torch.float32).numpy()
-            frame_idx = self.current_frame
-            if frame_idx not in captured_scores:
-                captured_scores[frame_idx] = []
-            captured_scores[frame_idx].append(logits)
-        
-        hook_handle = self.video_predictor.predictor.sam_mask_decoder.register_forward_hook(mask_decoder_hook)
-        return captured_scores, hook_handle
-    
-    def _add_masks_to_predictor(self, masks, ann_frame_idx, ny):
-        """
-        Add masks to the video predictor with automatic prompting.
-        
-        Args:
-            masks: List of mask arrays or mask dictionaries
-            ann_frame_idx: Frame index for annotation
-            ny: Height dimension for scaling
-        
-        Returns:
-            prompts: Dictionary of prompts added
-        """
-        # Handle both mask arrays and mask dictionaries
-        if isinstance(masks[0], dict):
-            mask_arrays = [m['segmentation'] for m in masks]
+    def propagate(self, mask_shape, target_class: Optional[int] = 1):
+        """Seed masks into the adapter and propagate bidirectionally."""
+        if isinstance(self.masks[0], dict):
+            mask_arrays = [m['segmentation'] for m in self.masks]
         else:
-            mask_arrays = masks
-        
-        # Set up prompts
-        prompts = {}
-        scale = self.video_predictor.predictor.image_size / ny
-        labels = np.array([1], np.int32)
-        
-        for ii, mask in enumerate(mask_arrays):
-            # Skip Empty Masks
-            if np.max(mask) == 0:
-                continue
+            mask_arrays = self.masks
 
-            # Get SAM Points and Unique ID per mask
-            auto_points = ndimage.center_of_mass(mask)[::-1]
-            sam_points = np.array(auto_points) * scale       
-            ann_obj_id = ii + 1          
-
-            # Add new mask
-            _, out_obj_ids, out_mask_logits = self.video_predictor.add_new_mask(
-                inference_state=self.inference_state,
-                frame_idx=ann_frame_idx,
-                obj_id=ann_obj_id,
-                mask=mask,
-            )
-            
-            prompts.setdefault(ann_obj_id, {})
-            prompts[ann_obj_id].setdefault(ann_frame_idx, [])
-            prompts[ann_obj_id][ann_frame_idx].append((sam_points, labels))
-        
-        return prompts
-
-    def _propagate_and_filter(
-        self, vol, masks, 
-        captured_scores, mask_shape, 
-        ):
-        """
-        Propagate segmentation and optionally filter results.
-        
-        Args:
-            vol: Volume array
-            masks: Input masks
-            captured_scores: Captured confidence scores
-            mask_shape: Shape of the output mask
-            filter_segmentation: Whether to filter low-confidence segments
-            
-        Returns:
-            vol_masks: Final segmentation masks
-            video_segments: Video segmentation dictionary
-        """
-        # Propagate segmentation
-        vol_masks, video_segments = self.propagate_segementation(mask_shape)
-
-        self.nMasks = sum(
-            (mask['segmentation'] if isinstance(mask, dict) else mask).any()
-            for mask in self.masks
+        vol_masks = self.video_predictor.segment_volume(
+            start_frame_idx=self.ann_frame_idx,
+            masks=mask_arrays,
+            vol_shape=mask_shape,
+            max_frame_num_to_track=self.nframes,
+            min_presence_score=self.filter_threshold,
         )
-        nMasks = self.nMasks
-
-        # Filter if requested
-        if self.filter_threshold > 0:
-            self.frame_scores = np.zeros([vol.shape[0], nMasks])
-            vol_masks, video_segments = self.filter_video_segments(
-                video_segments, captured_scores, mask_shape
-            )
-        else:
-            vol_masks = filters.segments_to_mask(
-                video_segments, vol_masks, mask_shape
-            )
-
-        # Remove hook and Reset Inference State
-        self.video_predictor.reset_state(self.inference_state)
-            
-        return vol_masks, video_segments        
-
-    def filter_video_segments(self, video_segments, captured_scores, mask_shape):
-        """
-        Filter out masks with low confidence scores.
-        """
-
-        # Populate the Frame Scores Array
-        for frame_idx, scores in captured_scores.items():
-            if frame_idx is None:
-                continue
-
-            score_values = np.concatenate([s.flatten() for s in scores])
-
-            # Store these score values in the corresponding row.
-            # If there are fewer scores than the allocated length, the remaining values stay zero.
-            self.frame_scores[frame_idx, ] = score_values
-
-        # Determine the Range Along Z-Axis for Each Organelle
-        self.mask_boundaries = estimate_thickness.fit_organelle_boundaries(self.frame_scores, plot=self.confidence_debug)
-
-        # Now, filter the video_segments.
-        # For each frame, if the score for the first mask is above the threshold, keep the segmentation;
-        # otherwise, replace with an array of zeros (or background).
-        nMasks = self.frame_scores.shape[1]
-        filtered_video_segments = {}
-        for frame_idx, seg_dict in video_segments.items():
-            # Check the score for the first mask; adjust if needed.
-            filtered_video_segments[frame_idx] = {}  # Initialize the dictionary for this frame
-
-            vals = list(seg_dict.keys())
-            for mask_idx in range(nMasks):
-                mask_val = vals[mask_idx]
-                if self.mask_boundaries[frame_idx, mask_idx] > self.filter_threshold:
-                    filtered_video_segments[frame_idx][mask_val] = seg_dict[mask_val]
-                else:
-                    # For null frames, create an empty mask for given object id.
-                    filtered_video_segments[frame_idx][mask_val] = np.full(seg_dict[1].shape, False, dtype=bool)
-
-        # Convert Video Segments into Mask
-        masks = np.zeros([mask_shape[0], mask_shape[1], mask_shape[2]], dtype=np.uint8)
-        masks = filters.segments_to_mask(filtered_video_segments, masks, mask_shape)
-
-        return masks, filtered_video_segments
+        self.video_predictor.reset_state()
+        return vol_masks

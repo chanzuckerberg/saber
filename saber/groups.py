@@ -37,28 +37,28 @@ click.rich_click.OPTION_GROUPS = {
 	],
 	"routines segment slab": [
 		{"name": "Input", "options": ["--config", "--voxel-size", "--tomo-alg", "--run-id", "--slab-thickness"]},
-	  	{"name": "Classifier", "options": ["--model-weights", "--model-config", "--target-class"]},
+	  	{"name": "Classifier", "options": ["--model-weights", "--model-config", "--target-class", "--text-prompt"]},
 		{"name": "SAM2-AMG", "options": [ *amg_flags ]}, 
 	],
 	"routines segment micrographs": [
 		{"name": "I/O", "options": ["--input", "--output", "--scale-factor", "--target-resolution", "--sliding-window"]},
-	  	{"name": "Classifier", "options": ["--model-weights", "--model-config", "--target-class"]},
+	  	{"name": "Classifier", "options": ["--model-weights", "--model-config", "--target-class", "--text-prompt"]},
 		{"name": "SAM2-AMG", "options": [ *amg_flags ]},
 	],
 	 "routines segment tomograms": [
 		{"name": "Input", "options": ["--config", "--voxel-size", "--tomo-alg", "--run-ids", "--slab-thickness", "--multi-slab"]},
-	  	{"name": "Classifier", "options": ["--model-weights", "--model-config", "--target-class"]},
+	  	{"name": "Classifier", "options": ["--model-weights", "--model-config", "--target-class", "--text-prompt"]},
 		{"name": "Output", "options": ["--seg-name", "--seg-session-id" ]},
 	 ],
 	 "routines segment fib": [
 		{"name": "I/O", "options": ["--input", "--scale-factor", "--output"]},
 		{"name": "Processing Parameters", "options": ["--ini_depth", "--nframes",]},
-		{"name": "Classifier", "options": ["--model-config", "--model-weights", "--target-class"]}
+		{"name": "Classifier", "options": ["--model-config", "--model-weights", "--target-class", "--text-prompt"]}
 	 ]
 ,
 	 "routines segment light": [
 		{"name": "I/O", "options": ["--input", "--scale-factor", "--output"]},
 		{"name": "Processing Parameters", "options": ["--ini_depth", "--nframes",]},
-		{"name": "Classifier", "options": ["--model-config", "--model-weights", "--target-class"]}
+		{"name": "Classifier", "options": ["--model-config", "--model-weights", "--target-class", "--text-prompt"]}
 	 ]	 
 }

@@ -1,50 +1,6 @@
 import rich_click as click
 
-@click.group()
-@click.pass_context
-def cli(ctx):
-    pass
-
-def validate_num_gpus(ctx, param, value):
-    if value is not None and (value < 1 or value > 4):
-        raise click.BadParameter("Number of GPUs must be between 1 and 4.")
-    return value
-
-def create_shellsubmit(
-    job_name, 
-    output_file,
-    shell_name,
-    command,
-    num_gpus = 1, 
-    gpu_constraint = 'h100'):
-
-    if num_gpus > 0:
-        slurm_gpus = f'#SBATCH --nodes=1\n#SBATCH --partition=gpu\n#SBATCH --gpus={gpu_constraint}:{num_gpus}'
-    else:
-        slurm_gpus = f'#SBATCH --partition=cpu'
-
-    shell_script_content = f"""#!/bin/bash
-
-{slurm_gpus}
-#SBATCH --time=18:00:00
-#SBATCH --cpus-per-task=6
-#SBATCH --mem-per-cpu=16G
-#SBATCH --job-name={job_name}
-#SBATCH --output={output_file}
-
-ml anaconda 
-conda activate /hpc/projects/group.czii/conda_environments/pySAM2
-
-{command}
-"""
-    with open(shell_name, 'w') as file:
-        file.write(shell_script_content)
-
-    print(f"\nShell script {shell_name} created successfully.\n")
-
-
 ################################### COMMON CLI COMMANDS ##############################################
-
 
 def copick_commands(func):
     """Decorator to add common options to a Click command."""
@@ -93,11 +49,9 @@ def classifier_inputs(func):
         click.option("-mc", "--model-config", type=str,required=False, default=None,
                      help="Path to Classifier Model Config"),
         click.option("-mw", "--model-weights", type=str, required=False, default=None,
-                    help="Path to Classifier model trained weights."),
+                    help="Path to Classifier model trained weights."),    
         click.option("-tc", "--target-class", type=int, required=False, default=-1,
-                    help="Target Class for Segmentation. When set to -1, the model performs semantic segmentation.\nWhen set to a positive integer, the model performs instance segmentation for the desired class.."),
-        click.option("-tp", "--text-prompt", type=str, required=False, default=None,
-                    help="Text description of the target structure (e.g. 'mitochondria'). When provided, segmentation will run with SAM3 using open-vocabulary text-guided detection instead of the classifier with SAM2."),
+                    help="Target Class for Segmentation. When set to -1, the model performs semantic segmentation.\nWhen set to a positive integer, the model performs instance segmentation for the desired class..")
     ]
     for option in reversed(options):  # Add options in reverse order to preserve correct order
         func = option(func)
@@ -117,6 +71,10 @@ def sam2_inputs(func):
         func = option(func)
     return func
 
+def validate_num_gpus(ctx, param, value):
+    if value is not None and (value < 1 or value > 4):
+        raise click.BadParameter("Number of GPUs must be between 1 and 4.")
+    return value
 
 # Callback to ensure the --multiple-slabs parameter is an odd integer (and at least 1)
 def validate_odd(ctx, param, value):
@@ -125,6 +83,3 @@ def validate_odd(ctx, param, value):
     if value % 2 == 0:
         raise click.BadParameter("The --multiple-slabs parameter must be an odd number.")
     return value
-
-if __name__ == "__main__":
-    cli()

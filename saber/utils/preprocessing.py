@@ -1,9 +1,13 @@
 from scipy.ndimage import uniform_filter
 import numpy as np
 
-def contrast(image, std_cutoff=5):
+def contrast(image: np.ndarray, std_cutoff: int = 5) -> np.ndarray:
     """
     Normalize the Input Data to [0,1]
+    
+    Args:
+        image (np.ndarray): The input image to contrast.
+        std_cutoff (int): The cutoff value for the contrast.
     """
     image_mean = uniform_filter(image, size=500)
     image_sq = uniform_filter(image**2, size=500)
@@ -13,7 +17,15 @@ def contrast(image, std_cutoff=5):
 
     return np.clip(image, -std_cutoff, std_cutoff)
 
-def normalize(image, rgb = False):
+def normalize(image: np.ndarray, rgb: bool = False) -> np.ndarray:
+    """
+    Normalize the input image to [0,1]
+    
+    Args:
+        image (np.ndarray): The input image to normalize.
+        rgb (bool): Whether the image is in RGB format.
+    """
+
     # Clip the Volume by ±5std
     if rgb:
         min_vals = image.min(axis=(0, 1), keepdims=True)
@@ -51,3 +63,19 @@ def project_tomogram(vol, zSlice = None, deltaZ = None):
         projection = np.mean(vol, axis=0)
         
     return projection
+
+def prepare(image: np.ndarray, to_rgb: bool = False):
+    """
+    Prepare the input image for SAM2/SAM3 Processing.
+    
+    Args:
+        image (np.ndarray): The input image to prepare.
+        to_rgb (bool): Whether to return the image in RGB format.
+    """
+
+    image = contrast(image, std_cutoff=3)
+    image = normalize(image, rgb=False)
+    if to_rgb and image.ndim == 2:
+        image = np.repeat(image[..., None], 3, axis=2)
+        image = image.astype(np.float32)
+    return image

@@ -1,6 +1,6 @@
 from saber.segmenters.micro import cryoMicroSegmenter
 from saber.filters.downsample import FourierRescale2D
-from saber.segmenters.tomo import cryoTomoSegmenter
+from saber.segmenters.tomo import tomoSegmenter
 from saber.filters import masks as mask_filters
 from copick_utils.io import writers, readers
 from saber.utils import zarr_writer, io
@@ -17,7 +17,8 @@ def segment_tomogram_core(
     num_slabs: int, delta_z: int,
     display_segmentation: bool,
     segmenter,  # Pre-loaded or newly created segmenter
-    gpu_id: int = 0  # Default GPU ID
+    gpu_id: int = 0,  # Default GPU ID
+    target_class: int = 1,
     ):
     """
     Core segmentation function that both interactive and parallel versions call.
@@ -54,8 +55,9 @@ def segment_tomogram_core(
     else:
         segment_mask = segmenter.segment(
             vol, slab_thickness,
-            save_run=img_name, 
-            show_segmentations=display_segmentation)
+            target_class=target_class,
+            save_run=img_name,
+            display=display_segmentation)
 
     # Check if the segment_mask is None
     if segment_mask is None:
@@ -105,7 +107,7 @@ def segment_micrograph_core(
 
     # Get the Global Zarr Writer
     zwriter = zarr_writer.get_zarr_writer(output) 
-    zwriter.set_dict_attr('amg', segmenter.cfg)
+    zwriter.set_dict_attr('amg', segmenter.adapter_cfg.amg_cfg.to_dict())
 
     # Ensure we're on the correct GPU
     torch.cuda.set_device(gpu_id)
@@ -121,8 +123,9 @@ def segment_micrograph_core(
     elif scale_factor is not None:
         image = FourierRescale2D.run(image, scale_factor)   
 
-    # Produce Initialial Segmentations with SAM2
-    segmenter.segment( image, display_image=False, use_sliding_window=use_sliding_window )
+    # Produce Segmentations with SAM2 or SAM3
+    target_class = models.get('target_class', -1)
+    segmenter.segment( image, target_class=target_class, display=False, use_sliding_window=use_sliding_window )
 
     # Convert any numpy array/scalar to Python scalar
     if isinstance(pixel_size, np.ndarray):
