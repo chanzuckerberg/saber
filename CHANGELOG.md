@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/chanzuckerberg/saber/compare/saber-em-v0.10.0...saber-em-v0.11.0) (2026-03-24)
+
+
+### ✨ Features
+
+* add no args is help to cli ([2edac60](https://github.com/chanzuckerberg/saber/commit/2edac602b598b5d38dfc38df16d0bb404e089603))
+
 ## [0.10.0](https://github.com/chanzuckerberg/saber/compare/saber-em-v0.9.0...saber-em-v0.10.0) (2026-01-22)
 
 
