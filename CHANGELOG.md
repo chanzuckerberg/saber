@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.0.0](https://github.com/chanzuckerberg/saber/compare/saber-em-v0.10.0...saber-em-v1.0.0) (2026-04-03)
+
+
+### ✨ Features
+
+* add no args is help to cli ([2edac60](https://github.com/chanzuckerberg/saber/commit/2edac602b598b5d38dfc38df16d0bb404e089603))
+
+
+### 📝 Documentation
+
+* migrate to zensical 2.0 ([1446b45](https://github.com/chanzuckerberg/saber/commit/1446b45731c1600e15ced569399fe4cc2df7e24c))
+
+
+### 🧹 Miscellaneous Chores
+
+* Mkdocs2.0 ([4ce8119](https://github.com/chanzuckerberg/saber/commit/4ce81192cbc2f70737c08b712992a4549181d8f6))
+
 ## [0.10.0](https://github.com/chanzuckerberg/saber/compare/saber-em-v0.9.0...saber-em-v0.10.0) (2026-01-22)
 
 
