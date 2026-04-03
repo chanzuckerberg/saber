@@ -1,0 +1,76 @@
+[project]
+site_name = "SABER - Segment Anything Based Electron Recognition"
+repo_url = "https://github.com/chanzuckerberg/saber"
+repo_name = "chanzuckerberg/saber"
+copyright = "2025, Jonathan Schwartz"
+
+nav = [
+    {"🏡 Home" = [
+        {"Overview" = "index.md"},
+    ]},
+    {"🛠️ Getting Started" = [
+        {"Installation" = "getting-started/installation.md"},
+        {"Importing Volumes" = "getting-started/import-tomos.md"},
+        {"Quickstart" = "getting-started/quickstart.md"},
+    ]},
+    {"📓 User Guide" = [
+        {"Overview" = "tutorials/introduction.md"},
+        {"Importing Volumes" = "tutorials/import-tomos.md"},
+        {"Pre-processing" = "tutorials/preprocessing.md"},
+        {"Training a Classifier" = "tutorials/training.md"},
+        {"Inference (2D & 3D)" = "tutorials/inference.md"},
+        {"Membrane Refinement" = "tutorials/membrane-refinement.md"},
+    ]},
+    {"📦 API Reference" = [
+        {"Overview" = "api/overview.md"},
+        {"Importing Volumes" = "api/import-tomos.md"},
+        {"2D Quickstart" = "api/quickstart2d.md"},
+        {"3D Quickstart" = "api/quickstart3d.md"},
+        {"Training Domain Expert Classifiers" = "api/training.md"},
+        {"Parallel Inference" = "api/parallel-inference.md"},
+    ]},
+]
+
+# --- Theme ---
+
+[project.theme]
+variant = "classic"
+logo = "assets/logo.png"
+features = [
+    "navigation.instant",
+    "navigation.tracking",
+    "navigation.tabs",
+    "navigation.tabs.sticky",
+    "navigation.expand",
+    "navigation.sections",
+    "search.highlight",
+    "search.suggest",
+    "content.tabs.link",
+    "content.code.annotate",
+    "content.code.copy",
+    "content.tooltips",
+]
+
+[[project.theme.palette]]
+scheme = "default"
+primary = "purple"
+accent = "purple"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+scheme = "slate"
+primary = "purple"
+accent = "purple"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to light mode"
+
+# --- Plugins ---
+
+[project.plugins.search]
+
+# --- Extra ---
+
+[[project.extra.social]]
+icon = "fontawesome/brands/github"
+link = "https://github.com/chanzuckerberg/saber"
