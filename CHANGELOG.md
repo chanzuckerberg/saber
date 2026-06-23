@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.1](https://github.com/chanzuckerberg/saber/compare/saber-em-v1.0.0...saber-em-v1.0.1) (2026-06-23)
+
+
+### 🐞 Bug Fixes
+
+* inference and analysis workflow bugs ([f477380](https://github.com/chanzuckerberg/saber/commit/f4773805255165e4f2138a6fd8e83833fe60cd5b))
+* inference workflows ([bf7bc93](https://github.com/chanzuckerberg/saber/commit/bf7bc93e6c4827a617d00d8dde068e33a160ea74))
+
 ## [1.0.0](https://github.com/chanzuckerberg/saber/compare/saber-em-v0.10.0...saber-em-v1.0.0) (2026-04-03)
 
 
