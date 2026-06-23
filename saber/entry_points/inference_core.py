@@ -141,8 +141,9 @@ def segment_micrograph_core(
         pixel_size = 1
 
     # For now lets assume its always grayscale images
-    if image.ndim == 2:
-        out_image = segmenter.image[:,:,0]
+    out_image = segmenter.image
+    if out_image.ndim == 3:
+        out_image = out_image[:,:,0]
 
     # Write Run to Zarr
     input = os.path.splitext(os.path.basename(input))[0]

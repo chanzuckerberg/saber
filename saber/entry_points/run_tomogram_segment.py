@@ -333,7 +333,7 @@ def slab(
               help="Number of slabs and spacing for multi-slab segmentation provided as thickness or thickness,spacing. (Default spacing is 30 if ignored)")
 def tomograms(
     config: str,
-    run_ids: str,
+    run_id: str,
     voxel_size: float,
     tomo_alg: str,
     seg_name: str,
@@ -351,7 +351,7 @@ def tomograms(
 
     print('🚀 Running Saber Tomogram Segmentation...')
     run_tomo_seg(
-        config, run_ids, voxel_size, tomo_alg,
+        config, run_id, voxel_size, tomo_alg,
         seg_name, seg_session_id, slab_thickness,
         model_config, model_weights, target_class, multi_slab, text_prompt
     )

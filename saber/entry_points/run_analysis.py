@@ -24,7 +24,9 @@ def common_options(func):
         click.option("--run-ids", type=str, required=False, default=None,
                     help="Comma-separated list of RunIDs to process. If not provided, processes all RunIDs."),
         click.option("--n-procs", type=int, required=False, default=None,
-                    help="Number of Processes to Use for Parallelization.")
+                    help="Number of Processes to Use for Parallelization."),
+        click.option('-o', '--output', type=str, required=False, default='statistics.csv', 
+                    help='Path to Output CSV File.')
     ]
     for option in reversed(options):  # Add options in reverse order to preserve correct order
         func = option(func)
@@ -40,6 +42,7 @@ def process_organelles(
     n_procs: Optional[int],
     save_copick: bool = True,
     save_statistics: bool = True,
+    output: str = 'statistics.csv'
     ):
     """Core processing function that can be used by different commands."""
     import multiprocess as mp
@@ -54,7 +57,8 @@ def process_organelles(
         organelle_name, session_id, 
         user_id, run_ids,
         save_copick=save_copick,
-        save_statistics=save_statistics
+        save_statistics=save_statistics,
+        output=output
     )
 
     # Read Config File
@@ -79,7 +83,7 @@ def process_organelles(
     # Initialize CSV file if statistics are requested
     csv_filename = None
     if save_statistics:
-        csv_filename = f'{organelle_name}_statistics.csv'
+        csv_filename = output
         # Create CSV with headers
         with open(csv_filename, 'w', newline='') as csvfile:
             writer = csv.writer(csvfile)
@@ -157,7 +161,8 @@ def report_input_commands(
     organelle_name, session_id, 
     user_id, run_ids,
     save_copick=True,
-    save_statistics=True
+    save_statistics=True,
+    output: str = 'statistics.csv'
     ):
     """Print a summary of all inputs and processing options."""
     action_msg = []
@@ -174,7 +179,8 @@ def report_input_commands(
           f"\tVoxel Size: {voxel_size}\n"
           f"\tRun IDs: {run_ids if run_ids else 'All'}\n"
           f"\tSave to Copick: {save_copick}\n"
-          f"\tSave Statistics: {save_statistics}\n")
+          f"\tSave Statistics: {save_statistics}\n"
+          f"\tOutput: {output}\n")
 
 def pickable_object_check(root, organelle_name):
     """Check if the specified organelle exists as a pickable object in the config."""
@@ -192,7 +198,7 @@ def pickable_object_check(root, organelle_name):
 ########################################################
 
 
-@cli.command(context_settings=cli_context)
+@cli.command(context_settings=cli_context, no_args_is_help=True)
 @common_options
 @click.option("--save-statistics", default=True,
               help="Save statistics to Zarr file")
@@ -204,7 +210,8 @@ def coordinates(
     voxel_size: float,
     save_statistics: bool,
     run_ids: str,
-    n_procs: int
+    n_procs: int,
+    output: str
 ):
     if save_statistics: description = "Coordinates and Statistics Extraction"
     else: description = "Coordinate Extraction"
@@ -219,10 +226,11 @@ def coordinates(
         run_ids=run_ids,
         n_procs=n_procs,
         save_copick=True,
-        save_statistics=save_statistics
+        save_statistics=save_statistics,
+        output=output
     )
 
-@cli.command(context_settings=cli_context)
+@cli.command(context_settings=cli_context, no_args_is_help=True)
 @common_options
 def statistics(
     config: str,
@@ -231,7 +239,8 @@ def statistics(
     user_id: str,
     voxel_size: float,
     run_ids: str,
-    n_procs: int
+    n_procs: int,
+    output: str
 ):
     """Measure the size distribution of the measured organelles."""
     process_organelles(
@@ -243,7 +252,8 @@ def statistics(
         run_ids=run_ids,
         n_procs=n_procs,
         save_copick=False,
-        save_statistics=True
+        save_statistics=True,
+        output=output
     )
 
 @cli.command(context_settings=cli_context)
@@ -261,7 +271,8 @@ def slurm(
     run_ids: str,
     n_procs: int,
     save_copick: bool,
-    save_statistics: bool
+    save_statistics: bool,
+    output: str
     ):
     from saber.utils import slurm_submit
     import copick
@@ -280,7 +291,8 @@ def slurm(
         organelle_name, session_id, 
         user_id, run_ids,
         save_copick=save_copick,
-        save_statistics=save_statistics
+        save_statistics=save_statistics,
+        output=output
     )
     
     # Determine which command to use
