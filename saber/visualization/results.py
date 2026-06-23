@@ -62,8 +62,15 @@ def save_slab_seg(
          classifier.display_mask_list(image, masks)
     plt.axis('off')
 
+    # Parse the current run string to extract runID and sessionID
+    output = current_run.split('-')
+    if len(output) == 2:
+        runID, sessionID = output
+    elif len(output) > 2:
+        runID = output[0]
+        sessionID = '-'.join(output[1:])
+
     # Save the Figure
-    runID, sessionID = current_run.split('-')
     os.makedirs(f'sID-{sessionID}/frames', exist_ok=True)
     plt.savefig(f'sID-{sessionID}/frames/{runID}.png', bbox_inches='tight', pad_inches=0)
     plt.close('all')
